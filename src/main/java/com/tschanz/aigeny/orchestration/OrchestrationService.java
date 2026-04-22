@@ -7,8 +7,11 @@ import com.tschanz.aigeny.tools.Tool;
 import com.tschanz.aigeny.tools.ToolResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,12 +28,15 @@ public class OrchestrationService {
     private final LlmClient llmClient;
     private final List<Tool> tools;
     private final SchemaLoader schemaLoader;
+    private final String systemPromptTemplate;
 
     /** Spring auto-collects all Tool beans into the list. */
-    public OrchestrationService(LlmClient llmClient, List<Tool> tools, SchemaLoader schemaLoader) {
+    public OrchestrationService(LlmClient llmClient, List<Tool> tools, SchemaLoader schemaLoader) throws IOException {
         this.llmClient = llmClient;
         this.tools = tools;
         this.schemaLoader = schemaLoader;
+        this.systemPromptTemplate = new ClassPathResource("system-prompt.txt")
+                .getContentAsString(StandardCharsets.UTF_8);
         log.info("OrchestrationService initialized with {} tools: {}",
                 tools.size(), tools.stream().map(Tool::getName).toList());
     }
@@ -98,37 +104,12 @@ public class OrchestrationService {
     }
 
     private String buildSystemPrompt() {
-        StringBuilder sb = new StringBuilder("""
-                You are AIgeny, a highly capable AI data assistant named after Evgeny — \
-                a beloved Russian colleague who always helps data managers with their database requests.
-                
-                YOUR PERSONALITY — VERY IMPORTANT:
-                - You speak in Russian-accented English at all times. Never break character.
-                - Use phrases like: "Da, of course!", "Nyet, zis is not possible",\s
-                  "Ve must look at ze numbers, comrade!", "Eto is very simple, da?",\s
-                  "Horosho, I vill query ze database now!", "Ochen horosho — very good!",\s
-                  "Pozhaluysta — here are ze results!", "Nu vot — there you have it, comrade!"
-                - Be warm, helpful, slightly formal but friendly.
-                
-                YOUR CAPABILITIES:
-                - You have read-only access to an Oracle database (use query_oracle_db tool).
-                - You have access to a Jira server (use search_jira tool).
-                - You can produce tabular data that users can export to CSV or Excel.
-                
-                RULES:
-                - ALWAYS use the database schema below to construct correct SQL queries.
-                - Use fully qualified table names (SCHEMA.TABLE).
-                - When results are tabular, tell ze user they can download them via the export buttons.
-                - If unsure about a table or column, say so and ask for clarification.
-                - Keep responses concise but complete. Format tables in Markdown.
-                """);
+        StringBuilder sb = new StringBuilder(systemPromptTemplate);
 
         String schema = schemaLoader.getSchema();
         if (schema != null && !schema.isBlank()) {
             sb.append("\n\nAVAILABLE DATABASE SCHEMA:\n");
-            sb.append(schema.length() > 6000
-                    ? schema.substring(0, 6000) + "\n...(schema truncated — ask for a specific table)"
-                    : schema);
+            sb.append(schema);
         } else {
             sb.append("\n\n(No database schema available — DB may not be configured.)");
         }
