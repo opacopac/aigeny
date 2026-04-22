@@ -39,12 +39,13 @@ services:
 
       # ── Oracle DB ──────────────────────────────────────────────────────────
       # AIGENY_DB_URL:          "jdbc:oracle:thin:@hostname:1521/SERVICENAME"
-      # AIGENY_DB_USERNAME:     "your_readonly_user"
+      AIGENY_DB_URL:            "jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS_LIST=(FAILOVER=ON)(LOAD_BALANCE=OFF)(ADDRESS=(PROTOCOL=TCP)(HOST=zkdb100vl2813-scan.sbb.ch)(PORT=1521))(ADDRESS=(PROTOCOL=TCP)(HOST=bedb200vl2813-scan.sbb.ch)(PORT=1521)))(CONNECT_DATA=(SERVICE_NAME=NOVAP_INTE.SBB.CH)))"
+      AIGENY_DB_USERNAME:       "NOVAP_INTE"
       AIGENY_DB_PASSWORD_FILE: "/run/secrets/db_password"
 
       # ── Jira ───────────────────────────────────────────────────────────────
-      # AIGENY_JIRA_BASE_URL:   "https://flow.sbb.ch"
-      # AIGENY_JIRA_USERNAME:   "your_username"
+      AIGENY_JIRA_BASE_URL:   "https://flow.sbb.ch"
+      AIGENY_JIRA_USERNAME:   "armand.tschanz@sbb.ch"
       AIGENY_JIRA_TOKEN_FILE:  "/run/secrets/jira_token"
     depends_on:
       ollama:
