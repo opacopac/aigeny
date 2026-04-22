@@ -76,13 +76,20 @@ public class OpenAiCompatibleAdapter implements LlmClient {
         body.put("max_tokens", 4096);
 
         String bodyStr = JSON.writeValueAsString(body);
-        log.debug("LLM request: {}", bodyStr);
 
         String baseUrl = llm.getBaseUrl().replaceAll("/$", "");
         String url = baseUrl + "/chat/completions";
         if ("azure".equals(llm.getProvider())) {
             url += "?api-version=2024-02-15-preview";
         }
+
+        // count non-system messages for the log
+        long userMsgCount = messages.stream().filter(m -> !"system".equals(m.getRole())).count();
+        log.info(">> LLM REQUEST  provider={} model={} messages={} tools={}",
+                llm.getProvider(), llm.getModel(), userMsgCount,
+                tools != null ? tools.size() : 0);
+        log.info("   URL: {}", url);
+        log.debug("   Body: {}", bodyStr);
 
         HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -96,24 +103,38 @@ public class OpenAiCompatibleAdapter implements LlmClient {
             reqBuilder.header("Authorization", "Bearer " + llm.getApiKey());
         }
 
+        long t0 = System.currentTimeMillis();
         HttpResponse<String> response = sendWithRetry(reqBuilder.build());
+        long elapsed = System.currentTimeMillis() - t0;
 
         if (response.statusCode() != 200) {
-            log.error("LLM error {}: {}", response.statusCode(), response.body());
+            log.error("<< LLM RESPONSE status={} elapsed={}ms body={}",
+                    response.statusCode(), elapsed, response.body());
             throw new RuntimeException("LLM returned HTTP " + response.statusCode() + ": " + response.body());
         }
 
-        log.debug("LLM response: {}", response.body());
-        return parseResponse(response.body());
+        ChatResponse chatResponse = parseResponse(response.body());
+        if (chatResponse.hasToolCalls()) {
+            log.info("<< LLM RESPONSE status=200 elapsed={}ms type=tool_calls count={}",
+                    elapsed, chatResponse.getToolCalls().size());
+            chatResponse.getToolCalls().forEach(tc ->
+                    log.info("   tool_call: {}", tc.getFunction().getName()));
+        } else {
+            log.info("<< LLM RESPONSE status=200 elapsed={}ms type=text chars={}",
+                    elapsed, chatResponse.getContent() != null ? chatResponse.getContent().length() : 0);
+        }
+        log.debug("   Raw response: {}", response.body());
+        return chatResponse;
     }
 
+    /** Send request, automatically retrying on HTTP 429 (rate limit) up to 3 times. */
     private HttpResponse<String> sendWithRetry(HttpRequest request) throws Exception {
         int maxRetries = 3;
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 429) return response;
             long waitSeconds = parseRetryAfter(response.body());
-            log.warn("Rate limit (429). Waiting {}s before retry {}/{}...", waitSeconds, attempt, maxRetries);
+            log.warn("<< LLM RESPONSE status=429 — rate limit. Waiting {}s before retry {}/{}...", waitSeconds, attempt, maxRetries);
             Thread.sleep(waitSeconds * 1000);
         }
         return http.send(request, HttpResponse.BodyHandlers.ofString());

@@ -97,13 +97,16 @@ public class OracleDbTool implements Tool {
             return new ToolResult("ERROR: Potentially dangerous SQL keywords detected. Query rejected.");
         }
 
-        log.info("Executing SQL [{}]: {}", description, sql);
+        log.info("▶ DB REQUEST  desc=\"{}\"", description);
+        log.info("  SQL: {}", sql);
 
         HikariDataSource ds = getPool();
         if (ds == null) {
+            log.error("✗ DB REQUEST  FAILED — connection pool unavailable");
             return new ToolResult("ERROR: Could not connect to Oracle database.");
         }
 
+        long t0 = System.currentTimeMillis();
         try (Connection conn = ds.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql,
                      ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)) {
@@ -124,12 +127,15 @@ public class OracleDbTool implements Tool {
                     rows.add(row);
                 }
 
+                long elapsed = System.currentTimeMillis() - t0;
+                log.info("✓ DB RESPONSE rows={} cols={} elapsed={}ms", rows.size(), colCount, elapsed);
+
                 QueryResult qr = new QueryResult("Oracle DB", columns, rows);
-                log.info("Query returned {} rows, {} columns", rows.size(), colCount);
                 return new ToolResult(qr.toText(), qr);
             }
         } catch (SQLException e) {
-            log.error("SQL execution error", e);
+            long elapsed = System.currentTimeMillis() - t0;
+            log.error("✗ DB REQUEST  FAILED elapsed={}ms error=\"{}\"", elapsed, e.getMessage());
             return new ToolResult("SQL ERROR: " + e.getMessage());
         }
     }

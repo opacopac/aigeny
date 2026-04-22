@@ -1,7 +1,14 @@
 package com.tschanz.aigeny.config;
 
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /**
  * All AIgeny configuration, bound from application.yml (prefix: aigeny).
@@ -14,9 +21,39 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "aigeny")
 public class AigenyProperties {
 
+    private static final Logger log = LoggerFactory.getLogger(AigenyProperties.class);
+
     private Llm llm = new Llm();
     private Db db = new Db();
     private Jira jira = new Jira();
+
+    /**
+     * After Spring has bound all properties (YAML + env vars), resolve any
+     * Docker secret files referenced by *_FILE environment variables.
+     *
+     * AIGENY_DB_PASSWORD_FILE  → db.password
+     * AIGENY_JIRA_TOKEN_FILE   → jira.token
+     * AIGENY_LLM_API_KEY_FILE  → llm.apiKey
+     */
+    @PostConstruct
+    public void resolveSecretFiles() {
+        db.password  = readSecretFile("AIGENY_DB_PASSWORD_FILE",  db.password);
+        jira.token   = readSecretFile("AIGENY_JIRA_TOKEN_FILE",   jira.token);
+        llm.apiKey   = readSecretFile("AIGENY_LLM_API_KEY_FILE",  llm.apiKey);
+    }
+
+    private static String readSecretFile(String envVar, String currentValue) {
+        String filePath = System.getenv(envVar);
+        if (filePath == null || filePath.isBlank()) return currentValue;
+        try {
+            String value = Files.readString(Path.of(filePath)).strip();
+            log.info("Loaded secret from {} ({})", filePath, envVar);
+            return value;
+        } catch (IOException e) {
+            log.warn("Could not read secret file '{}' for {}: {}", filePath, envVar, e.getMessage());
+            return currentValue;
+        }
+    }
 
     // ── Computed helpers ────────────────────────────────────────────────────
 

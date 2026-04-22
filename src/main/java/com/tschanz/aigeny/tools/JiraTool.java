@@ -72,7 +72,8 @@ public class JiraTool implements Tool {
                 + URLEncoder.encode(jql, StandardCharsets.UTF_8)
                 + "&fields=" + fields + "&maxResults=" + maxResults;
 
-        log.info("Jira search: {}", jql);
+        log.info(">> JIRA REQUEST  jql=\"{}\" maxResults={}", jql, maxResults);
+        log.info("   URL: {}", url);
 
         String auth = jira.getUsername() + ":" + jira.getToken();
         String authHeader = "Basic " + Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
@@ -84,12 +85,20 @@ public class JiraTool implements Tool {
                 .header("Accept", "application/json")
                 .GET().build();
 
+        long t0 = System.currentTimeMillis();
         HttpResponse<String> response = http.send(req, HttpResponse.BodyHandlers.ofString());
+        long elapsed = System.currentTimeMillis() - t0;
 
-        if (response.statusCode() == 401)
+        if (response.statusCode() == 401) {
+            log.warn("<< JIRA RESPONSE status=401 elapsed={}ms — authentication failed", elapsed);
             return new ToolResult("Jira authentication failed. Check username and token in application.yml.");
-        if (response.statusCode() != 200)
+        }
+        if (response.statusCode() != 200) {
+            log.error("<< JIRA RESPONSE status={} elapsed={}ms body={}", response.statusCode(), elapsed, response.body());
             return new ToolResult("Jira error " + response.statusCode() + ": " + response.body());
+        }
+
+        log.info("<< JIRA RESPONSE status=200 elapsed={}ms bodySize={}B", elapsed, response.body().length());
 
         return parseJiraResponse(response.body());
     }
@@ -101,6 +110,8 @@ public class JiraTool implements Tool {
 
         if (!issues.isArray() || issues.isEmpty())
             return new ToolResult("No Jira issues found for ze query, da.");
+
+        log.info("   Jira total={} returned={}", total, issues.size());
 
         List<String> columns = List.of("KEY", "SUMMARY", "STATUS", "ASSIGNEE", "PRIORITY", "TYPE");
         List<Map<String, Object>> rows = new ArrayList<>();

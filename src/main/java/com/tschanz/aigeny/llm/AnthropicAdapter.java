@@ -116,9 +116,12 @@ public class AnthropicAdapter implements LlmClient {
         }
 
         String bodyStr = JSON.writeValueAsString(body);
-        log.debug("Claude request: {}", bodyStr);
-
         String url = props.getLlm().getBaseUrl().replaceAll("/$", "") + "/messages";
+
+        long userMsgCount = chatMessages.stream().filter(m -> "user".equals(m.getRole())).count();
+        log.info(">> LLM REQUEST  provider=claude model={} messages={} tools={}", llm.getModel(), userMsgCount, tools != null ? tools.size() : 0);
+        log.info("   URL: {}", url);
+        log.debug("   Body: {}", bodyStr);
 
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -129,15 +132,24 @@ public class AnthropicAdapter implements LlmClient {
                 .POST(HttpRequest.BodyPublishers.ofString(bodyStr, StandardCharsets.UTF_8))
                 .build();
 
+        long t0 = System.currentTimeMillis();
         HttpResponse<String> response = http.send(req, HttpResponse.BodyHandlers.ofString());
+        long elapsed = System.currentTimeMillis() - t0;
 
         if (response.statusCode() != 200) {
-            log.error("Claude error {}: {}", response.statusCode(), response.body());
+            log.error("<< LLM RESPONSE status={} elapsed={}ms body={}", response.statusCode(), elapsed, response.body());
             throw new RuntimeException("Claude returned HTTP " + response.statusCode() + ": " + response.body());
         }
 
-        log.debug("Claude response: {}", response.body());
-        return parseResponse(response.body());
+        ChatResponse chatResponse = parseResponse(response.body());
+        if (chatResponse.hasToolCalls()) {
+            log.info("<< LLM RESPONSE status=200 elapsed={}ms type=tool_calls count={}", elapsed, chatResponse.getToolCalls().size());
+            chatResponse.getToolCalls().forEach(tc -> log.info("   tool_call: {}", tc.getFunction().getName()));
+        } else {
+            log.info("<< LLM RESPONSE status=200 elapsed={}ms type=text chars={}", elapsed, chatResponse.getContent() != null ? chatResponse.getContent().length() : 0);
+        }
+        log.debug("   Raw response: {}", response.body());
+        return chatResponse;
     }
 
     private ChatResponse parseResponse(String json) throws Exception {
