@@ -26,7 +26,7 @@ mvn clean package -DskipTests
 docker compose up --build
 ```
 
-> **First run**: Docker automatically downloads the `llama3.1:8b` model (~4.7 GB).
+> **First run**: The `ollama-init` container automatically pulls the `llama3.1:8b` model (~4.7 GB).
 > This takes a few minutes once. Subsequent starts are instant.
 
 ### 2. Open in browser
@@ -43,7 +43,11 @@ docker compose up --build
 - [Ollama](https://ollama.com/download) installed locally (Windows / Mac / Linux)
 
 ```bash
-# 1. Install Ollama from https://ollama.com/download, then pull the model:
+# 1. Install Ollama from https://ollama.com/download
+#    On Windows/Mac, Ollama starts as a background service automatically after installation.
+#    On Linux, start it with: ollama serve
+#
+#    Pull the model if not already downloaded (only needed once, ~4.7 GB):
 ollama pull llama3.1:8b
 
 # 2. Build and run AIgeny
@@ -96,6 +100,17 @@ export AIGENY_JIRA_TOKEN=your_api_token
 java -jar target/aigeny-*.jar
 ```
 
+For **Docker secrets** (files instead of plain-text env vars), use the `_FILE` variant:
+
+```bash
+# Point to a file containing the secret value (e.g. /run/secrets/db_password)
+AIGENY_DB_PASSWORD_FILE=/run/secrets/db_password
+AIGENY_JIRA_TOKEN_FILE=/run/secrets/jira_token
+AIGENY_LLM_API_KEY_FILE=/run/secrets/llm_api_key
+```
+
+AIgeny reads the file content at startup and uses it as the value. See `docker-compose.yml` for a ready-to-use example.
+
 In `docker-compose.yml` uncomment the relevant `environment:` lines.
 
 ---
@@ -108,6 +123,8 @@ In `docker-compose.yml` uncomment the relevant `environment:` lines.
 | Groq | Free tier | ~12k TPM | Cloud | `provider: groq`, `base-url: https://api.groq.com/openai/v1` |
 | OpenAI | Paid | — | Cloud | `provider: openai`, `base-url: https://api.openai.com/v1` |
 | Azure OpenAI | Paid | — | Cloud | `provider: azure`, `base-url: https://RESOURCE.openai.azure.com/...` |
+| xAI Grok | Paid | — | Cloud | `provider: grok`, `base-url: https://api.x.ai/v1` |
+| Anthropic Claude | Paid | — | Cloud | `provider: claude`, `base-url: https://api.anthropic.com/v1` |
 
 ### Switching providers
 
@@ -154,11 +171,11 @@ Without GPU: responses take ~10–30 s on CPU. With GPU: ~1–3 s.
 ## Project Structure
 
 ```
-src/main/java/com/aigeny/
+src/main/java/com/tschanz/aigeny/
 ├── AigenyApplication.java       # Spring Boot entry point
 ├── config/
 │   └── AigenyProperties.java    # @ConfigurationProperties (aigeny.*)
-├── llm/                         # LLM adapter (Ollama/Groq/OpenAI/Azure)
+├── llm/                         # LLM adapter (Ollama/Groq/OpenAI/Azure/Grok/Claude)
 ├── tools/                       # Oracle DB tool, Jira tool
 ├── db/                          # Schema loader (auto-loads on startup)
 ├── orchestration/               # Agentic tool-call loop

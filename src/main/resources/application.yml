@@ -83,7 +83,7 @@ aigeny:
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging:
   level:
-    com.tschanz.aigeny: INFO
+    com.tschanz.aigeny: DEBUG
     com.zaxxer.hikari: WARN
   file:
     name: ${user.home}/.aigeny/aigeny.log

@@ -40,7 +40,7 @@ public class SchemaLoader {
                 cachedSchema = "(DB schema unavailable: " + e.getMessage() + ")";
             }
         } else {
-            log.info("DB not configured — skipping schema load");
+            log.info("DB not configured - skipping schema load");
             cachedSchema = "";
         }
     }
