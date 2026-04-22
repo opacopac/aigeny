@@ -1,0 +1,6 @@
+[begin] (AIgeny)
+[exec] (Terminal) {x-terminal-emulator}
+[separator]
+[exit] (Exit)
+[end]
+

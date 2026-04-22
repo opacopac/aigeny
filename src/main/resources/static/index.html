@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AIgeny</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<header class="app-header">
+  <div class="header-left">
+    <canvas id="halEyeMini" width="32" height="32"></canvas>
+    <span class="app-title">AIgeny</span>
+  </div>
+  <div class="header-right" id="statusBar">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Connecting...</span>
+  </div>
+</header>
+
+<!-- ── Main layout ────────────────────────────────────────────────────── -->
+<main class="app-main">
+
+  <!-- HAL Eye panel -->
+  <aside class="hal-panel">
+    <canvas id="halEye" width="220" height="220"></canvas>
+    <div class="hal-label">AIgeny</div>
+    <div class="hal-status" id="halStatusText">Ready, comrade.</div>
+    <div class="info-box" id="infoBox">
+      <div class="info-row"><span class="info-key">LLM</span><span class="info-val" id="infoLlm">—</span></div>
+      <div class="info-row"><span class="info-key">Model</span><span class="info-val" id="infoModel">—</span></div>
+      <div class="info-row"><span class="info-key">DB</span><span class="info-val" id="infoDb">—</span></div>
+      <div class="info-row"><span class="info-key">Jira</span><span class="info-val" id="infoJira">—</span></div>
+      <div class="info-row"><span class="info-key">Tables</span><span class="info-val" id="infoTables">—</span></div>
+    </div>
+    <button class="btn-secondary" onclick="reloadSchema()" title="Reload DB schema">&#8635; Reload Schema</button>
+  </aside>
+
+  <!-- Chat panel -->
+  <section class="chat-panel">
+    <div class="chat-messages" id="chatMessages">
+      <!-- Messages injected by JS -->
+    </div>
+
+    <!-- Input area -->
+    <div class="input-area">
+      <textarea id="userInput"
+                placeholder="Ask AIgeny anything about ze database or Jira, comrade..."
+                rows="3"></textarea>
+      <button class="btn-send" id="sendBtn" onclick="sendMessage()">
+        &#9654; Send
+      </button>
+    </div>
+
+    <!-- Export & control bar -->
+    <div class="action-bar">
+      <button class="btn-export" id="btnCsv" disabled onclick="exportData('csv')" title="Download as CSV">
+        &#8595; Export CSV
+      </button>
+      <button class="btn-secondary" onclick="clearChat()">&#10005; Clear Chat</button>
+    </div>
+  </section>
+
+</main>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
+

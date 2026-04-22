@@ -1,0 +1,109 @@
+version: "3.9"
+
+# ── Secrets ────────────────────────────────────────────────────────────────────
+# Create plain-text files in ./secrets/ (add to .gitignore!):
+#   secrets/db_password.txt    — Oracle read-only user password
+#   secrets/jira_token.txt     — Jira API token or password
+#   secrets/llm_api_key.txt    — LLM API key (not needed for Ollama)
+#
+# Alternatively, use Docker Swarm secrets or Vault for production.
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  jira_token:
+    file: ./secrets/jira_token.txt
+  llm_api_key:
+    file: ./secrets/llm_api_key.txt
+
+services:
+
+  # ── AIgeny Spring Boot Web App ─────────────────────────────────────────────
+  aigeny:
+    build: .
+    container_name: aigeny
+    ports:
+      - "8080:8080"        # Open http://localhost:8080 in your browser
+    volumes:
+      - aigeny-config:/root/.aigeny    # persists external config & logs
+    secrets:
+      - db_password
+      - jira_token
+      - llm_api_key
+    environment:
+      # ── LLM — Ollama (default, local, no rate limits) ─────────────────────
+      AIGENY_LLM_PROVIDER: "ollama"
+      AIGENY_LLM_BASE_URL: "http://ollama:11434/v1"
+      AIGENY_LLM_MODEL:    "llama3.1:8b"
+      # For Ollama no real key is needed; for cloud providers use the secret file:
+      # AIGENY_LLM_API_KEY_FILE: "/run/secrets/llm_api_key"
+
+      # ── Oracle DB ──────────────────────────────────────────────────────────
+      # AIGENY_DB_URL:          "jdbc:oracle:thin:@hostname:1521/SERVICENAME"
+      # AIGENY_DB_USERNAME:     "your_readonly_user"
+      AIGENY_DB_PASSWORD_FILE: "/run/secrets/db_password"
+
+      # ── Jira ───────────────────────────────────────────────────────────────
+      # AIGENY_JIRA_BASE_URL:   "https://flow.sbb.ch"
+      # AIGENY_JIRA_USERNAME:   "your_username"
+      AIGENY_JIRA_TOKEN_FILE:  "/run/secrets/jira_token"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - aigeny-net
+
+  # ── Ollama — local LLM (no API key, no rate limits, fully private) ─────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    networks:
+      - aigeny-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    # GPU support — uncomment for NVIDIA GPU (dramatically faster responses):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # ── Ollama model initialiser — pulls model once on first run ───────────────
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - aigeny-net
+    entrypoint: >
+      sh -c "
+        echo 'AIgeny: Pulling Ollama model llama3.1:8b (first run only, ~4.7 GB)...';
+        ollama pull llama3.1:8b;
+        echo 'Model ready!';
+      "
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: "no"
+
+volumes:
+  aigeny-config:
+  ollama-models:
+
+networks:
+  aigeny-net:
+    driver: bridge

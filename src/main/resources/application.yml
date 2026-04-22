@@ -1,0 +1,90 @@
+spring:
+  application:
+    name: AIgeny
+  # Load an optional external config file from the user's home directory.
+  # Create ~/.aigeny/aigeny.yml to override any setting below without editing this file.
+  config:
+    import: "optional:file:${user.home}/.aigeny/aigeny.yml"
+  mvc:
+    async:
+      request-timeout: 300000   # 5 minutes — Ollama can be slow on CPU
+
+server:
+  port: 8080
+
+# ── AIgeny configuration ──────────────────────────────────────────────────────
+# All values can also be overridden via environment variables.
+# Spring Boot maps  aigeny.db.password  →  AIGENY_DB_PASSWORD  automatically.
+#
+# For Docker secrets, set the _FILE variant of the env var:
+#   AIGENY_DB_PASSWORD_FILE=/run/secrets/db_password
+#   AIGENY_JIRA_TOKEN_FILE=/run/secrets/jira_token
+#   AIGENY_LLM_API_KEY_FILE=/run/secrets/llm_api_key
+# AIgeny reads the file and uses its contents as the value.
+#
+# ── LLM Provider Presets ──────────────────────────────────────────────────────
+#
+#  Ollama (default — local, free, private):
+#    provider: ollama
+#    api-key:  ollama
+#    base-url: http://localhost:11434/v1
+#    model:    llama3.1:8b
+#
+#  Groq (free cloud tier, rate-limited):
+#    provider: groq
+#    api-key:  gsk_YOUR_KEY
+#    base-url: https://api.groq.com/openai/v1
+#    model:    llama-3.3-70b-versatile
+#
+#  OpenAI:
+#    provider: openai
+#    api-key:  sk-YOUR_KEY
+#    base-url: https://api.openai.com/v1
+#    model:    gpt-4o-mini
+#
+#  Azure OpenAI:
+#    provider: azure
+#    api-key:  YOUR_AZURE_KEY
+#    base-url: https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_DEPLOY
+#    model:    gpt-4o
+#
+#  xAI Grok (OpenAI-compatible):
+#    provider: grok
+#    api-key:  xai-YOUR_KEY
+#    base-url: https://api.x.ai/v1
+#    model:    grok-3
+#
+#  Anthropic Claude (native API):
+#    provider: claude
+#    api-key:  sk-ant-YOUR_KEY
+#    base-url: https://api.anthropic.com/v1
+#    model:    claude-opus-4-5
+#             (alternatives: claude-sonnet-4-5, claude-haiku-3-5)
+# ─────────────────────────────────────────────────────────────────────────────
+aigeny:
+  llm:
+    provider: ollama
+    api-key: ollama
+    base-url: http://localhost:11434/v1
+    model: llama3.1:8b
+
+  db:
+    # jdbc:oracle:thin:@hostname:1521/SERVICENAME
+    url: ""
+    username: ""
+    password: ""   # or use AIGENY_DB_PASSWORD_FILE for Docker secrets
+
+  jira:
+    # https://flow.sbb.ch
+    base-url: ""
+    username: ""
+    token: ""      # or use AIGENY_JIRA_TOKEN_FILE for Docker secrets
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.tschanz.aigeny: INFO
+    com.zaxxer.hikari: WARN
+  file:
+    name: ${user.home}/.aigeny/aigeny.log
+
