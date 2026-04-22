@@ -19,11 +19,11 @@ public class ExportService {
 
     private static final Logger log = LoggerFactory.getLogger(ExportService.class);
 
-    /** Returns UTF-8 CSV bytes (with BOM for Excel compatibility). */
+    /** Returns UTF-8 CSV bytes (with BOM for broad client compatibility). */
     public byte[] toCsv(QueryResult result) {
         StringWriter sw = new StringWriter();
         PrintWriter pw = new PrintWriter(sw);
-        pw.print('\uFEFF'); // BOM for Excel UTF-8 compatibility
+        pw.print('\uFEFF'); // UTF-8 BOM for broad client compatibility
         pw.println(String.join(";", result.getColumns()));
         for (Map<String, Object> row : result.getRows()) {
             StringBuilder line = new StringBuilder();

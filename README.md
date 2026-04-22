@@ -5,7 +5,7 @@
 AIgeny is a **Spring Boot web application** with a Russian-accented AI assistant for data managers.
 Open it in any browser — no installation, no setup wizard, no desktop app required.
 
-It can query Oracle databases (read-only), search Jira tickets, and export results as CSV or Excel.
+It can query Oracle databases (read-only), search Jira tickets, and export results as CSV.
 
 ---
 
@@ -155,7 +155,6 @@ Without GPU: responses take ~10–30 s on CPU. With GPU: ~1–3 s.
 | `POST` | `/api/schema/reload` | Reload DB schema from Oracle |
 | `GET` | `/api/status` | LLM/DB/Jira connection status |
 | `GET` | `/api/export/csv` | Download last query result as CSV |
-| `GET` | `/api/export/excel` | Download last query result as Excel |
 
 ---
 
@@ -179,7 +178,7 @@ src/main/java/com/tschanz/aigeny/
 ├── tools/                       # Oracle DB tool, Jira tool
 ├── db/                          # Schema loader (auto-loads on startup)
 ├── orchestration/               # Agentic tool-call loop
-├── export/                      # CSV & Excel byte[] generation
+├── export/                      # CSV export (byte[] generation)
 └── web/                         # REST controllers (chat, export, status)
 
 src/main/resources/

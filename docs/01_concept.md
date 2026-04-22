@@ -15,7 +15,7 @@ into SQL queries, executes them and presents the results — in the style of "AI
 ### Typical Use Cases
 - "Show me all open orders from the last 30 days"
 - "How many records does table X have with status = active?"
-- "Create a report of orders per region and export it as Excel"
+- "Create a report of orders per region and export it as CSV"
 - "Search all Jira tickets in project NOVA with status Open"
 
 ---
@@ -26,7 +26,7 @@ into SQL queries, executes them and presents the results — in the style of "AI
 |---|---|---|
 | F1 | **Natural-language DB queries** | User asks a question → LLM generates SQL → result is displayed |
 | F2 | **Jira integration** | Search tickets via JQL through the Jira REST API |
-| F3 | **Export** | Tabular results downloadable as CSV or Excel (.xlsx) |
+| F3 | **Export** | Tabular results downloadable as CSV |
 | F4 | **DB schema loading** | Oracle schema loaded automatically on startup for LLM context |
 | F5 | **SQL confirmation** | Every LLM-generated SQL query must be confirmed by the user |
 | F6 | **AIgeny persona** | The agent replies in Russian-accented English at all times |
@@ -62,12 +62,12 @@ into SQL queries, executes them and presents the results — in the style of "AI
 │          │  🔴 AIgeny:                                          │
 │          │  Horosho! I have queried ze database, comrade...     │
 │          │  [table with results]                                │
-│          │  You can export zis as CSV or Excel, da!            │
+  │          │  You can export zis as CSV, da!                              │
 ├──────────┴──────────────────────────────────────────────────────┤
 │ ┌──────────────────────────────────────────┐  [Send ▶]          │
 │ │ Type your question...                    │                    │
 │ └──────────────────────────────────────────┘                    │
-│  [⬇ CSV]  [⬇ Excel]   [🗑 Clear chat]                          │
+│  [⬇ CSV]   [🗑 Clear chat]                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

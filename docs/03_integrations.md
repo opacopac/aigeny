@@ -8,10 +8,12 @@
 
 | Provider | Base URL | Default Model | API Key |
 |---|---|---|---|
-| **Groq** ⭐ | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | Groq API key |
+| **Ollama** ⭐ | `http://localhost:11434/v1` | `llama3.1:8b` | `ollama` (no key needed) |
+| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | Groq API key |
 | OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` | OpenAI API key |
 | Azure OpenAI | `https://RESOURCE.openai.azure.com/openai/deployments/DEPLOY` | `gpt-4o` | Azure API key |
-| Ollama | `http://localhost:11434/v1` | `llama3.2` | `ollama` (no key needed) |
+| xAI Grok | `https://api.x.ai/v1` | `grok-3` | xAI API key |
+| Anthropic Claude | `https://api.anthropic.com/v1` | `claude-opus-4-5` | Anthropic API key (native adapter) |
 
 ### 1.2 API Protocol (OpenAI-compatible)
 
@@ -126,7 +128,7 @@ WHERE owner = ? AND table_name = ?
 ORDER BY column_id;
 ```
 
-The result is inserted as formatted text into the system prompt (max 12,000 characters).
+The result is inserted as formatted text into the system prompt (no character limit — full schema is used).
 
 Fallback if `all_tables` is not accessible → `user_tables` / `user_tab_columns`.
 
@@ -198,47 +200,40 @@ GET /rest/api/2/search
 
 ---
 
-## 4. Export Formats
+## 4. Export Format
 
 ### 4.1 CSV
 
 | Property | Value |
 |---|---|
-| Encoding | UTF-8 with BOM (for Excel compatibility) |
+| Encoding | UTF-8 with BOM (for broad client compatibility) |
 | Delimiter | Semicolon (`;`) |
 | Quoting | RFC 4180 (`"` when value contains semicolon / newline / quote) |
 | File extension | `.csv` |
 
-### 4.2 Excel (.xlsx)
-
-| Property | Value |
-|---|---|
-| Library | Apache POI (XSSFWorkbook) |
-| Header style | Bold, white text, dark-red background (`#8B0000`) |
-| Row style | Alternating light grey (every other row) |
-| Column width | Auto-sized (`autoSizeColumn`), max ~19 cm |
-| Freeze pane | First row frozen |
-| Sheet name | Data source name (`Oracle DB` or `Jira`) |
 
 ---
 
 ## 5. Configuration Format
 
-Stored in `~/.aigeny/config.properties`:
+Stored in `~/.aigeny/aigeny.yml` (override file, never committed to git):
 
-```properties
-# Saved by AIgeny — DO NOT SHARE
-llm.provider=groq
-llm.apiKey=<AES-256 encrypted>
-llm.baseUrl=https://api.groq.com/openai/v1
-llm.model=llama-3.3-70b-versatile
-db.url=jdbc:oracle:thin:@hostname:1521/SERVICENAME
-db.username=aigeny_readonly
-db.password=<AES-256 encrypted>
-jira.baseUrl=https://flow.sbb.ch
-jira.username=firstname.lastname
-jira.token=<AES-256 encrypted>
+```yaml
+aigeny:
+  llm:
+    provider: ollama
+    api-key: ollama
+    base-url: http://localhost:11434/v1
+    model: llama3.1:8b
+  db:
+    url: jdbc:oracle:thin:@hostname:1521/SERVICENAME
+    username: aigeny_readonly
+    password: 'secret'
+  jira:
+    base-url: https://flow.sbb.ch
+    username: firstname.lastname@company.com
+    token: your_api_token
 ```
 
-**Encryption**: AES-256-ECB; key derived from `hostname + salt` (machine-bound).  
-Protection level: prevents accidental reading; not a replacement for a proper secrets manager.
+Alternatively, use environment variables (`AIGENY_DB_PASSWORD=...`) or Docker secret files
+(`AIGENY_DB_PASSWORD_FILE=/run/secrets/db_password`). See `docker-compose.yml` for a full example.

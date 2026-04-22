@@ -13,9 +13,9 @@
 | 7 | `OracleDbTool` (`@Service`, SELECT whitelist, HikariCP) | ✅ Done |
 | 8 | `JiraTool` (`@Service`, JQL, Basic Auth) | ✅ Done |
 | 9 | `OrchestrationService` (agentic loop, system prompt, `ChatResult`) | ✅ Done |
-| 10 | `ExportService` (CSV bytes, Excel bytes — no Swing) | ✅ Done |
+| 10 | `ExportService` (CSV bytes) | ✅ Done |
 | 11 | `ChatController` (REST, async, `HttpSession`) | ✅ Done |
-| 12 | `ExportController` (CSV/Excel download) | ✅ Done |
+| 12 | `ExportController` (CSV download) | ✅ Done |
 | 13 | Web frontend (HAL Canvas, dark theme, chat, export buttons) | ✅ Done |
 | 14 | `Dockerfile` (simple Spring Boot image) | ✅ Done |
 | 15 | `docker-compose.yml` (AIgeny + Ollama + init) | ✅ Done |
@@ -34,7 +34,7 @@
 | `AppConfig` + AES-encrypted properties | `@ConfigurationProperties` + external YAML |
 | GUI setup wizard (`SetupWizard.java`) | Edit `~/.aigeny/aigeny.yml` or use env vars |
 | Swing `JOptionPane` SQL confirmation | SQL logged, shown in chat; SELECT-only enforced |
-| `JFileChooser` export dialogs | HTTP file download (`/api/export/csv`, `/api/export/excel`) |
+| `JFileChooser` export dialogs | HTTP file download (`/api/export/csv`) |
 | HAL eye in `HalEyePanel.java` (Swing) | HAL eye in `app.js` (Canvas API) |
 | FlatLaf dark theme | CSS dark theme (`#0a0a0a` / `#cc0000`) |
 
@@ -52,7 +52,6 @@
 - [ ] DB configured → schema loads on startup, table count shown in status box
 - [ ] Question about data → SQL generated, DB queried, results shown
 - [ ] Export CSV → file downloads with correct data
-- [ ] Export Excel → `.xlsx` downloads with red header
 - [ ] Jira search → issues returned in table format
 - [ ] Clear chat → history wiped, welcome message re-appears
 - [ ] Reload schema → table count updates
@@ -69,4 +68,4 @@
 | Session state is in-memory | Add Spring Session + Redis for multi-instance deployment |
 | No streaming (LLM response arrives at once) | Add SSE streaming in v3 |
 | Single-user assumption per session | Fine for current use case |
-| Schema limited to 6,000 chars in prompt | Ask AIgeny to describe a specific table for full detail |
+| Schema limited to 6,000 chars in prompt | Removed — full schema is now always injected |

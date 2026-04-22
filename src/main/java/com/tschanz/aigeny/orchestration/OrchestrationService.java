@@ -48,8 +48,22 @@ public class OrchestrationService {
      * @param userMessage the new user input
      * @return ChatResult with the final response text and optional QueryResult for export
      */
+    private static final String PERSONA_PRIMER =
+            "Da, zdravstvuyte comrade! I am AIgeny, your faithful data assistant, da! " +
+            "Vat can I help you with today? Ve can query ze database, search Jira tickets, " +
+            "or export results to CSV. Horosho, just ask!";
+
+    // ...existing code...
+
     public ChatResult chat(List<Message> history, String userMessage) throws Exception {
         List<ToolDefinition> toolDefs = tools.stream().map(Tool::getDefinition).toList();
+
+        // Prime the persona on the very first message of a new conversation
+        if (history.isEmpty()) {
+            history.add(Message.assistant(PERSONA_PRIMER));
+            log.debug("Injected persona primer as first assistant message");
+        }
+
         history.add(Message.user(userMessage));
         ToolResult lastToolResult = null;
 
@@ -108,10 +122,14 @@ public class OrchestrationService {
 
         String schema = schemaLoader.getSchema();
         if (schema != null && !schema.isBlank()) {
+            log.debug("Injecting DB schema into system prompt ({} chars)", schema.length());
             sb.append("\n\nAVAILABLE DATABASE SCHEMA:\n");
             sb.append(schema);
         } else {
-            sb.append("\n\n(No database schema available — DB may not be configured.)");
+            sb.append("\n\nNO DATABASE SCHEMA AVAILABLE. CRITICAL RULES:\n" +
+                    "- Do NOT invent, guess or hallucinate any schema, table names or column names.\n" +
+                    "- Tell the user the DB is not configured or the schema could not be loaded.\n" +
+                    "- Do NOT pretend to have DB access you do not have.");
         }
 
         return sb.toString();
