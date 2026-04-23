@@ -8,6 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.tschanz.aigeny.web.ChatController;
+
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -59,8 +61,21 @@ public class JiraTool implements Tool {
 
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
-        if (!props.isJiraConfigured()) {
-            return new ToolResult("Jira is not configured. Please set aigeny.jira.* properties.");
+        AigenyProperties.Jira jira = props.getJira();
+        String baseUrl = jira.getBaseUrl() == null ? "" : jira.getBaseUrl().replaceAll("/$", "");
+
+        if (baseUrl.isBlank()) {
+            return new ToolResult("Jira is not configured. Please set aigeny.jira.base-url.");
+        }
+
+        // Resolve effective token: ThreadLocal (set by ChatController) takes priority over server config
+        String effectiveToken = JiraTokenContext.get();
+        if (effectiveToken == null || effectiveToken.isBlank()) {
+            effectiveToken = props.getJira().getToken();
+        }
+
+        if (effectiveToken == null || effectiveToken.isBlank()) {
+            return new ToolResult("Kein Jira-Token konfiguriert. Bitte gib deinen persönlichen Jira-Token über den 'Token eingeben'-Button ein.");
         }
 
         JsonNode args = JSON.readTree(argumentsJson);
@@ -68,18 +83,16 @@ public class JiraTool implements Tool {
         String jql = args.path("jql").asText("").trim();
         int maxResults = Math.min(args.path("maxResults").asInt(20), MAX_RESULTS);
 
-        AigenyProperties.Jira jira = props.getJira();
-        String baseUrl = jira.getBaseUrl().replaceAll("/$", "");
 
         // Build auth header
         String authHeader;
         if (jira.getUsername() == null || jira.getUsername().isBlank()) {
-            authHeader = "Bearer " + jira.getToken();
-            log.debug("   Auth mode=Bearer tokenLength={}", jira.getToken() != null ? jira.getToken().length() : 0);
+            authHeader = "Bearer " + effectiveToken;
+            log.debug("   Auth mode=Bearer tokenLength={}", effectiveToken.length());
         } else {
-            String credStr = jira.getUsername() + ":" + jira.getToken();
+            String credStr = jira.getUsername() + ":" + effectiveToken;
             authHeader = "Basic " + Base64.getEncoder().encodeToString(credStr.getBytes(StandardCharsets.UTF_8));
-            log.debug("   Auth mode=Basic user={} tokenLength={}", jira.getUsername(), jira.getToken() != null ? jira.getToken().length() : 0);
+            log.debug("   Auth mode=Basic user={} tokenLength={}", jira.getUsername(), effectiveToken.length());
         }
 
         // Direct issue fetch by key - richer data, no JQL needed

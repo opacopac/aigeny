@@ -32,7 +32,11 @@
       <div class="info-row"><span class="info-key">LLM</span><span class="info-val" id="infoLlm">—</span></div>
       <div class="info-row"><span class="info-key">Modell</span><span class="info-val" id="infoModel">—</span></div>
       <div class="info-row"><span class="info-key">DB</span><span class="info-val" id="infoDb">—</span></div>
-      <div class="info-row"><span class="info-key">Jira</span><span class="info-val" id="infoJira">—</span></div>
+      <div class="info-row">
+        <span class="info-key">Jira</span>
+        <span class="info-val" id="infoJira">—</span>
+        <button class="btn-token" id="btnJiraToken" onclick="openJiraTokenModal()" title="Jira Personal Access Token eingeben">Token eingeben</button>
+      </div>
       <div class="info-row"><span class="info-key">DB-Tabellen</span><span class="info-val" id="infoTables">—</span></div>
     </div>
     <button class="btn-secondary" onclick="reloadSchema()" title="DB-Schema neu laden">&#8635; DB-Schema neu laden</button>
@@ -66,6 +70,26 @@
 </main>
 
 <script src="/js/app.js"></script>
+
+<!-- ── Jira Token Modal ────────────────────────────────────────────────── -->
+<div id="jiraTokenModal" class="modal-overlay" style="display:none" onclick="closeJiraTokenModal(event)">
+  <div class="modal-box">
+    <h2>🔑 Jira Personal Access Token</h2>
+    <p class="modal-desc">
+      Gib deinen persönlichen Jira-Token ein.<br>
+      <strong>Wo findest du den Token?</strong><br>
+      Jira öffnen → <em>Profil</em> (oben rechts) → <em>Personal Access Tokens</em> → Token erstellen.
+    </p>
+    <input type="password" id="jiraTokenInput" class="modal-input"
+           placeholder="Token eingeben..." autocomplete="off"/>
+    <div class="modal-hint" id="jiraTokenHint"></div>
+    <div class="modal-actions">
+      <button class="btn-send" onclick="saveJiraToken()">💾 Speichern</button>
+      <button class="btn-secondary" onclick="clearJiraToken()">🗑 Token löschen</button>
+      <button class="btn-secondary" onclick="closeJiraTokenModal()">Abbrechen</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
 

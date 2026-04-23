@@ -9,6 +9,7 @@
 // ── State ──────────────────────────────────────────────────────────────────
 let isThinking = false;
 let hasExportData = false;
+const JIRA_TOKEN_KEY = 'aigeny.jiraToken';
 
 // ── HAL Eye ────────────────────────────────────────────────────────────────
 
@@ -215,7 +216,87 @@ function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// ── Send message ───────────────────────────────────────────────────────────
+// ── Jira Token Modal ───────────────────────────────────────────────────────
+
+function openJiraTokenModal() {
+  const stored = localStorage.getItem(JIRA_TOKEN_KEY) || '';
+  document.getElementById('jiraTokenInput').value = stored;
+  document.getElementById('jiraTokenHint').textContent = stored ? '✔ Token ist gespeichert.' : '';
+  document.getElementById('jiraTokenHint').className = stored ? 'modal-hint ok' : 'modal-hint';
+  document.getElementById('jiraTokenModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('jiraTokenInput').focus(), 50);
+}
+
+function closeJiraTokenModal(e) {
+  if (e && e.target !== document.getElementById('jiraTokenModal')) return;
+  document.getElementById('jiraTokenModal').style.display = 'none';
+}
+
+async function saveJiraToken() {
+  const token = document.getElementById('jiraTokenInput').value.trim();
+  const hint  = document.getElementById('jiraTokenHint');
+  try {
+    const res = await fetch('/api/jira/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (token) {
+      localStorage.setItem(JIRA_TOKEN_KEY, token);
+      hint.textContent = '✔ Token gespeichert! Da, choroscho!';
+      hint.className = 'modal-hint ok';
+    } else {
+      localStorage.removeItem(JIRA_TOKEN_KEY);
+      hint.textContent = 'Token gelöscht.';
+      hint.className = 'modal-hint';
+    }
+    setTimeout(() => {
+      document.getElementById('jiraTokenModal').style.display = 'none';
+      loadStatus();
+    }, 900);
+  } catch (err) {
+    hint.textContent = 'Njet! Fehler: ' + err.message;
+    hint.className = 'modal-hint error';
+  }
+}
+
+async function clearJiraToken() {
+  localStorage.removeItem(JIRA_TOKEN_KEY);
+  await fetch('/api/jira/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: '' })
+  });
+  document.getElementById('jiraTokenInput').value = '';
+  const hint = document.getElementById('jiraTokenHint');
+  hint.textContent = 'Token gelöscht.';
+  hint.className = 'modal-hint';
+  setTimeout(() => {
+    document.getElementById('jiraTokenModal').style.display = 'none';
+    loadStatus();
+  }, 600);
+}
+
+/** Send stored Jira token to backend session (called on page load) */
+async function syncJiraTokenToSession() {
+  const token = localStorage.getItem(JIRA_TOKEN_KEY);
+  if (!token) return;
+  try {
+    await fetch('/api/jira/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+  } catch (e) { /* ignore */ }
+}
+
+// Close modal on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('jiraTokenModal').style.display = 'none';
+});
+
+
 
 async function sendMessage() {
   if (isThinking) return;
@@ -336,9 +417,25 @@ async function loadStatus() {
     dbEl.textContent  = data.dbConfigured ? 'Connected' : 'Not configured';
     dbEl.className    = 'info-val ' + (data.dbConfigured ? 'ok' : 'error');
 
-    const jiraEl = document.getElementById('infoJira');
-    jiraEl.textContent = data.jiraConfigured ? 'Connected' : 'Not configured';
-    jiraEl.className   = 'info-val ' + (data.jiraConfigured ? 'ok' : 'error');
+    const jiraEl  = document.getElementById('infoJira');
+    const jiraBtn = document.getElementById('btnJiraToken');
+    if (data.jiraBaseUrlConfigured) {
+      if (data.jiraConfigured) {
+        jiraEl.textContent = 'Connected';
+        jiraEl.className   = 'info-val ok';
+        jiraBtn.textContent = '✎ Token ändern';
+        jiraBtn.classList.add('visible');
+      } else {
+        jiraEl.textContent = 'Kein Token';
+        jiraEl.className   = 'info-val error';
+        jiraBtn.textContent = '+ Token eingeben';
+        jiraBtn.classList.add('visible');
+      }
+    } else {
+      jiraEl.textContent = 'Not configured';
+      jiraEl.className   = 'info-val error';
+      jiraBtn.classList.remove('visible');
+    }
 
     if (data.hasExport) {
       hasExportData = true;
@@ -354,7 +451,7 @@ async function loadStatus() {
 // ── Init ───────────────────────────────────────────────────────────────────
 
 window.addEventListener('load', () => {
-  loadStatus();
+  syncJiraTokenToSession().then(() => loadStatus());
   setInterval(loadStatus, 15000);
 
   // Welcome message

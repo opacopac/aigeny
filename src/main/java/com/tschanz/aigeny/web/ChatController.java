@@ -5,6 +5,7 @@ import com.tschanz.aigeny.db.SchemaLoader;
 import com.tschanz.aigeny.llm.model.Message;
 import com.tschanz.aigeny.orchestration.ChatResult;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
+import com.tschanz.aigeny.tools.JiraTokenContext;
 import com.tschanz.aigeny.tools.QueryResult;
 import com.tschanz.aigeny.tools.ToolResult;
 import jakarta.servlet.http.HttpSession;
@@ -26,8 +27,9 @@ import java.util.concurrent.CompletableFuture;
 public class ChatController {
 
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
-    private static final String SESSION_HISTORY   = "chatHistory";
-    private static final String SESSION_RESULT    = "lastQueryResult";
+    private static final String SESSION_HISTORY    = "chatHistory";
+    private static final String SESSION_RESULT     = "lastQueryResult";
+    private static final String SESSION_JIRA_TOKEN = "jiraToken";
 
     private final OrchestrationService orchestration;
     private final SchemaLoader schemaLoader;
@@ -56,7 +58,12 @@ public class ChatController {
 
         List<Message> history = getOrCreateHistory(session);
 
+        // Read token in the HTTP thread (RequestContextHolder is available here)
+        // then pass it into the async lambda via ThreadLocal
+        final String jiraToken = getEffectiveJiraToken(session, props);
+
         return CompletableFuture.supplyAsync(() -> {
+            JiraTokenContext.set(jiraToken);
             try {
                 ChatResult result = orchestration.chat(history, message);
 
@@ -75,6 +82,8 @@ public class ChatController {
                         "response", "Nyet! Something vent wrong, comrade: " + e.getMessage(),
                         "hasExport", false
                 ));
+            } finally {
+                JiraTokenContext.clear();
             }
         });
     }
@@ -111,14 +120,51 @@ public class ChatController {
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> status(HttpSession session) {
         QueryResult lastResult = (QueryResult) session.getAttribute(SESSION_RESULT);
+        String userJiraToken = (String) session.getAttribute(SESSION_JIRA_TOKEN);
+        boolean jiraTokenAvailable = (userJiraToken != null && !userJiraToken.isBlank())
+                || props.isJiraConfigured();
+        boolean jiraBaseUrlConfigured = props.getJira().getBaseUrl() != null
+                && !props.getJira().getBaseUrl().isBlank();
         return ResponseEntity.ok(Map.of(
-                "llmProvider",  props.getLlm().getProvider(),
-                "llmModel",     props.getLlm().getModel(),
-                "dbConfigured", props.isDbConfigured(),
-                "jiraConfigured", props.isJiraConfigured(),
-                "schemaTables", schemaLoader.getTableCount(),
-                "hasExport",    lastResult != null && !lastResult.isEmpty()
+                "llmProvider",          props.getLlm().getProvider(),
+                "llmModel",             props.getLlm().getModel(),
+                "dbConfigured",         props.isDbConfigured(),
+                "jiraConfigured",       jiraTokenAvailable,
+                "jiraBaseUrlConfigured",jiraBaseUrlConfigured,
+                "schemaTables",         schemaLoader.getTableCount(),
+                "hasExport",            lastResult != null && !lastResult.isEmpty()
         ));
+    }
+
+    // ── POST /api/jira/token ─────────────────────────────────────────────────
+
+    @PostMapping("/jira/token")
+    public ResponseEntity<Map<String, String>> setJiraToken(
+            @RequestBody Map<String, String> body,
+            HttpSession session) {
+        String token = body.getOrDefault("token", "").strip();
+        if (token.isEmpty()) {
+            session.removeAttribute(SESSION_JIRA_TOKEN);
+            return ResponseEntity.ok(Map.of("status", "cleared"));
+        }
+        session.setAttribute(SESSION_JIRA_TOKEN, token);
+        log.info("User Jira token set for session {}", session.getId());
+        return ResponseEntity.ok(Map.of("status", "ok"));
+    }
+
+    // ── DELETE /api/jira/token ───────────────────────────────────────────────
+
+    @DeleteMapping("/jira/token")
+    public ResponseEntity<Map<String, String>> clearJiraToken(HttpSession session) {
+        session.removeAttribute(SESSION_JIRA_TOKEN);
+        return ResponseEntity.ok(Map.of("status", "cleared"));
+    }
+
+    /** Returns the effective Jira token for the current session (user override or config fallback). */
+    public static String getEffectiveJiraToken(HttpSession session, AigenyProperties props) {
+        String userToken = session != null ? (String) session.getAttribute(SESSION_JIRA_TOKEN) : null;
+        if (userToken != null && !userToken.isBlank()) return userToken;
+        return props.getJira().getToken();
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
