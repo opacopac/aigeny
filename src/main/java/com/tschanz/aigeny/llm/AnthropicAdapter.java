@@ -52,7 +52,7 @@ public class AnthropicAdapter implements LlmClient {
 
         ObjectNode body = JSON.createObjectNode();
         body.put("model", llm.getModel());
-        body.put("max_tokens", 4096);
+        body.put("max_tokens", 8192);
 
         // Extract system message (Claude takes it as a top-level field)
         String systemContent = null;

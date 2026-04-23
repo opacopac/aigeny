@@ -72,12 +72,9 @@ public class SchemaLoader {
     private int countTables(Connection conn) {
         String sql = """
             SELECT COUNT(*) FROM all_tables
-            WHERE owner NOT IN (
-                'SYS','SYSTEM','OUTLN','DBSNMP','APPQOSSYS','WMSYS',
-                'EXFSYS','CTXSYS','XDB','ORDDATA','ORDSYS','MDSYS',
-                'OLAPSYS','OWBSYS','FLOWS_FILES'
-            )
-            AND table_name NOT LIKE 'HTA!_%' ESCAPE '!'
+            WHERE tablespace_name = 'USERS'
+            AND table_name NOT LIKE 'HTE!_%' ESCAPE '!'
+            AND table_name NOT LIKE 'WWV!_%' ESCAPE '!'
             """;
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {

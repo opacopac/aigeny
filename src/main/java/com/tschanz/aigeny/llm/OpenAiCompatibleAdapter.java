@@ -73,7 +73,7 @@ public class OpenAiCompatibleAdapter implements LlmClient {
             body.put("tool_choice", "auto");
         }
 
-        body.put("max_tokens", 4096);
+        body.put("max_tokens", 8192);
 
         String bodyStr = JSON.writeValueAsString(body);
 

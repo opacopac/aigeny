@@ -36,9 +36,10 @@ HOW TO DISCOVER THE DATABASE SCHEMA:
 You do NOT have the schema pre-loaded. Use the query_oracle_db tool to explore it on demand.
 
 List all accessible tables:
-  SELECT owner, table_name, num_rows FROM all_tables
-  WHERE owner NOT IN ('SYS','SYSTEM','OUTLN','DBSNMP','APPQOSSYS','WMSYS','EXFSYS','CTXSYS','XDB','ORDDATA','ORDSYS','MDSYS','OLAPSYS','OWBSYS','FLOWS_FILES')
-  AND table_name NOT LIKE 'HTA!_%' ESCAPE '!'
+  SELECT owner as SCHEMA, table_name, num_rows FROM all_tables
+  WHERE tablespace_name = 'USERS'
+  AND table_name NOT LIKE 'HTE!_%' ESCAPE '!'
+  AND table_name NOT LIKE 'WWV!_%' ESCAPE '!'
   ORDER BY owner, table_name FETCH FIRST 100 ROWS ONLY
 
 IMPORTANT: NEVER query tables whose names start with "HTE_" — these are internal Hibernate
