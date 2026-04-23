@@ -47,7 +47,7 @@ services:
 
       # ── Jira ───────────────────────────────────────────────────────────────
       AIGENY_JIRA_BASE_URL:   "https://flow.sbb.ch"
-      AIGENY_JIRA_USERNAME:   ""
+      # Token is entered per-user via the UI (Personal Access Token)
     restart: unless-stopped
     networks:
       - aigeny-net

@@ -117,14 +117,11 @@ public class AigenyProperties {
     public static class Jira {
         /** Jira base URL, e.g. https://flow.sbb.ch */
         private String baseUrl = "";
-        private String username = "";
-        /** API token or password */
+        /** API token (Personal Access Token) – entered per-user via the UI */
         private String token = "";
 
         public String getBaseUrl() { return baseUrl; }
         public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
-        public String getUsername() { return username; }
-        public void setUsername(String username) { this.username = username; }
         public String getToken() { return token; }
         public void setToken(String token) { this.token = token; }
     }

@@ -84,16 +84,9 @@ public class JiraTool implements Tool {
         int maxResults = Math.min(args.path("maxResults").asInt(20), MAX_RESULTS);
 
 
-        // Build auth header
-        String authHeader;
-        if (jira.getUsername() == null || jira.getUsername().isBlank()) {
-            authHeader = "Bearer " + effectiveToken;
-            log.debug("   Auth mode=Bearer tokenLength={}", effectiveToken.length());
-        } else {
-            String credStr = jira.getUsername() + ":" + effectiveToken;
-            authHeader = "Basic " + Base64.getEncoder().encodeToString(credStr.getBytes(StandardCharsets.UTF_8));
-            log.debug("   Auth mode=Basic user={} tokenLength={}", jira.getUsername(), effectiveToken.length());
-        }
+        // Build auth header – always Bearer (Personal Access Token)
+        String authHeader = "Bearer " + effectiveToken;
+        log.debug("   Auth mode=Bearer tokenLength={}", effectiveToken.length());
 
         // Direct issue fetch by key - richer data, no JQL needed
         if (!issueKey.isBlank()) {
