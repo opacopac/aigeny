@@ -216,6 +216,69 @@ function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// ── Jira Write Confirmation ────────────────────────────────────────────────
+
+function showJiraConfirmation(pendingAction) {
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'message aigeny jira-confirm-msg';
+  div.id = 'jiraConfirmBlock';
+
+  const header = document.createElement('div');
+  header.className = 'message-header';
+  const dot = document.createElement('span'); dot.className = 'dot';
+  const name = document.createElement('span'); name.textContent = 'AIgeny';
+  header.append(dot, name);
+
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble';
+
+  const descHtml = renderMarkdown(
+    '⚠️ **Jira Schreibaktion – Bestätigung erforderlich!**\n\n' +
+    pendingAction.description + '\n\nSoll ich diese Aktion wirklich ausführen, Towarischtsch?'
+  );
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'jira-confirm-buttons';
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'btn btn-confirm';
+  confirmBtn.textContent = '✔ Da! Ausführen';
+  confirmBtn.onclick = () => executeJiraAction(div);
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn btn-cancel';
+  cancelBtn.textContent = '✗ Njet! Abbrechen';
+  cancelBtn.onclick = () => cancelJiraAction(div);
+
+  btnRow.append(confirmBtn, cancelBtn);
+  bubble.innerHTML = descHtml;
+  bubble.appendChild(btnRow);
+
+  div.append(header, bubble);
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+async function executeJiraAction(confirmBlock) {
+  confirmBlock.querySelectorAll('button').forEach(b => b.disabled = true);
+  try {
+    const res  = await fetch('/api/jira/confirm', { method: 'POST' });
+    const data = await res.json();
+    confirmBlock.remove();
+    appendMessage('aigeny', data.result || 'Aktion ausgeführt, da!');
+  } catch (err) {
+    confirmBlock.remove();
+    appendMessage('aigeny', 'Njet! Netzwerkfehler: ' + err.message);
+  }
+}
+
+async function cancelJiraAction(confirmBlock) {
+  await fetch('/api/jira/cancel', { method: 'POST' }).catch(() => {});
+  confirmBlock.remove();
+  appendMessage('aigeny', 'Njet! Aktion wurde abgebrochen, Towarischtsch. Choroscho, keine Änderungen gemacht, da!');
+}
+
 // ── Jira Token Modal ───────────────────────────────────────────────────────
 
 function openJiraTokenModal() {
@@ -320,6 +383,10 @@ async function sendMessage() {
 
     if (data.response) {
       appendMessage('aigeny', data.response);
+    }
+
+    if (data.pendingAction) {
+      showJiraConfirmation(data.pendingAction);
     }
 
     if (data.hasExport) {

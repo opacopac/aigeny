@@ -376,3 +376,43 @@ html, body {
 .modal-hint.error { color: var(--red); }
 .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* ── Jira Confirmation Block ───────────────────────────────────────────── */
+.jira-confirm-msg .message-bubble {
+  border: 1px solid #cc6600;
+  background: #1a1000;
+}
+.jira-confirm-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.btn-confirm {
+  background: #1a4a1a;
+  color: #88ee88;
+  border: 1px solid #338833;
+  padding: 7px 18px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.2s, border-color 0.2s;
+}
+.btn-confirm:hover:not(:disabled) { background: #225522; border-color: #44aa44; }
+.btn-confirm:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-cancel {
+  background: #3a1010;
+  color: #ee8888;
+  border: 1px solid #883333;
+  padding: 7px 18px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.2s, border-color 0.2s;
+}
+.btn-cancel:hover:not(:disabled) { background: #4a1515; border-color: #aa4444; }
+.btn-cancel:disabled { opacity: 0.45; cursor: not-allowed; }
+
+

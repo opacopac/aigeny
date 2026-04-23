@@ -6,6 +6,9 @@ import com.tschanz.aigeny.llm.model.Message;
 import com.tschanz.aigeny.orchestration.ChatResult;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
 import com.tschanz.aigeny.tools.JiraTokenContext;
+import com.tschanz.aigeny.tools.JiraWriteExecutor;
+import com.tschanz.aigeny.tools.PendingJiraAction;
+import com.tschanz.aigeny.tools.PendingJiraActionContext;
 import com.tschanz.aigeny.tools.QueryResult;
 import com.tschanz.aigeny.tools.ToolResult;
 import jakarta.servlet.http.HttpSession;
@@ -27,20 +30,24 @@ import java.util.concurrent.CompletableFuture;
 public class ChatController {
 
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
-    private static final String SESSION_HISTORY    = "chatHistory";
-    private static final String SESSION_RESULT     = "lastQueryResult";
-    private static final String SESSION_JIRA_TOKEN = "jiraToken";
+    private static final String SESSION_HISTORY        = "chatHistory";
+    private static final String SESSION_RESULT         = "lastQueryResult";
+    private static final String SESSION_JIRA_TOKEN     = "jiraToken";
+    private static final String SESSION_PENDING_ACTION = "pendingJiraAction";
 
     private final OrchestrationService orchestration;
     private final SchemaLoader schemaLoader;
     private final AigenyProperties props;
+    private final JiraWriteExecutor jiraWriteExecutor;
 
     public ChatController(OrchestrationService orchestration,
                           SchemaLoader schemaLoader,
-                          AigenyProperties props) {
-        this.orchestration = orchestration;
-        this.schemaLoader  = schemaLoader;
-        this.props         = props;
+                          AigenyProperties props,
+                          JiraWriteExecutor jiraWriteExecutor) {
+        this.orchestration     = orchestration;
+        this.schemaLoader      = schemaLoader;
+        this.props             = props;
+        this.jiraWriteExecutor = jiraWriteExecutor;
     }
 
     // ── POST /api/chat ──────────────────────────────────────────────────────
@@ -64,12 +71,27 @@ public class ChatController {
 
         return CompletableFuture.supplyAsync(() -> {
             JiraTokenContext.set(jiraToken);
+            PendingJiraActionContext.clear();
             try {
                 ChatResult result = orchestration.chat(history, message);
 
                 // Persist last query result in session for export
                 if (result.hasExportData()) {
                     session.setAttribute(SESSION_RESULT, result.lastToolResult().getQueryResult());
+                }
+
+                // Check for a pending Jira write action queued by a tool
+                PendingJiraAction pending = PendingJiraActionContext.get();
+                if (pending != null) {
+                    session.setAttribute(SESSION_PENDING_ACTION, pending);
+                    return ResponseEntity.ok(Map.of(
+                            "response",       result.response(),
+                            "hasExport",      result.hasExportData(),
+                            "pendingAction",  Map.of(
+                                    "description", pending.getHumanDescription(),
+                                    "issueKey",    pending.getIssueKey()
+                            )
+                    ));
                 }
 
                 return ResponseEntity.ok(Map.of(
@@ -84,8 +106,44 @@ public class ChatController {
                 ));
             } finally {
                 JiraTokenContext.clear();
+                PendingJiraActionContext.clear();
             }
         });
+    }
+
+    // ── POST /api/jira/confirm ───────────────────────────────────────────────
+
+    @PostMapping("/jira/confirm")
+    public CompletableFuture<ResponseEntity<Map<String, Object>>> confirmJiraAction(HttpSession session) {
+        PendingJiraAction pending = (PendingJiraAction) session.getAttribute(SESSION_PENDING_ACTION);
+        if (pending == null) {
+            return CompletableFuture.completedFuture(
+                    ResponseEntity.ok(Map.of("result", "Njet! Keine ausstehende Aktion gefunden, Towarischtsch.")));
+        }
+        session.removeAttribute(SESSION_PENDING_ACTION);
+        final String token = getEffectiveJiraToken(session, props);
+        if (token == null || token.isBlank()) {
+            return CompletableFuture.completedFuture(
+                    ResponseEntity.ok(Map.of("result", "Njet! Kein Jira-Token konfiguriert.")));
+        }
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String result = jiraWriteExecutor.execute(pending, token);
+                return ResponseEntity.ok(Map.<String, Object>of("result", result));
+            } catch (Exception e) {
+                log.error("Jira write failed", e);
+                return ResponseEntity.ok(Map.<String, Object>of(
+                        "result", "Njet! Fehler bei Jira-Aktion: " + e.getMessage()));
+            }
+        });
+    }
+
+    // ── POST /api/jira/cancel ────────────────────────────────────────────────
+
+    @PostMapping("/jira/cancel")
+    public ResponseEntity<Map<String, String>> cancelJiraAction(HttpSession session) {
+        session.removeAttribute(SESSION_PENDING_ACTION);
+        return ResponseEntity.ok(Map.of("status", "cancelled"));
     }
 
     // ── POST /api/chat/clear ─────────────────────────────────────────────────
