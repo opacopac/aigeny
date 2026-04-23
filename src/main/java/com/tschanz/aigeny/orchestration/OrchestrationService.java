@@ -22,7 +22,7 @@ import java.util.List;
 public class OrchestrationService {
 
     private static final Logger log = LoggerFactory.getLogger(OrchestrationService.class);
-    private static final int MAX_TOOL_ITERATIONS = 10;
+    private static final int MAX_TOOL_ITERATIONS = 50;
 
     private final LlmClient llmClient;
     private final List<Tool> tools;
