@@ -77,6 +77,7 @@ public class SchemaLoader {
                 'EXFSYS','CTXSYS','XDB','ORDDATA','ORDSYS','MDSYS',
                 'OLAPSYS','OWBSYS','FLOWS_FILES'
             )
+            AND table_name NOT LIKE 'HTA!_%' ESCAPE '!'
             """;
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {

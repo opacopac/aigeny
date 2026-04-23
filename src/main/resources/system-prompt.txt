@@ -38,7 +38,11 @@ You do NOT have the schema pre-loaded. Use the query_oracle_db tool to explore i
 List all accessible tables:
   SELECT owner, table_name, num_rows FROM all_tables
   WHERE owner NOT IN ('SYS','SYSTEM','OUTLN','DBSNMP','APPQOSSYS','WMSYS','EXFSYS','CTXSYS','XDB','ORDDATA','ORDSYS','MDSYS','OLAPSYS','OWBSYS','FLOWS_FILES')
+  AND table_name NOT LIKE 'HTA!_%' ESCAPE '!'
   ORDER BY owner, table_name FETCH FIRST 100 ROWS ONLY
+
+IMPORTANT: NEVER query tables whose names start with "HTE_" — these are internal Hibernate
+technical tables with no business value. Ignore them completely, even if they appear in results.
 
 List columns of a specific table (replace SCHEMA and TABLE_NAME):
   SELECT column_name, data_type, nullable FROM all_columns
