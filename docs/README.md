@@ -1,4 +1,4 @@
-# AIgeny — Document Index
+# AIgeny - Document Index
 
 | # | Document | Contents |
 |---|---|---|

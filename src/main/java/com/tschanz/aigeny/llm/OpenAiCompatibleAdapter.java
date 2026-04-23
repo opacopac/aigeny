@@ -19,7 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * OpenAI-compatible HTTP adapter — works with Ollama, Groq, OpenAI, Azure OpenAI, xAI Grok.
+ * OpenAI-compatible HTTP adapter - works with Ollama, Groq, OpenAI, Azure OpenAI, xAI Grok.
  * Switch provider via application.yml (aigeny.llm.*).
  * For Claude (Anthropic), use AnthropicAdapter instead.
  */
@@ -134,7 +134,7 @@ public class OpenAiCompatibleAdapter implements LlmClient {
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 429) return response;
             long waitSeconds = parseRetryAfter(response.body());
-            log.warn("<< LLM RESPONSE status=429 — rate limit. Waiting {}s before retry {}/{}...", waitSeconds, attempt, maxRetries);
+            log.warn("<< LLM RESPONSE status=429 - rate limit. Waiting {}s before retry {}/{}...", waitSeconds, attempt, maxRetries);
             Thread.sleep(waitSeconds * 1000);
         }
         return http.send(request, HttpResponse.BodyHandlers.ofString());

@@ -7,7 +7,7 @@ spring:
     import: "optional:file:${user.home}/.aigeny/aigeny.yml"
   mvc:
     async:
-      request-timeout: 300000   # 5 minutes — Ollama can be slow on CPU
+      request-timeout: 300000   # 5 minutes - Ollama can be slow on CPU
 
 server:
   port: 8080
@@ -24,7 +24,7 @@ server:
 #
 # ── LLM Provider Presets ──────────────────────────────────────────────────────
 #
-#  Ollama (default — local, free, private):
+#  Ollama (default - local, free, private):
 #    provider: ollama
 #    api-key:  ollama
 #    base-url: http://localhost:11434/v1

@@ -41,7 +41,7 @@ public class QueryResult {
             sb.append("\n");
         }
         if (rows.size() > 200) {
-            sb.append("... (").append(rows.size() - 200).append(" more rows — export to see all)");
+            sb.append("... (").append(rows.size() - 200).append(" more rows - export to see all)");
         }
         return sb.toString();
     }

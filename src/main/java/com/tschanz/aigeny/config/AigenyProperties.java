@@ -83,7 +83,7 @@ public class AigenyProperties {
     public static class Llm {
         /** Provider name: ollama | groq | openai | azure */
         private String provider = "ollama";
-        /** API key — use "ollama" as placeholder for local Ollama */
+        /** API key - use "ollama" as placeholder for local Ollama */
         private String apiKey = "ollama";
         /** OpenAI-compatible base URL */
         private String baseUrl = "http://localhost:11434/v1";

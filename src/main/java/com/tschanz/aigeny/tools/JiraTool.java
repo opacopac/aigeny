@@ -82,7 +82,7 @@ public class JiraTool implements Tool {
             log.debug("   Auth mode=Basic user={} tokenLength={}", jira.getUsername(), jira.getToken() != null ? jira.getToken().length() : 0);
         }
 
-        // Direct issue fetch by key — richer data, no JQL needed
+        // Direct issue fetch by key - richer data, no JQL needed
         if (!issueKey.isBlank()) {
             return fetchIssueByKey(issueKey, baseUrl, authHeader);
         }

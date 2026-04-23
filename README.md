@@ -1,9 +1,9 @@
-# AIgeny — README
+# AIgeny - README
 
-## AIgeny — AI Data Assistant
+## AIgeny - AI Data Assistant
 
 AIgeny is a **Spring Boot web application** with a Russian-accented AI assistant for data managers.
-Open it in any browser — no installation, no setup wizard, no desktop app required.
+Open it in any browser - no installation, no setup wizard, no desktop app required.
 
 It can query Oracle databases (read-only), search Jira tickets, and export results as CSV.
 
@@ -14,7 +14,7 @@ It can query Oracle databases (read-only), search Jira tickets, and export resul
 ### Prerequisites
 - Docker Desktop installed
 - ~5 GB free disk space (for the Ollama LLM model)
-- No API key needed — Ollama runs fully locally
+- No API key needed - Ollama runs fully locally
 
 ### 1. Build & Start
 
@@ -62,9 +62,9 @@ Open **http://localhost:8080** in your browser.
 ## Configuration
 
 All settings live in `src/main/resources/application.yml`.
-**Never edit this file with secrets for production** — use one of the override mechanisms below.
+**Never edit this file with secrets for production** - use one of the override mechanisms below.
 
-### Option 1 — External config file (recommended)
+### Option 1 - External config file (recommended)
 
 Create `~/.aigeny/aigeny.yml` (or `/root/.aigeny/aigeny.yml` in Docker) with only the values you want to override:
 
@@ -86,7 +86,7 @@ aigeny:
     token: "your_api_token"
 ```
 
-### Option 2 — Environment variables
+### Option 2 - Environment variables
 
 Spring Boot maps `aigeny.db.password` → `AIGENY_DB_PASSWORD` automatically:
 
@@ -121,10 +121,10 @@ In `docker-compose.yml` uncomment the relevant `environment:` lines.
 |---|---|---|---|---|
 | **Ollama** ⭐ | Free | None | Fully local | `provider: ollama`, `base-url: http://localhost:11434/v1` |
 | Groq | Free tier | ~12k TPM | Cloud | `provider: groq`, `base-url: https://api.groq.com/openai/v1` |
-| OpenAI | Paid | — | Cloud | `provider: openai`, `base-url: https://api.openai.com/v1` |
-| Azure OpenAI | Paid | — | Cloud | `provider: azure`, `base-url: https://RESOURCE.openai.azure.com/...` |
-| xAI Grok | Paid | — | Cloud | `provider: grok`, `base-url: https://api.x.ai/v1` |
-| Anthropic Claude | Paid | — | Cloud | `provider: claude`, `base-url: https://api.anthropic.com/v1` |
+| OpenAI | Paid | - | Cloud | `provider: openai`, `base-url: https://api.openai.com/v1` |
+| Azure OpenAI | Paid | - | Cloud | `provider: azure`, `base-url: https://RESOURCE.openai.azure.com/...` |
+| xAI Grok | Paid | - | Cloud | `provider: grok`, `base-url: https://api.x.ai/v1` |
+| Anthropic Claude | Paid | - | Cloud | `provider: claude`, `base-url: https://api.anthropic.com/v1` |
 
 ### Switching providers
 
@@ -161,7 +161,7 @@ Without GPU: responses take ~10–30 s on CPU. With GPU: ~1–3 s.
 ## Security
 
 - Oracle: only `SELECT` queries allowed (whitelist + read-only JDBC connection)
-- Secrets live outside the JAR (external config file or env vars — never committed to git)
+- Secrets live outside the JAR (external config file or env vars - never committed to git)
 - Logs written to `~/.aigeny/aigeny.log`
 - Add `.aigeny/aigeny.yml` to `.gitignore`!
 

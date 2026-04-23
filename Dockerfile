@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────
-#  AIgeny — Spring Boot Web Application
+#  AIgeny - Spring Boot Web Application
 #  Access at: http://localhost:8080
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -8,7 +8,7 @@ FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 COPY target/aigeny-*.jar aigeny.jar
 
-# Config directory — mount to persist external application.yml
+# Config directory - mount to persist external application.yml
 RUN mkdir -p /root/.aigeny
 VOLUME ["/root/.aigeny"]
 

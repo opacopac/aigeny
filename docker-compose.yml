@@ -2,9 +2,9 @@ version: "3.9"
 
 # ── Secrets ────────────────────────────────────────────────────────────────────
 # Create plain-text files in ./secrets/ (add to .gitignore!):
-#   secrets/db_password.txt    — Oracle read-only user password
-#   secrets/jira_token.txt     — Jira API token or password
-#   secrets/llm_api_key.txt    — LLM API key (not needed for Ollama)
+#   secrets/db_password.txt    - Oracle read-only user password
+#   secrets/jira_token.txt     - Jira API token or password
+#   secrets/claude_api_key.txt - Anthropic Claude API key (sk-ant-...)
 #
 # Alternatively, use Docker Swarm secrets or Vault for production.
 secrets:
@@ -12,8 +12,8 @@ secrets:
     file: ./secrets/db_password.txt
   jira_token:
     file: ./secrets/jira_token.txt
-  llm_api_key:
-    file: ./secrets/llm_api_key.txt
+  claude_api_key:
+    file: ./secrets/claude_api_key.txt
 
 services:
 
@@ -28,14 +28,18 @@ services:
     secrets:
       - db_password
       - jira_token
-      - llm_api_key
+      - claude_api_key
     environment:
-      # ── LLM — Ollama (default, local, no rate limits) ─────────────────────
-      AIGENY_LLM_PROVIDER: "ollama"
-      AIGENY_LLM_BASE_URL: "http://ollama:11434/v1"
-      AIGENY_LLM_MODEL:    "llama3.1:8b"
-      # For Ollama no real key is needed; for cloud providers use the secret file:
-      # AIGENY_LLM_API_KEY_FILE: "/run/secrets/llm_api_key"
+      # ── LLM - Anthropic Claude ────────────────────────────────────────────
+      AIGENY_LLM_PROVIDER: "claude"
+      AIGENY_LLM_BASE_URL: "https://api.anthropic.com/v1"
+      AIGENY_LLM_MODEL:    "claude-sonnet-4-6"
+      AIGENY_LLM_API_KEY_FILE: "/run/secrets/claude_api_key"
+      # ── LLM - Ollama (local fallback, uncomment to use) ───────────────────
+      # AIGENY_LLM_PROVIDER: "ollama"
+      # AIGENY_LLM_BASE_URL: "http://ollama:11434/v1"
+      # AIGENY_LLM_MODEL:    "qwen2.5:14b"
+      # AIGENY_LLM_API_KEY:  "ollama"
 
       # ── Oracle DB ──────────────────────────────────────────────────────────
       # AIGENY_DB_URL:          "jdbc:oracle:thin:@hostname:1521/SERVICENAME"
@@ -45,16 +49,13 @@ services:
 
       # ── Jira ───────────────────────────────────────────────────────────────
       AIGENY_JIRA_BASE_URL:   "https://flow.sbb.ch"
-      AIGENY_JIRA_USERNAME:   "armand.tschanz@sbb.ch"
+      AIGENY_JIRA_USERNAME:   ""
       AIGENY_JIRA_TOKEN_FILE:  "/run/secrets/jira_token"
-    depends_on:
-      ollama:
-        condition: service_healthy
     restart: unless-stopped
     networks:
       - aigeny-net
 
-  # ── Ollama — local LLM (no API key, no rate limits, fully private) ─────────
+  # ── Ollama - local LLM (no API key, no rate limits, fully private) ─────────
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
@@ -71,7 +72,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
-    # GPU support — uncomment for NVIDIA GPU (dramatically faster responses):
+    # GPU support - uncomment for NVIDIA GPU (dramatically faster responses):
     # deploy:
     #   resources:
     #     reservations:
@@ -80,7 +81,7 @@ services:
     #           count: 1
     #           capabilities: [gpu]
 
-  # ── Ollama model initialiser — pulls model once on first run ───────────────
+  # ── Ollama model initialiser - pulls model once on first run ───────────────
   ollama-init:
     image: ollama/ollama:latest
     container_name: ollama-init

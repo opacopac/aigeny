@@ -1,4 +1,4 @@
-# AIgeny — Integration Specification
+# AIgeny - Integration Specification
 
 ---
 
@@ -128,15 +128,15 @@ WHERE owner = ? AND table_name = ?
 ORDER BY column_id;
 ```
 
-The result is inserted as formatted text into the system prompt (no character limit — full schema is used).
+The result is inserted as formatted text into the system prompt (no character limit - full schema is used).
 
 Fallback if `all_tables` is not accessible → `user_tables` / `user_tab_columns`.
 
 ### 2.4 Query Result
 
 `QueryResult` contains:
-- `List<String> columns` — column labels
-- `List<Map<String, Object>> rows` — up to 5,000 rows
+- `List<String> columns` - column labels
+- `List<Map<String, Object>> rows` - up to 5,000 rows
 - For the LLM: max 200 rows as text (remainder: "export to see all")
 - For export: all rows
 

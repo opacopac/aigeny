@@ -1,4 +1,4 @@
-# AIgeny — Implementation Plan
+# AIgeny - Implementation Plan
 
 ## Status
 
@@ -25,7 +25,7 @@
 
 ## Architecture Change Log
 
-### v2.0 — Swing → Spring Boot Web App
+### v2.0 - Swing → Spring Boot Web App
 
 | Before (v1) | After (v2) |
 |---|---|
@@ -68,4 +68,4 @@
 | Session state is in-memory | Add Spring Session + Redis for multi-instance deployment |
 | No streaming (LLM response arrives at once) | Add SSE streaming in v3 |
 | Single-user assumption per session | Fine for current use case |
-| Schema limited to 6,000 chars in prompt | Removed — full schema is now always injected |
+| Schema limited to 6,000 chars in prompt | Removed - full schema is now always injected |

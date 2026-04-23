@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────────────────
-   AIgeny — frontend JavaScript
+   AIgeny - frontend JavaScript
    - HAL 9000 eye animation (Canvas)
    - Chat send / receive
    - Export buttons
@@ -359,7 +359,7 @@ window.addEventListener('load', () => {
 
   // Welcome message
   appendMessage('aigeny',
-    'Privet Towarischtsch! Ich bin AIgeny — dein persönlicher Daten-Assistent mit russische Seele.\n\n' +
+    'Privet Towarischtsch! Ich bin AIgeny - dein persönlicher Daten-Assistent mit russische Seele.\n\n' +
     'Du kannst mir Fragen zur Datenbank stellen, Berichte anfordern oder Jira-Tickets suchen.\n\n' +
     '**Was kann ich heute für dich tun?**');
 });

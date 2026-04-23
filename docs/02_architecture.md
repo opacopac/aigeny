@@ -1,9 +1,9 @@
-# AIgeny — Architecture
+# AIgeny - Architecture
 
 ## Overview
 
 AIgeny is a **Spring Boot 3 web application** serving a single-page UI. All configuration is
-file- or environment-variable-based — no GUI setup wizard.
+file- or environment-variable-based - no GUI setup wizard.
 
 ---
 
@@ -30,7 +30,7 @@ Browser (any device)
 │        LlmClient                          Tools       │
 │  OpenAiCompatibleAdapter          OracleDbTool        │
 │  (Ollama / Groq / OpenAI /        JiraTool            │
-│   Azure — switchable via yml)     SchemaLoader        │
+│   Azure - switchable via yml)     SchemaLoader        │
 │                                                       │
 │  ExportService  → byte[] CSV                          │
 └───────────────────────────────────────────────────────┘
@@ -74,17 +74,17 @@ src/main/java/com/tschanz/aigeny/
 │   └── model/                      Message, ToolCall, ToolDefinition, ChatResponse
 ├── tools/
 │   ├── Tool.java                   Interface
-│   ├── OracleDbTool.java           @Service — SQL SELECT via JDBC
-│   ├── JiraTool.java               @Service — JQL search via HTTPS
+│   ├── OracleDbTool.java           @Service - SQL SELECT via JDBC
+│   ├── JiraTool.java               @Service - JQL search via HTTPS
 │   ├── QueryResult.java            Column names + row data
 │   └── ToolResult.java             Text + optional QueryResult
 ├── db/
-│   └── SchemaLoader.java           @Service — loads schema on startup, caches it
+│   └── SchemaLoader.java           @Service - loads schema on startup, caches it
 ├── orchestration/
-│   ├── OrchestrationService.java   @Service — agentic loop, system prompt
+│   ├── OrchestrationService.java   @Service - agentic loop, system prompt
 │   └── ChatResult.java             Record: response text + last ToolResult
 ├── export/
-│   └── ExportService.java          @Service — byte[] CSV
+│   └── ExportService.java          @Service - byte[] CSV
 └── web/
     ├── ChatController.java         POST /api/chat, /api/chat/clear, schema reload, status
     └── ExportController.java       GET /api/export/csv
@@ -131,8 +131,8 @@ Volumes:
 ## Session Management
 
 Each browser tab/session holds its own conversation state in the HTTP session:
-- `chatHistory` — `List<Message>` (conversation context for the LLM)
-- `lastQueryResult` — `QueryResult` (available for CSV download)
+- `chatHistory` - `List<Message>` (conversation context for the LLM)
+- `lastQueryResult` - `QueryResult` (available for CSV download)
 
 Sessions are in-memory (single-instance deployment). For multi-instance, add
 Spring Session with Redis.

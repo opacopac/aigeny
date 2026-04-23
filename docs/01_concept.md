@@ -1,4 +1,4 @@
-# AIgeny — Concept & Requirements
+# AIgeny - Concept & Requirements
 
 > **AIgeny** is a local Java desktop AI assistant for data managers, named after *Evgeny* —
 > a Russian colleague who traditionally helps data managers with database requests.
@@ -10,7 +10,7 @@
 
 Data managers should be able to ask questions about an Oracle database in natural language
 (English or German) without needing any SQL knowledge. The AI agent translates questions
-into SQL queries, executes them and presents the results — in the style of "AIgeny" with a Russian accent.
+into SQL queries, executes them and presents the results - in the style of "AIgeny" with a Russian accent.
 
 ### Typical Use Cases
 - "Show me all open orders from the last 30 days"
@@ -53,7 +53,7 @@ into SQL queries, executes them and presents the results — in the style of "AI
 ├──────────┬──────────────────────────────────────────────────────┤
 │          │                                                      │
 │  HAL Eye │  🔴 AIgeny:                                          │
-│  (red    │  Da, privet comrade! I am AIgeny — your Russian      │
+│  (red    │  Da, privet comrade! I am AIgeny - your Russian      │
 │  pulsing │  data expert. Ask me about ze database, da?          │
 │  glow    │                                                      │
 │  anima-  │  👤 You:                                             │
@@ -89,9 +89,9 @@ The agent speaks in "Russian-accented English":
 | Yes, of course | Da, of course! |
 | No, that's not possible | Nyet, zis is not possible |
 | Let me check the database | Horosho! I vill query ze database now! |
-| Very good | Ochen horosho — very good! |
-| Here are the results | Pozhaluysta — here are ze results! |
-| There you have it | Nu vot — there you have it, comrade! |
+| Very good | Ochen horosho - very good! |
+| Here are the results | Pozhaluysta - here are ze results! |
+| There you have it | Nu vot - there you have it, comrade! |
 
 Rules for the persona:
 - Always stay in character, never break it

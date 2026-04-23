@@ -68,7 +68,7 @@ public class AnthropicAdapter implements LlmClient {
             body.put("system", systemContent);
         }
 
-        // Build messages array — Claude format
+        // Build messages array - Claude format
         ArrayNode msgArray = body.putArray("messages");
         for (Message m : chatMessages) {
             if ("tool".equals(m.getRole())) {
@@ -90,7 +90,7 @@ public class AnthropicAdapter implements LlmClient {
                     block.put("type", "tool_use");
                     block.put("id", tc.getId());
                     block.put("name", tc.getFunction().getName());
-                    // Arguments are a JSON string — parse back to node
+                    // Arguments are a JSON string - parse back to node
                     try {
                         block.set("input", JSON.readTree(tc.getFunction().getArguments()));
                     } catch (Exception e) {
@@ -104,7 +104,7 @@ public class AnthropicAdapter implements LlmClient {
             }
         }
 
-        // Tools — Claude uses "input_schema" instead of "parameters"
+        // Tools - Claude uses "input_schema" instead of "parameters"
         if (tools != null && !tools.isEmpty()) {
             ArrayNode toolsArr = body.putArray("tools");
             for (ToolDefinition td : tools) {
@@ -169,7 +169,7 @@ public class AnthropicAdapter implements LlmClient {
                 tc.setType("function");
                 ToolCall.FunctionCall fc = new ToolCall.FunctionCall();
                 fc.setName(block.path("name").asText());
-                // input is a JSON object — serialize back to string for our common format
+                // input is a JSON object - serialize back to string for our common format
                 fc.setArguments(JSON.writeValueAsString(block.path("input")));
                 tc.setFunction(fc);
                 toolCalls.add(tc);

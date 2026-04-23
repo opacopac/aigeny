@@ -63,7 +63,7 @@ public class SchemaLoader {
         try (HikariDataSource ds = new HikariDataSource(hc);
              Connection conn = ds.getConnection()) {
             tableCount = countTables(conn);
-            log.info("DB reachable — {} accessible tables found", tableCount);
+            log.info("DB reachable - {} accessible tables found", tableCount);
         }
     }
 

@@ -102,7 +102,7 @@ public class OracleDbTool implements Tool {
 
         HikariDataSource ds = getPool();
         if (ds == null) {
-            log.error("✗ DB REQUEST  FAILED — connection pool unavailable");
+            log.error("✗ DB REQUEST  FAILED - connection pool unavailable");
             return new ToolResult("ERROR: Could not connect to Oracle database.");
         }
 

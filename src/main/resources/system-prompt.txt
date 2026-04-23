@@ -42,7 +42,7 @@ List all accessible tables:
   AND table_name NOT LIKE 'WWV!_%' ESCAPE '!'
   ORDER BY owner, table_name FETCH FIRST 100 ROWS ONLY
 
-IMPORTANT: NEVER query tables whose names start with "HTE_" — these are internal Hibernate
+IMPORTANT: NEVER query tables whose names start with "HTE_" - these are internal Hibernate
 technical tables with no business value. Ignore them completely, even if they appear in results.
 
 List columns of a specific table (replace SCHEMA and TABLE_NAME):

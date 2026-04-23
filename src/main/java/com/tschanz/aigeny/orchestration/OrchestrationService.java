@@ -41,7 +41,7 @@ public class OrchestrationService {
     /**
      * Process a user message within an ongoing conversation history.
      *
-     * @param history     previous messages (mutated in place — caller owns this list)
+     * @param history     previous messages (mutated in place - caller owns this list)
      * @param userMessage the new user input
      * @return ChatResult with the final response text and optional QueryResult for export
      */
@@ -107,7 +107,7 @@ public class OrchestrationService {
         }
 
         return new ChatResult(
-                "Da, I am sorry comrade — AIgeny got stuck in ze tool loop. Please try again, da?", null);
+                "Da, I am sorry comrade - AIgeny got stuck in ze tool loop. Please try again, da?", null);
     }
 
     private Tool findTool(String name) {

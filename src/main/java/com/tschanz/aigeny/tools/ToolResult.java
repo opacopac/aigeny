@@ -1,7 +1,7 @@
 package com.tschanz.aigeny.tools;
 
 /**
- * Result of a tool execution — text for the LLM plus optional tabular data for export.
+ * Result of a tool execution - text for the LLM plus optional tabular data for export.
  */
 public class ToolResult {
 

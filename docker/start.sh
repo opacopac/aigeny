@@ -13,7 +13,7 @@ sleep 1
 fluxbox &
 sleep 0.5
 
-# VNC server (no password for simplicity in local Docker — change -nopw to -passwd for security)
+# VNC server (no password for simplicity in local Docker - change -nopw to -passwd for security)
 x11vnc -display :1 -nopw -listen 0.0.0.0 -rfbport 5900 -xkb -forever -quiet &
 sleep 0.5
 
