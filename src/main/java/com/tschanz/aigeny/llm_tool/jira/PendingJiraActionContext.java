@@ -1,4 +1,4 @@
-package com.tschanz.aigeny.tools;
+package com.tschanz.aigeny.llm_tool.jira;
 
 /**
  * ThreadLocal holder for a pending Jira write action that requires user confirmation.

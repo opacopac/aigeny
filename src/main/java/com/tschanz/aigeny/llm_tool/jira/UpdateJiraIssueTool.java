@@ -1,10 +1,12 @@
-package com.tschanz.aigeny.tools;
+package com.tschanz.aigeny.llm_tool.jira;
 
 import com.tschanz.aigeny.config.AigenyProperties;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
+import com.tschanz.aigeny.llm_tool.Tool;
+import com.tschanz.aigeny.llm_tool.ToolResult;
+import com.tschanz.aigeny.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tschanz.aigeny.Messages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -91,3 +93,4 @@ public class UpdateJiraIssueTool implements Tool {
         return new ToolResult(Messages.get(Messages.JIRA_UPDATE_QUEUED, issueKey));
     }
 }
+

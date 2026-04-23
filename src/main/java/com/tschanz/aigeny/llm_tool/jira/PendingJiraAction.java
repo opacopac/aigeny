@@ -1,4 +1,4 @@
-package com.tschanz.aigeny.tools;
+package com.tschanz.aigeny.llm_tool.jira;
 
 import java.io.Serializable;
 import java.util.Map;

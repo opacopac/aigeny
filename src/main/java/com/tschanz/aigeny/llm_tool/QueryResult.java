@@ -1,4 +1,4 @@
-package com.tschanz.aigeny.tools;
+package com.tschanz.aigeny.llm_tool;
 
 import java.util.List;
 import java.util.Map;

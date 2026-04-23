@@ -1,10 +1,12 @@
-package com.tschanz.aigeny.tools;
+package com.tschanz.aigeny.llm_tool.jira;
 
 import com.tschanz.aigeny.config.AigenyProperties;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
+import com.tschanz.aigeny.llm_tool.Tool;
+import com.tschanz.aigeny.llm_tool.ToolResult;
+import com.tschanz.aigeny.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tschanz.aigeny.Messages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -21,13 +23,20 @@ public class AddJiraCommentTool implements Tool {
     private static final Logger log = LoggerFactory.getLogger(AddJiraCommentTool.class);
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    // ── Tool identity ────────────────────────────────────────────────────────
+    private static final String TOOL_NAME    = "add_jira_comment";
+
+    // ── JSON argument keys ───────────────────────────────────────────────────
+    private static final String ARG_ISSUE_KEY = "issueKey";
+    private static final String ARG_COMMENT   = "comment";
+
     private final AigenyProperties props;
 
     public AddJiraCommentTool(AigenyProperties props) {
         this.props = props;
     }
 
-    @Override public String getName() { return "add_jira_comment"; }
+    @Override public String getName() { return TOOL_NAME; }
 
     @Override
     public String getDescription() {
@@ -39,13 +48,13 @@ public class AddJiraCommentTool implements Tool {
     @Override
     public ToolDefinition getDefinition() {
         Map<String, Object> propsMap = Map.of(
-            "issueKey", Map.of("type", "string", "description", "The Jira issue key, e.g. NOVA-100000"),
-            "comment",  Map.of("type", "string", "description", "The comment text to add to the issue")
+            ARG_ISSUE_KEY, Map.of("type", "string", "description", "The Jira issue key, e.g. NOVA-100000"),
+            ARG_COMMENT,   Map.of("type", "string", "description", "The comment text to add to the issue")
         );
         return new ToolDefinition(getName(), getDescription(),
                 Map.of("type", "object",
                        "properties", propsMap,
-                       "required", new String[]{"issueKey", "comment"}));
+                       "required", new String[]{ARG_ISSUE_KEY, ARG_COMMENT}));
     }
 
     @Override
@@ -57,8 +66,8 @@ public class AddJiraCommentTool implements Tool {
         }
 
         JsonNode args   = JSON.readTree(argumentsJson);
-        String issueKey = args.path("issueKey").asText("").trim();
-        String comment  = args.path("comment").asText("").trim();
+        String issueKey = args.path(ARG_ISSUE_KEY).asText("").trim();
+        String comment  = args.path(ARG_COMMENT).asText("").trim();
 
         if (issueKey.isBlank() || comment.isBlank()) {
             return new ToolResult(Messages.get(Messages.JIRA_COMMENT_MISSING_ARGS));
@@ -68,7 +77,7 @@ public class AddJiraCommentTool implements Tool {
 
         PendingJiraActionContext.set(new PendingJiraAction(
                 PendingJiraAction.ActionType.ADD_COMMENT, issueKey,
-                Map.of("comment", comment), humanDesc));
+                Map.of(ARG_COMMENT, comment), humanDesc));
 
         log.info("Queued add_jira_comment for {} confirmation", issueKey);
         return new ToolResult(Messages.get(Messages.JIRA_COMMENT_QUEUED, issueKey));

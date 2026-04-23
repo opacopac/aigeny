@@ -1,15 +1,16 @@
-package com.tschanz.aigeny.tools;
+package com.tschanz.aigeny.llm_tool.jira;
 
 import com.tschanz.aigeny.config.AigenyProperties;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
+import com.tschanz.aigeny.llm_tool.QueryResult;
+import com.tschanz.aigeny.llm_tool.Tool;
+import com.tschanz.aigeny.llm_tool.ToolResult;
+import com.tschanz.aigeny.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tschanz.aigeny.Messages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-
-import com.tschanz.aigeny.web.ChatController;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -83,7 +84,6 @@ public class JiraTool implements Tool {
         String issueKey = args.path("issueKey").asText("").trim();
         String jql = args.path("jql").asText("").trim();
         int maxResults = Math.min(args.path("maxResults").asInt(20), MAX_RESULTS);
-
 
         // Build auth header – always Bearer (Personal Access Token)
         String authHeader = "Bearer " + effectiveToken;

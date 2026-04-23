@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.export;
 
-import com.tschanz.aigeny.tools.QueryResult;
+import com.tschanz.aigeny.llm_tool.QueryResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;

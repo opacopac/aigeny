@@ -1,4 +1,4 @@
-package com.tschanz.aigeny.tools;
+package com.tschanz.aigeny.llm_tool.jira;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;

@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.orchestration;
 
-import com.tschanz.aigeny.tools.ToolResult;
+import com.tschanz.aigeny.llm_tool.ToolResult;
 
 /**
  * Return value from OrchestrationService.chat():

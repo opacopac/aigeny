@@ -1,12 +1,15 @@
-package com.tschanz.aigeny.tools;
+package com.tschanz.aigeny.llm_tool.db;
 
 import com.tschanz.aigeny.config.AigenyProperties;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
+import com.tschanz.aigeny.llm_tool.QueryResult;
+import com.tschanz.aigeny.llm_tool.Tool;
+import com.tschanz.aigeny.llm_tool.ToolResult;
+import com.tschanz.aigeny.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import com.tschanz.aigeny.Messages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -141,3 +144,4 @@ public class OracleDbTool implements Tool {
         }
     }
 }
+

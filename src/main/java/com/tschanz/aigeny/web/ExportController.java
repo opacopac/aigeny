@@ -1,7 +1,7 @@
 package com.tschanz.aigeny.web;
 
 import com.tschanz.aigeny.export.ExportService;
-import com.tschanz.aigeny.tools.QueryResult;
+import com.tschanz.aigeny.llm_tool.QueryResult;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;

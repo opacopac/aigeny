@@ -1,4 +1,4 @@
-package com.tschanz.aigeny.tools;
+package com.tschanz.aigeny.llm_tool;
 
 /**
  * Result of a tool execution - text for the LLM plus optional tabular data for export.
