@@ -4,6 +4,7 @@ import com.tschanz.aigeny.config.AigenyProperties;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tschanz.aigeny.Messages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -52,7 +53,7 @@ public class AddJiraCommentTool implements Tool {
         AigenyProperties.Jira jira = props.getJira();
         String baseUrl = jira.getBaseUrl() == null ? "" : jira.getBaseUrl().replaceAll("/$", "");
         if (baseUrl.isBlank()) {
-            return new ToolResult("Jira ist nicht konfiguriert.");
+            return new ToolResult(Messages.get(Messages.JIRA_ERROR_NOT_CONFIGURED_DE));
         }
 
         JsonNode args   = JSON.readTree(argumentsJson);
@@ -60,7 +61,7 @@ public class AddJiraCommentTool implements Tool {
         String comment  = args.path("comment").asText("").trim();
 
         if (issueKey.isBlank() || comment.isBlank()) {
-            return new ToolResult("Bitte gib 'issueKey' und 'comment' an, Towarischtsch.");
+            return new ToolResult(Messages.get(Messages.JIRA_COMMENT_MISSING_ARGS));
         }
 
         String humanDesc = "Kommentar zu Jira-Ticket **" + issueKey + "** hinzufügen:\n> " + comment;
@@ -70,10 +71,7 @@ public class AddJiraCommentTool implements Tool {
                 Map.of("comment", comment), humanDesc));
 
         log.info("Queued add_jira_comment for {} confirmation", issueKey);
-        return new ToolResult(
-                "Da Kommentar ist bereit, Towarischtsch! " +
-                "Nutzer muss Kommentar zu **" + issueKey + "** zuerst bestätigen. " +
-                "Ich habe Bestätigungs-Button in Chat gezeigt. Bitte informiere Nutzer, dass er Aktion bestätigen soll.");
+        return new ToolResult(Messages.get(Messages.JIRA_COMMENT_QUEUED, issueKey));
     }
 }
 

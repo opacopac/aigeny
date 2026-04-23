@@ -17,6 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/export")
 public class ExportController {
 
+    private static final String CSV_CONTENT_DISPOSITION = "attachment; filename=\"aigeny_export.csv\"";
+    private static final String CSV_CONTENT_TYPE        = "text/csv;charset=UTF-8";
+
     private final ExportService exportService;
 
     public ExportController(ExportService exportService) {
@@ -31,8 +34,8 @@ public class ExportController {
         }
         byte[] data = exportService.toCsv(result);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"aigeny_export.csv\"")
-                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, CSV_CONTENT_DISPOSITION)
+                .contentType(MediaType.parseMediaType(CSV_CONTENT_TYPE))
                 .body(data);
     }
 }

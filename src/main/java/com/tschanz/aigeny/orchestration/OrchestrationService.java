@@ -1,5 +1,6 @@
 package com.tschanz.aigeny.orchestration;
 
+import com.tschanz.aigeny.Messages;
 import com.tschanz.aigeny.llm.LlmClient;
 import com.tschanz.aigeny.llm.model.*;
 import com.tschanz.aigeny.tools.Tool;
@@ -46,9 +47,7 @@ public class OrchestrationService {
      * @return ChatResult with the final response text and optional QueryResult for export
      */
     private static final String PERSONA_PRIMER =
-            "Da, zdravstvuyte Genosse! Ich bin AIgeny, dein treuer Daten-Assistent, da! " +
-            "Was kann ich heute für dich tun? Wir können Datenbank abfragen, Jira-Tickets suchen " +
-            "oder Ergebnisse als CSV exportieren. Horosho, frag einfach!";
+            Messages.get(Messages.ORCHESTRATION_PERSONA_PRIMER);
 
     // ...existing code...
 
@@ -91,7 +90,7 @@ public class OrchestrationService {
                 Tool tool = findTool(toolName);
                 ToolResult result;
                 if (tool == null) {
-                    result = new ToolResult("ERROR: Unknown tool '" + toolName + "'");
+                    result = new ToolResult(Messages.get(Messages.ORCHESTRATION_ERROR_UNKNOWN_TOOL, toolName));
                     log.warn("Unknown tool: {}", toolName);
                 } else {
                     try {
@@ -99,7 +98,7 @@ public class OrchestrationService {
                         if (result.hasQueryResult()) lastToolResult = result;
                     } catch (Exception e) {
                         log.error("Tool execution failed: {}", e.getMessage(), e);
-                        result = new ToolResult("ERROR executing " + toolName + ": " + e.getMessage());
+                        result = new ToolResult(Messages.get(Messages.ORCHESTRATION_ERROR_TOOL_EXEC, toolName, e.getMessage()));
                     }
                 }
                 history.add(Message.tool(tc.getId(), toolName, result.getText()));
@@ -107,7 +106,7 @@ public class OrchestrationService {
         }
 
         return new ChatResult(
-                "Da, I am sorry comrade - AIgeny got stuck in ze tool loop. Please try again, da?", null);
+                Messages.get(Messages.ORCHESTRATION_ERROR_TOOL_LOOP), null);
     }
 
     private Tool findTool(String name) {

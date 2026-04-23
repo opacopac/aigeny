@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tschanz.aigeny.Messages;
 import com.tschanz.aigeny.config.AigenyProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,15 +71,15 @@ public class JiraWriteExecutor {
         log.info("<< JIRA PUT status={}", resp.statusCode());
 
         if (resp.statusCode() == 204 || resp.statusCode() == 200) {
-            return "✔ Otschen choroscho! Ticket **" + issueKey + "** wurde erfolgreich aktualisiert, Towarischtsch!";
+            return Messages.get(Messages.JIRA_WRITE_UPDATED, issueKey);
         }
         if (resp.statusCode() == 401) {
-            return "Njet! Authentifizierung fehlgeschlagen (401). Bitte überprüfe deinen Jira-Token.";
+            return Messages.get(Messages.JIRA_WRITE_AUTH_FAILED);
         }
         if (resp.statusCode() == 403) {
-            return "Njet! Keine Berechtigung (403). Dein Token hat keine Schreibrechte für " + issueKey + ".";
+            return Messages.get(Messages.JIRA_WRITE_FORBIDDEN, issueKey);
         }
-        return "Njet! Jira Fehler " + resp.statusCode() + ": " + resp.body();
+        return Messages.get(Messages.JIRA_WRITE_ERROR, resp.statusCode(), resp.body());
     }
 
     private String addComment(String issueKey, Map<String, Object> params,
@@ -102,15 +103,15 @@ public class JiraWriteExecutor {
         log.info("<< JIRA POST comment status={}", resp.statusCode());
 
         if (resp.statusCode() == 201) {
-            return "✔ Da! Kommentar zu **" + issueKey + "** wurde erfolgreich hinzugefügt, Towarischtsch!";
+            return Messages.get(Messages.JIRA_WRITE_COMMENT_ADDED, issueKey);
         }
         if (resp.statusCode() == 401) {
-            return "Njet! Authentifizierung fehlgeschlagen (401). Bitte überprüfe deinen Jira-Token.";
+            return Messages.get(Messages.JIRA_WRITE_AUTH_FAILED);
         }
         if (resp.statusCode() == 403) {
-            return "Njet! Keine Berechtigung (403). Dein Token hat keine Schreibrechte für " + issueKey + ".";
+            return Messages.get(Messages.JIRA_WRITE_FORBIDDEN, issueKey);
         }
-        return "Njet! Jira Fehler " + resp.statusCode() + ": " + resp.body();
+        return Messages.get(Messages.JIRA_WRITE_ERROR, resp.statusCode(), resp.body());
     }
 }
 

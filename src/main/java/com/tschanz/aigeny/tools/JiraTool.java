@@ -4,6 +4,7 @@ import com.tschanz.aigeny.config.AigenyProperties;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tschanz.aigeny.Messages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -65,7 +66,7 @@ public class JiraTool implements Tool {
         String baseUrl = jira.getBaseUrl() == null ? "" : jira.getBaseUrl().replaceAll("/$", "");
 
         if (baseUrl.isBlank()) {
-            return new ToolResult("Jira is not configured. Please set aigeny.jira.base-url.");
+            return new ToolResult(Messages.get(Messages.JIRA_ERROR_NOT_CONFIGURED));
         }
 
         // Resolve effective token: ThreadLocal (set by ChatController) takes priority over server config
@@ -75,7 +76,7 @@ public class JiraTool implements Tool {
         }
 
         if (effectiveToken == null || effectiveToken.isBlank()) {
-            return new ToolResult("Kein Jira-Token konfiguriert. Bitte gib deinen persönlichen Jira-Token über den 'Token eingeben'-Button ein.");
+            return new ToolResult(Messages.get(Messages.JIRA_ERROR_NO_TOKEN));
         }
 
         JsonNode args = JSON.readTree(argumentsJson);
@@ -94,7 +95,7 @@ public class JiraTool implements Tool {
         }
 
         if (jql.isBlank()) {
-            return new ToolResult("Please provide either 'issueKey' or 'jql'.");
+            return new ToolResult(Messages.get(Messages.JIRA_ERROR_MISSING_JQL));
         }
 
         return searchByJql(jql, maxResults, baseUrl, authHeader);
@@ -109,16 +110,15 @@ public class JiraTool implements Tool {
         HttpResponse<String> response = sendRequest(url, authHeader);
 
         if (response.statusCode() == 404) {
-            return new ToolResult("Jira issue '" + issueKey + "' not found (HTTP 404). " +
-                    "Check the key and ensure the PAT has access to this project.");
+            return new ToolResult(Messages.get(Messages.JIRA_ERROR_ISSUE_NOT_FOUND, issueKey));
         }
         if (response.statusCode() == 401) {
             log.warn("   Response body: {}", response.body());
-            return new ToolResult("Jira authentication failed (HTTP 401). Check token in ~/.aigeny/aigeny.yml.");
+            return new ToolResult(Messages.get(Messages.JIRA_ERROR_AUTH_FAILED_EN));
         }
         if (response.statusCode() != 200) {
             log.error("<< JIRA RESPONSE status={} body={}", response.statusCode(), response.body());
-            return new ToolResult("Jira error " + response.statusCode() + ": " + response.body());
+            return new ToolResult(Messages.get(Messages.JIRA_ERROR_HTTP_EN, response.statusCode(), response.body()));
         }
 
         log.info("<< JIRA RESPONSE status=200 bodySize={}B", response.body().length());
@@ -137,11 +137,11 @@ public class JiraTool implements Tool {
 
         if (response.statusCode() == 401) {
             log.warn("   Response body: {}", response.body());
-            return new ToolResult("Jira authentication failed (HTTP 401). Check token in ~/.aigeny/aigeny.yml.");
+            return new ToolResult(Messages.get(Messages.JIRA_ERROR_AUTH_FAILED_EN));
         }
         if (response.statusCode() != 200) {
             log.error("<< JIRA RESPONSE status={} body={}", response.statusCode(), response.body());
-            return new ToolResult("Jira error " + response.statusCode() + ": " + response.body());
+            return new ToolResult(Messages.get(Messages.JIRA_ERROR_HTTP_EN, response.statusCode(), response.body()));
         }
 
         log.info("<< JIRA RESPONSE status=200 bodySize={}B", response.body().length());
@@ -198,14 +198,14 @@ public class JiraTool implements Tool {
         JsonNode issues = root.path("issues");
 
         if (!issues.isArray() || issues.isEmpty())
-            return new ToolResult("No Jira issues found for ze query, da.");
+            return new ToolResult(Messages.get(Messages.JIRA_NO_ISSUES_FOUND));
 
         log.info("   Jira total={} returned={}", total, issues.size());
 
         List<String> columns = List.of("KEY", "SUMMARY", "STATUS", "ASSIGNEE", "PRIORITY", "TYPE");
         List<Map<String, Object>> rows = new ArrayList<>();
         StringBuilder text = new StringBuilder();
-        text.append("Found ").append(total).append(" issues (showing ").append(issues.size()).append("):\n\n");
+        text.append(Messages.get(Messages.JIRA_ISSUES_FOUND, total, issues.size()));
 
         for (JsonNode issue : issues) {
             String key = issue.path("key").asText();

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import com.tschanz.aigeny.Messages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -83,7 +84,7 @@ public class OracleDbTool implements Tool {
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
         if (!props.isDbConfigured()) {
-            return new ToolResult("Database is not configured. Please set aigeny.db.* properties.");
+            return new ToolResult(Messages.get(Messages.DB_ERROR_NOT_CONFIGURED));
         }
 
         JsonNode args = JSON.readTree(argumentsJson);
@@ -91,10 +92,10 @@ public class OracleDbTool implements Tool {
         String description = args.path("description").asText("Execute query");
 
         if (!SAFE_SQL.matcher(sql).matches()) {
-            return new ToolResult("ERROR: Only SELECT queries are allowed.");
+            return new ToolResult(Messages.get(Messages.DB_ERROR_SELECT_ONLY));
         }
         if (DANGEROUS.matcher(sql).find()) {
-            return new ToolResult("ERROR: Potentially dangerous SQL keywords detected. Query rejected.");
+            return new ToolResult(Messages.get(Messages.DB_ERROR_DANGEROUS_SQL));
         }
 
         log.info("▶ DB REQUEST  desc=\"{}\"", description);
@@ -103,7 +104,7 @@ public class OracleDbTool implements Tool {
         HikariDataSource ds = getPool();
         if (ds == null) {
             log.error("✗ DB REQUEST  FAILED - connection pool unavailable");
-            return new ToolResult("ERROR: Could not connect to Oracle database.");
+            return new ToolResult(Messages.get(Messages.DB_ERROR_NO_CONNECTION));
         }
 
         long t0 = System.currentTimeMillis();
@@ -136,7 +137,7 @@ public class OracleDbTool implements Tool {
         } catch (SQLException e) {
             long elapsed = System.currentTimeMillis() - t0;
             log.error("✗ DB REQUEST  FAILED elapsed={}ms error=\"{}\"", elapsed, e.getMessage());
-            return new ToolResult("SQL ERROR: " + e.getMessage());
+            return new ToolResult(Messages.get(Messages.DB_ERROR_SQL, e.getMessage()));
         }
     }
 }
