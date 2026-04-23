@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de-ch">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -16,7 +16,7 @@
   </div>
   <div class="header-right" id="statusBar">
     <span class="status-dot" id="statusDot"></span>
-    <span id="statusText">Connecting...</span>
+    <span id="statusText">Verbinde...</span>
   </div>
 </header>
 
@@ -27,15 +27,15 @@
   <aside class="hal-panel">
     <canvas id="halEye" width="220" height="220"></canvas>
     <div class="hal-label">AIgeny</div>
-    <div class="hal-status" id="halStatusText">Ready, comrade.</div>
-    <div class="info-box" id="infoBox">
+  <div class="hal-status" id="halStatusText">Bereit, Towarischtsch.</div>
+  <div class="info-box" id="infoBox">
       <div class="info-row"><span class="info-key">LLM</span><span class="info-val" id="infoLlm">—</span></div>
-      <div class="info-row"><span class="info-key">Model</span><span class="info-val" id="infoModel">—</span></div>
+      <div class="info-row"><span class="info-key">Modell</span><span class="info-val" id="infoModel">—</span></div>
       <div class="info-row"><span class="info-key">DB</span><span class="info-val" id="infoDb">—</span></div>
       <div class="info-row"><span class="info-key">Jira</span><span class="info-val" id="infoJira">—</span></div>
-      <div class="info-row"><span class="info-key">Tables</span><span class="info-val" id="infoTables">—</span></div>
+      <div class="info-row"><span class="info-key">DB-Tabellen</span><span class="info-val" id="infoTables">—</span></div>
     </div>
-    <button class="btn-secondary" onclick="reloadSchema()" title="Reload DB schema">&#8635; Reload Schema</button>
+    <button class="btn-secondary" onclick="reloadSchema()" title="DB-Schema neu laden">&#8635; DB-Schema neu laden</button>
   </aside>
 
   <!-- Chat panel -->
@@ -47,19 +47,19 @@
     <!-- Input area -->
     <div class="input-area">
       <textarea id="userInput"
-                placeholder="Ask AIgeny anything about ze database or Jira, comrade..."
+                placeholder="Stell AIgeny eine Frage zur Datenbank oder zu Jira, Towarischtsch..."
                 rows="3"></textarea>
       <button class="btn-send" id="sendBtn" onclick="sendMessage()">
-        &#9654; Send
+        &#9654; Senden
       </button>
     </div>
 
     <!-- Export & control bar -->
     <div class="action-bar">
-      <button class="btn-export" id="btnCsv" disabled onclick="exportData('csv')" title="Download as CSV">
-        &#8595; Export CSV
+      <button class="btn-export" id="btnCsv" disabled onclick="exportData('csv')" title="Als CSV herunterladen">
+        &#8595; CSV exportieren
       </button>
-      <button class="btn-secondary" onclick="clearChat()">&#10005; Clear Chat</button>
+      <button class="btn-secondary" onclick="clearChat()">&#10005; Chat leeren</button>
     </div>
   </section>
 

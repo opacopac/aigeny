@@ -111,7 +111,7 @@ function appendMessage(role, text) {
   const dot = document.createElement('span');
   dot.className = 'dot';
   const name = document.createElement('span');
-  name.textContent = role === 'user' ? 'You' : 'AIgeny';
+  name.textContent = role === 'user' ? 'Du' : 'AIgeny';
   header.append(dot, name);
 
   const bubble = document.createElement('div');
@@ -247,7 +247,7 @@ async function sendMessage() {
     }
   } catch (err) {
     removeTypingIndicator();
-    appendMessage('aigeny', 'Nyet! Network error, comrade: ' + err.message);
+    appendMessage('aigeny', 'Njet! Netzwerkfehler, Towarischtsch: ' + err.message);
   } finally {
     setThinking(false);
   }
@@ -270,29 +270,29 @@ async function clearChat() {
   setExportButtons(false);
   // Greeting
   appendMessage('aigeny',
-    'Da, chat has been cleared, comrade! AIgeny is ready for new questions. ' +
-    'Vat vould you like to know from ze database today?');
+    'Da, Chat wurde geleert, Towarischtsch! AIgeny ist bereit für neue Fragen. ' +
+    'Was möchtest du heute aus Datenbank wissen?');
 }
 
 async function reloadSchema() {
   const btn = event.target;
   btn.disabled = true;
-  btn.textContent = '⌛ Loading...';
+    btn.textContent = '⌛ Lade...';
   try {
     const res = await fetch('/api/schema/reload', { method: 'POST' });
     const data = await res.json();
     if (data.status === 'ok') {
       document.getElementById('infoTables').textContent = data.tables;
       appendMessage('aigeny',
-        `Da! Schema reloaded, comrade. I now know about **${data.tables}** tables in ze database. Ochen horosho!`);
+        `Da! Schema neu geladen, Towarischtsch. Ich kenne jetzt **${data.tables}** Tabellen in Datenbank. Otschen choroscho!`);
     } else {
-      appendMessage('aigeny', 'Nyet! Schema reload failed: ' + (data.message || 'unknown error'));
+      appendMessage('aigeny', 'Njet! Schema-Neuladen fehlgeschlagen: ' + (data.message || 'unbekannter Fehler'));
     }
   } catch (err) {
-    appendMessage('aigeny', 'Nyet! Could not reload schema: ' + err.message);
+    appendMessage('aigeny', 'Njet! Schema konnte nicht geladen werden: ' + err.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = '↻ Reload Schema';
+    btn.textContent = '↻ Schema neu laden';
   }
 }
 
@@ -306,8 +306,8 @@ function setThinking(thinking) {
   isThinking = thinking;
   document.getElementById('sendBtn').disabled = thinking;
   document.getElementById('halStatusText').textContent =
-    thinking ? 'AIgeny mysleet... (thinking)' : 'Ready, comrade.';
-  setStatusIndicator(thinking ? 'busy' : 'ok', thinking ? 'Thinking...' : 'Ready');
+    thinking ? 'AIgeny mysleet... (denkt nach)' : 'Bereit, Towarischtsch.';
+  setStatusIndicator(thinking ? 'busy' : 'ok', thinking ? 'Denkt nach...' : 'Bereit');
 }
 
 function setExportButtons(enabled) {
@@ -347,7 +347,7 @@ async function loadStatus() {
 
     if (!isThinking) setStatusIndicator('ok', 'Ready');
   } catch {
-    if (!isThinking) setStatusIndicator('error', 'Server unreachable');
+    if (!isThinking) setStatusIndicator('error', 'Server nicht erreichbar');
   }
 }
 
@@ -359,8 +359,8 @@ window.addEventListener('load', () => {
 
   // Welcome message
   appendMessage('aigeny',
-    'Da, privet comrade! I am AIgeny — your personal data assistant with Russian soul.\n\n' +
-    'You can ask me questions about ze database, request reports, or search Jira tickets.\n\n' +
-    '**What can I do for you today?**');
+    'Privet Towarischtsch! Ich bin AIgeny — dein persönlicher Daten-Assistent mit russische Seele.\n\n' +
+    'Du kannst mir Fragen zur Datenbank stellen, Berichte anfordern oder Jira-Tickets suchen.\n\n' +
+    '**Was kann ich heute für dich tun?**');
 });
 

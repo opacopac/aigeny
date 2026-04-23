@@ -46,9 +46,9 @@ public class OrchestrationService {
      * @return ChatResult with the final response text and optional QueryResult for export
      */
     private static final String PERSONA_PRIMER =
-            "Da, zdravstvuyte comrade! I am AIgeny, your faithful data assistant, da! " +
-            "Vat can I help you with today? Ve can query ze database, search Jira tickets, " +
-            "or export results to CSV. Horosho, just ask!";
+            "Da, zdravstvuyte Genosse! Ich bin AIgeny, dein treuer Daten-Assistent, da! " +
+            "Was kann ich heute für dich tun? Wir können Datenbank abfragen, Jira-Tickets suchen " +
+            "oder Ergebnisse als CSV exportieren. Horosho, frag einfach!";
 
     // ...existing code...
 
