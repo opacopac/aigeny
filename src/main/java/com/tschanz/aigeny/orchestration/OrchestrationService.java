@@ -1,6 +1,5 @@
 package com.tschanz.aigeny.orchestration;
 
-import com.tschanz.aigeny.db.SchemaLoader;
 import com.tschanz.aigeny.llm.LlmClient;
 import com.tschanz.aigeny.llm.model.*;
 import com.tschanz.aigeny.tools.Tool;
@@ -27,14 +26,12 @@ public class OrchestrationService {
 
     private final LlmClient llmClient;
     private final List<Tool> tools;
-    private final SchemaLoader schemaLoader;
     private final String systemPromptTemplate;
 
     /** Spring auto-collects all Tool beans into the list. */
-    public OrchestrationService(LlmClient llmClient, List<Tool> tools, SchemaLoader schemaLoader) throws IOException {
+    public OrchestrationService(LlmClient llmClient, List<Tool> tools) throws IOException {
         this.llmClient = llmClient;
         this.tools = tools;
-        this.schemaLoader = schemaLoader;
         this.systemPromptTemplate = new ClassPathResource("system-prompt.txt")
                 .getContentAsString(StandardCharsets.UTF_8);
         log.info("OrchestrationService initialized with {} tools: {}",
@@ -118,20 +115,6 @@ public class OrchestrationService {
     }
 
     private String buildSystemPrompt() {
-        StringBuilder sb = new StringBuilder(systemPromptTemplate);
-
-        String schema = schemaLoader.getSchema();
-        if (schema != null && !schema.isBlank()) {
-            log.debug("Injecting DB schema into system prompt ({} chars)", schema.length());
-            sb.append("\n\nAVAILABLE DATABASE SCHEMA:\n");
-            sb.append(schema);
-        } else {
-            sb.append("\n\nNO DATABASE SCHEMA AVAILABLE. CRITICAL RULES:\n" +
-                    "- Do NOT invent, guess or hallucinate any schema, table names or column names.\n" +
-                    "- Tell the user the DB is not configured or the schema could not be loaded.\n" +
-                    "- Do NOT pretend to have DB access you do not have.");
-        }
-
-        return sb.toString();
+        return systemPromptTemplate;
     }
 }

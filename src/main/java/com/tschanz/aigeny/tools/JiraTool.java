@@ -41,18 +41,20 @@ public class JiraTool implements Tool {
 
     @Override
     public String getDescription() {
-        return "Search Jira issues using JQL. Returns key, summary, status, assignee, priority. " +
-               "Example: 'project = NOVA AND status = Open ORDER BY created DESC'";
+        return "Search Jira issues using JQL, or fetch a single issue directly by key. " +
+               "To fetch a specific ticket, provide 'issueKey' (e.g. 'NOVA-100000') instead of jql. " +
+               "JQL example: 'project = NOVA AND status = Open ORDER BY created DESC'";
     }
 
     @Override
     public ToolDefinition getDefinition() {
         Map<String, Object> propsMap = Map.of(
-            "jql", Map.of("type", "string", "description", "JQL query string"),
-            "maxResults", Map.of("type", "integer", "description", "Max issues to return (default 20, max 50)")
+            "jql", Map.of("type", "string", "description", "JQL query string (use this for searches)"),
+            "issueKey", Map.of("type", "string", "description", "Fetch a single issue directly by key, e.g. NOVA-100000 (faster and more detailed than JQL)"),
+            "maxResults", Map.of("type", "integer", "description", "Max issues to return for JQL searches (default 20, max 50)")
         );
         return new ToolDefinition(getName(), getDescription(),
-                Map.of("type", "object", "properties", propsMap, "required", List.of("jql")));
+                Map.of("type", "object", "properties", propsMap));
     }
 
     @Override
@@ -62,45 +64,126 @@ public class JiraTool implements Tool {
         }
 
         JsonNode args = JSON.readTree(argumentsJson);
+        String issueKey = args.path("issueKey").asText("").trim();
         String jql = args.path("jql").asText("").trim();
         int maxResults = Math.min(args.path("maxResults").asInt(20), MAX_RESULTS);
 
         AigenyProperties.Jira jira = props.getJira();
         String baseUrl = jira.getBaseUrl().replaceAll("/$", "");
+
+        // Build auth header
+        String authHeader;
+        if (jira.getUsername() == null || jira.getUsername().isBlank()) {
+            authHeader = "Bearer " + jira.getToken();
+            log.debug("   Auth mode=Bearer tokenLength={}", jira.getToken() != null ? jira.getToken().length() : 0);
+        } else {
+            String credStr = jira.getUsername() + ":" + jira.getToken();
+            authHeader = "Basic " + Base64.getEncoder().encodeToString(credStr.getBytes(StandardCharsets.UTF_8));
+            log.debug("   Auth mode=Basic user={} tokenLength={}", jira.getUsername(), jira.getToken() != null ? jira.getToken().length() : 0);
+        }
+
+        // Direct issue fetch by key — richer data, no JQL needed
+        if (!issueKey.isBlank()) {
+            return fetchIssueByKey(issueKey, baseUrl, authHeader);
+        }
+
+        if (jql.isBlank()) {
+            return new ToolResult("Please provide either 'issueKey' or 'jql'.");
+        }
+
+        return searchByJql(jql, maxResults, baseUrl, authHeader);
+    }
+
+    private ToolResult fetchIssueByKey(String issueKey, String baseUrl, String authHeader) throws Exception {
+        String url = baseUrl + "/rest/api/2/issue/" + URLEncoder.encode(issueKey, StandardCharsets.UTF_8)
+                + "?fields=summary,status,assignee,priority,issuetype,created,updated,description,comment";
+        log.info(">> JIRA REQUEST  issueKey={}", issueKey);
+        log.info("   URL: {}", url);
+
+        HttpResponse<String> response = sendRequest(url, authHeader);
+
+        if (response.statusCode() == 404) {
+            return new ToolResult("Jira issue '" + issueKey + "' not found (HTTP 404). " +
+                    "Check the key and ensure the PAT has access to this project.");
+        }
+        if (response.statusCode() == 401) {
+            log.warn("   Response body: {}", response.body());
+            return new ToolResult("Jira authentication failed (HTTP 401). Check token in ~/.aigeny/aigeny.yml.");
+        }
+        if (response.statusCode() != 200) {
+            log.error("<< JIRA RESPONSE status={} body={}", response.statusCode(), response.body());
+            return new ToolResult("Jira error " + response.statusCode() + ": " + response.body());
+        }
+
+        log.info("<< JIRA RESPONSE status=200 bodySize={}B", response.body().length());
+        return parseSingleIssue(response.body());
+    }
+
+    private ToolResult searchByJql(String jql, int maxResults, String baseUrl, String authHeader) throws Exception {
         String fields = "summary,status,assignee,priority,issuetype,created,updated";
         String url = baseUrl + "/rest/api/2/search?jql="
                 + URLEncoder.encode(jql, StandardCharsets.UTF_8)
                 + "&fields=" + fields + "&maxResults=" + maxResults;
-
         log.info(">> JIRA REQUEST  jql=\"{}\" maxResults={}", jql, maxResults);
         log.info("   URL: {}", url);
 
-        String auth = jira.getUsername() + ":" + jira.getToken();
-        String authHeader = "Basic " + Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
+        HttpResponse<String> response = sendRequest(url, authHeader);
 
+        if (response.statusCode() == 401) {
+            log.warn("   Response body: {}", response.body());
+            return new ToolResult("Jira authentication failed (HTTP 401). Check token in ~/.aigeny/aigeny.yml.");
+        }
+        if (response.statusCode() != 200) {
+            log.error("<< JIRA RESPONSE status={} body={}", response.statusCode(), response.body());
+            return new ToolResult("Jira error " + response.statusCode() + ": " + response.body());
+        }
+
+        log.info("<< JIRA RESPONSE status=200 bodySize={}B", response.body().length());
+        return parseJiraResponse(response.body());
+    }
+
+    private HttpResponse<String> sendRequest(String url, String authHeader) throws Exception {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .timeout(Duration.ofSeconds(30))
                 .header("Authorization", authHeader)
                 .header("Accept", "application/json")
                 .GET().build();
+        return http.send(req, HttpResponse.BodyHandlers.ofString());
+    }
 
-        long t0 = System.currentTimeMillis();
-        HttpResponse<String> response = http.send(req, HttpResponse.BodyHandlers.ofString());
-        long elapsed = System.currentTimeMillis() - t0;
+    private ToolResult parseSingleIssue(String json) throws Exception {
+        JsonNode f = JSON.readTree(json);
+        String key = f.path("key").asText();
+        JsonNode fields = f.path("fields");
 
-        if (response.statusCode() == 401) {
-            log.warn("<< JIRA RESPONSE status=401 elapsed={}ms — authentication failed", elapsed);
-            return new ToolResult("Jira authentication failed. Check username and token in application.yml.");
+        StringBuilder sb = new StringBuilder();
+        sb.append("**").append(key).append("**: ").append(fields.path("summary").asText()).append("\n\n");
+        sb.append("| Field | Value |\n|---|---|\n");
+        sb.append("| Status | ").append(fields.path("status").path("name").asText("-")).append(" |\n");
+        sb.append("| Type | ").append(fields.path("issuetype").path("name").asText("-")).append(" |\n");
+        sb.append("| Priority | ").append(fields.path("priority").path("name").asText("-")).append(" |\n");
+        sb.append("| Assignee | ").append(fields.path("assignee").path("displayName").asText("Unassigned")).append(" |\n");
+        sb.append("| Created | ").append(fields.path("created").asText("-")).append(" |\n");
+        sb.append("| Updated | ").append(fields.path("updated").asText("-")).append(" |\n");
+
+        String description = fields.path("description").asText("").trim();
+        if (!description.isBlank()) {
+            sb.append("\n**Description:**\n").append(description).append("\n");
         }
-        if (response.statusCode() != 200) {
-            log.error("<< JIRA RESPONSE status={} elapsed={}ms body={}", response.statusCode(), elapsed, response.body());
-            return new ToolResult("Jira error " + response.statusCode() + ": " + response.body());
+
+        JsonNode comments = fields.path("comment").path("comments");
+        if (comments.isArray() && !comments.isEmpty()) {
+            sb.append("\n**Last ").append(Math.min(comments.size(), 3)).append(" comment(s):**\n");
+            int start = Math.max(0, comments.size() - 3);
+            for (int i = start; i < comments.size(); i++) {
+                JsonNode c = comments.get(i);
+                sb.append("- *").append(c.path("author").path("displayName").asText("?")).append("*: ")
+                  .append(c.path("body").asText("")).append("\n");
+            }
         }
 
-        log.info("<< JIRA RESPONSE status=200 elapsed={}ms bodySize={}B", elapsed, response.body().length());
-
-        return parseJiraResponse(response.body());
+        return new ToolResult(sb.toString());
     }
 
     private ToolResult parseJiraResponse(String json) throws Exception {

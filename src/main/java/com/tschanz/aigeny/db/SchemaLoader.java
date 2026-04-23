@@ -10,11 +10,13 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.sql.*;
-import java.util.*;
 
 /**
- * Loads and caches the Oracle DB schema on startup (and on demand).
- * The schema string is injected into the LLM system prompt.
+ * Counts accessible Oracle tables on startup (and on demand via /api/schema/reload).
+ * The table count is shown in the status bar of the UI.
+ *
+ * Note: The schema is no longer pre-loaded into the LLM system prompt.
+ * The agent discovers tables/columns on demand via the query_oracle_db tool.
  */
 @Service
 public class SchemaLoader {
@@ -22,34 +24,31 @@ public class SchemaLoader {
     private static final Logger log = LoggerFactory.getLogger(SchemaLoader.class);
 
     private final AigenyProperties props;
-    private volatile String cachedSchema = "";
     private volatile int tableCount = 0;
 
     public SchemaLoader(AigenyProperties props) {
         this.props = props;
     }
 
-    /** Load schema automatically on startup if DB is configured. */
+    /** Load table count automatically on startup if DB is configured. */
     @EventListener(ApplicationReadyEvent.class)
     public void loadOnStartup() {
         if (props.isDbConfigured()) {
             try {
                 reload();
             } catch (Exception e) {
-                log.warn("Could not load DB schema on startup: {}", e.getMessage());
-                cachedSchema = "(DB schema unavailable: " + e.getMessage() + ")";
+                log.warn("Could not count DB tables on startup: {}", e.getMessage());
             }
         } else {
-            log.info("DB not configured - skipping schema load");
-            cachedSchema = "";
+            log.info("DB not configured - skipping table count");
         }
     }
 
-    /** Force a schema reload (e.g. via REST endpoint). */
-    public String reload() throws Exception {
+    /** Reconnects and refreshes the table count. */
+    public void reload() throws Exception {
         if (!props.isDbConfigured()) {
-            cachedSchema = "";
-            return cachedSchema;
+            tableCount = 0;
+            return;
         }
         AigenyProperties.Db db = props.getDb();
         HikariConfig hc = new HikariConfig();
@@ -63,112 +62,34 @@ public class SchemaLoader {
 
         try (HikariDataSource ds = new HikariDataSource(hc);
              Connection conn = ds.getConnection()) {
-            cachedSchema = buildSchemaText(conn, db.getUsername().toUpperCase());
-            log.info("DB schema loaded ({} chars, ~{} tables)", cachedSchema.length(), tableCount);
+            tableCount = countTables(conn);
+            log.info("DB reachable — {} accessible tables found", tableCount);
         }
-        return cachedSchema;
     }
 
-    public String getSchema()   { return cachedSchema; }
-    public int    getTableCount() { return tableCount; }
+    public int getTableCount() { return tableCount; }
 
-    // ── Private helpers ────────────────────────────────────────────────────
-
-    private String buildSchemaText(Connection conn, String schemaUser) throws SQLException {
-        StringBuilder sb = new StringBuilder();
-        sb.append("=== ORACLE DATABASE SCHEMA ===\n");
-        sb.append("Connected as: ").append(schemaUser).append("\n\n");
-
-        String tableQuery = """
-            SELECT owner, table_name, num_rows
-            FROM all_tables
+    private int countTables(Connection conn) {
+        String sql = """
+            SELECT COUNT(*) FROM all_tables
             WHERE owner NOT IN (
                 'SYS','SYSTEM','OUTLN','DBSNMP','APPQOSSYS','WMSYS',
                 'EXFSYS','CTXSYS','XDB','ORDDATA','ORDSYS','MDSYS',
                 'OLAPSYS','OWBSYS','FLOWS_FILES'
             )
-            ORDER BY owner, table_name
-            FETCH FIRST 300 ROWS ONLY
             """;
-
-        Map<String, List<String>> tablesByOwner = new LinkedHashMap<>();
-        try (PreparedStatement ps = conn.prepareStatement(tableQuery);
+        try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                String owner = rs.getString("owner");
-                String table = rs.getString("table_name");
-                long numRows = rs.getLong("num_rows");
-                tablesByOwner.computeIfAbsent(owner, k -> new ArrayList<>())
-                        .add(table + (numRows > 0 ? " (~" + numRows + " rows)" : ""));
-            }
+            if (rs.next()) return rs.getInt(1);
         } catch (SQLException e) {
-            log.warn("Could not query all_tables: {}", e.getMessage());
-            return loadUserSchema(conn, schemaUser);
-        }
-
-        if (tablesByOwner.isEmpty()) return loadUserSchema(conn, schemaUser);
-
-        tableCount = tablesByOwner.values().stream().mapToInt(List::size).sum();
-
-        for (Map.Entry<String, List<String>> entry : tablesByOwner.entrySet()) {
-            String owner = entry.getKey();
-            sb.append("SCHEMA: ").append(owner).append("\n");
-            sb.append("-".repeat(50)).append("\n");
-            for (String tableInfo : entry.getValue()) {
-                String tableName = tableInfo.split(" ")[0];
-                sb.append("  TABLE: ").append(owner).append(".").append(tableName)
-                  .append("  ").append(tableInfo.contains("(") ? tableInfo.substring(tableInfo.indexOf("(") - 1) : "")
-                  .append("\n");
-                try (PreparedStatement ps = conn.prepareStatement(
-                        "SELECT column_name, data_type, nullable FROM all_columns " +
-                        "WHERE owner = ? AND table_name = ? ORDER BY column_id")) {
-                    ps.setString(1, owner);
-                    ps.setString(2, tableName);
-                    try (ResultSet rs = ps.executeQuery()) {
-                        while (rs.next()) {
-                            sb.append("    ").append(rs.getString("column_name"))
-                              .append(" ").append(rs.getString("data_type"))
-                              .append("N".equals(rs.getString("nullable")) ? " NOT NULL" : "")
-                              .append("\n");
-                        }
-                    }
-                } catch (SQLException e) {
-                    sb.append("    (columns unavailable)\n");
-                }
-            }
-            sb.append("\n");
-        }
-        return sb.toString();
-    }
-
-    private String loadUserSchema(Connection conn, String schemaUser) throws SQLException {
-        StringBuilder sb = new StringBuilder();
-        sb.append("=== DATABASE SCHEMA (USER TABLES) ===\n\n");
-        int count = 0;
-        try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT table_name FROM user_tables ORDER BY table_name");
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                count++;
-                String table = rs.getString("table_name");
-                sb.append("TABLE: ").append(schemaUser).append(".").append(table).append("\n");
-                try (PreparedStatement cp = conn.prepareStatement(
-                        "SELECT column_name, data_type, nullable FROM user_tab_columns " +
-                        "WHERE table_name = ? ORDER BY column_id")) {
-                    cp.setString(1, table);
-                    try (ResultSet cr = cp.executeQuery()) {
-                        while (cr.next()) {
-                            sb.append("  ").append(cr.getString("column_name"))
-                              .append(" ").append(cr.getString("data_type"))
-                              .append("N".equals(cr.getString("nullable")) ? " NOT NULL" : "")
-                              .append("\n");
-                        }
-                    }
-                }
-                sb.append("\n");
+            log.warn("Could not count all_tables, trying user_tables: {}", e.getMessage());
+            try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM user_tables");
+                 ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getInt(1);
+            } catch (SQLException ex) {
+                log.warn("Could not count user_tables either: {}", ex.getMessage());
             }
         }
-        tableCount = count;
-        return sb.toString();
+        return 0;
     }
 }

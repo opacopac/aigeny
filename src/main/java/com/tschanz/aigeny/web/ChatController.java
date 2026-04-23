@@ -94,11 +94,10 @@ public class ChatController {
     public CompletableFuture<ResponseEntity<Map<String, Object>>> reloadSchema() {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String schema = schemaLoader.reload();
+                schemaLoader.reload();
                 return ResponseEntity.ok(Map.of(
-                        "status",     "ok",
-                        "tables",     schemaLoader.getTableCount(),
-                        "schemaSize", schema.length()
+                        "status", "ok",
+                        "tables", schemaLoader.getTableCount()
                 ));
             } catch (Exception e) {
                 log.error("Schema reload failed", e);

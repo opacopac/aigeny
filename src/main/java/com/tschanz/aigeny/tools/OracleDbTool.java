@@ -64,8 +64,8 @@ public class OracleDbTool implements Tool {
     @Override
     public String getDescription() {
         return "Execute a read-only SELECT query against the Oracle database and return the results. " +
-               "Use the schema information provided in the system prompt to build correct queries. " +
-               "Always use fully qualified table names (SCHEMA.TABLE) if possible.";
+               "You can also use this tool to discover the schema: query all_tables, all_columns, " +
+               "or user_tables / user_tab_columns. Always use fully qualified table names (SCHEMA.TABLE).";
     }
 
     @Override
