@@ -30,6 +30,11 @@ public class AddJiraCommentTool implements Tool {
     private static final String ARG_ISSUE_KEY = "issueKey";
     private static final String ARG_COMMENT   = "comment";
 
+    // ── Message keys ─────────────────────────────────────────────────────────
+    private static final String MSG_NOT_CONFIGURED = "jira.error.not_configured_de";
+    private static final String MSG_MISSING_ARGS   = "jira.comment.missing_args";
+    private static final String MSG_QUEUED         = "jira.comment.queued";
+
     private final AigenyProperties props;
 
     public AddJiraCommentTool(AigenyProperties props) {
@@ -62,7 +67,7 @@ public class AddJiraCommentTool implements Tool {
         AigenyProperties.Jira jira = props.getJira();
         String baseUrl = jira.getBaseUrl() == null ? "" : jira.getBaseUrl().replaceAll("/$", "");
         if (baseUrl.isBlank()) {
-            return new ToolResult(Messages.get(Messages.JIRA_ERROR_NOT_CONFIGURED_DE));
+            return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
         }
 
         JsonNode args   = JSON.readTree(argumentsJson);
@@ -70,7 +75,7 @@ public class AddJiraCommentTool implements Tool {
         String comment  = args.path(ARG_COMMENT).asText("").trim();
 
         if (issueKey.isBlank() || comment.isBlank()) {
-            return new ToolResult(Messages.get(Messages.JIRA_COMMENT_MISSING_ARGS));
+            return new ToolResult(Messages.get(MSG_MISSING_ARGS));
         }
 
         String humanDesc = "Kommentar zu Jira-Ticket **" + issueKey + "** hinzufügen:\n> " + comment;
@@ -80,7 +85,7 @@ public class AddJiraCommentTool implements Tool {
                 Map.of(ARG_COMMENT, comment), humanDesc));
 
         log.info("Queued add_jira_comment for {} confirmation", issueKey);
-        return new ToolResult(Messages.get(Messages.JIRA_COMMENT_QUEUED, issueKey));
+        return new ToolResult(Messages.get(MSG_QUEUED, issueKey));
     }
 }
 

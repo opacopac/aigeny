@@ -32,6 +32,19 @@ public class UpdateJiraIssueTool implements Tool {
     private static final String ARG_SUMMARY     = "summary";
     private static final String ARG_DESCRIPTION = "description";
 
+    // ── Message keys ─────────────────────────────────────────────────────────
+    private static final String MSG_NOT_CONFIGURED  = "jira.error.not_configured_de";
+    private static final String MSG_MISSING_KEY     = "jira.update.missing_key";
+    private static final String MSG_MISSING_FIELDS  = "jira.update.missing_fields";
+    private static final String MSG_QUEUED          = "jira.update.queued";
+    private static final String MSG_DESC_HEADER     = "jira.update.desc_header";
+    private static final String MSG_DESC_SUMMARY    = "jira.update.desc_summary";
+    private static final String MSG_DESC_DESC       = "jira.update.desc_description";
+    private static final String MSG_TOOL_DESC       = "jira.update.tool_description";
+    private static final String MSG_ARG_ISSUE_KEY   = "jira.update.arg_issue_key_desc";
+    private static final String MSG_ARG_SUMMARY     = "jira.update.arg_summary_desc";
+    private static final String MSG_ARG_DESCRIPTION = "jira.update.arg_description_desc";
+
     private final AigenyProperties props;
 
     public UpdateJiraIssueTool(AigenyProperties props) {
@@ -42,15 +55,15 @@ public class UpdateJiraIssueTool implements Tool {
 
     @Override
     public String getDescription() {
-        return Messages.get(Messages.JIRA_UPDATE_TOOL_DESCRIPTION);
+        return Messages.get(MSG_TOOL_DESC);
     }
 
     @Override
     public ToolDefinition getDefinition() {
         Map<String, Object> propsMap = Map.of(
-            ARG_ISSUE_KEY,   Map.of("type", "string", "description", Messages.get(Messages.JIRA_UPDATE_ARG_ISSUE_KEY)),
-            ARG_SUMMARY,     Map.of("type", "string", "description", Messages.get(Messages.JIRA_UPDATE_ARG_SUMMARY)),
-            ARG_DESCRIPTION, Map.of("type", "string", "description", Messages.get(Messages.JIRA_UPDATE_ARG_DESCRIPTION))
+            ARG_ISSUE_KEY,   Map.of("type", "string", "description", Messages.get(MSG_ARG_ISSUE_KEY)),
+            ARG_SUMMARY,     Map.of("type", "string", "description", Messages.get(MSG_ARG_SUMMARY)),
+            ARG_DESCRIPTION, Map.of("type", "string", "description", Messages.get(MSG_ARG_DESCRIPTION))
         );
         return new ToolDefinition(getName(), getDescription(),
                 Map.of("type", "object",
@@ -63,7 +76,7 @@ public class UpdateJiraIssueTool implements Tool {
         AigenyProperties.Jira jira = props.getJira();
         String baseUrl = jira.getBaseUrl() == null ? "" : jira.getBaseUrl().replaceAll("/$", "");
         if (baseUrl.isBlank()) {
-            return new ToolResult(Messages.get(Messages.JIRA_ERROR_NOT_CONFIGURED_DE));
+            return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
         }
 
         JsonNode args      = JSON.readTree(argumentsJson);
@@ -72,25 +85,25 @@ public class UpdateJiraIssueTool implements Tool {
         String description = args.path(ARG_DESCRIPTION).asText("").trim();
 
         if (issueKey.isBlank()) {
-            return new ToolResult(Messages.get(Messages.JIRA_UPDATE_MISSING_KEY));
+            return new ToolResult(Messages.get(MSG_MISSING_KEY));
         }
         if (summary.isBlank() && description.isBlank()) {
-            return new ToolResult(Messages.get(Messages.JIRA_UPDATE_MISSING_FIELDS));
+            return new ToolResult(Messages.get(MSG_MISSING_FIELDS));
         }
 
         Map<String, Object> params = new LinkedHashMap<>();
         if (!summary.isBlank())     params.put(ARG_SUMMARY,     summary);
         if (!description.isBlank()) params.put(ARG_DESCRIPTION, description);
 
-        StringBuilder desc = new StringBuilder(Messages.get(Messages.JIRA_UPDATE_DESC_HEADER, issueKey));
-        if (!summary.isBlank())     desc.append(Messages.get(Messages.JIRA_UPDATE_DESC_SUMMARY,     summary));
-        if (!description.isBlank()) desc.append(Messages.get(Messages.JIRA_UPDATE_DESC_DESC, description));
+        StringBuilder desc = new StringBuilder(Messages.get(MSG_DESC_HEADER, issueKey));
+        if (!summary.isBlank())     desc.append(Messages.get(MSG_DESC_SUMMARY,  summary));
+        if (!description.isBlank()) desc.append(Messages.get(MSG_DESC_DESC, description));
 
         PendingJiraActionContext.set(new PendingJiraAction(
                 PendingJiraAction.ActionType.UPDATE_ISSUE, issueKey, params, desc.toString()));
 
         log.info("Queued update_jira_issue for {} confirmation", issueKey);
-        return new ToolResult(Messages.get(Messages.JIRA_UPDATE_QUEUED, issueKey));
+        return new ToolResult(Messages.get(MSG_QUEUED, issueKey));
     }
 }
 

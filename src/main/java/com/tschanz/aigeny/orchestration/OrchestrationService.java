@@ -25,6 +25,12 @@ public class OrchestrationService {
     private static final Logger log = LoggerFactory.getLogger(OrchestrationService.class);
     private static final int MAX_TOOL_ITERATIONS = 50;
 
+    // ── Message keys ─────────────────────────────────────────────────────────
+    private static final String MSG_PERSONA_PRIMER    = "orchestration.persona_primer";
+    private static final String MSG_UNKNOWN_TOOL      = "orchestration.error.unknown_tool";
+    private static final String MSG_TOOL_EXEC_FAILED  = "orchestration.error.tool_execution";
+    private static final String MSG_TOOL_LOOP         = "orchestration.error.tool_loop";
+
     private final LlmClient llmClient;
     private final List<Tool> tools;
     private final String systemPromptTemplate;
@@ -47,7 +53,7 @@ public class OrchestrationService {
      * @return ChatResult with the final response text and optional QueryResult for export
      */
     private static final String PERSONA_PRIMER =
-            Messages.get(Messages.ORCHESTRATION_PERSONA_PRIMER);
+            Messages.get(MSG_PERSONA_PRIMER);
 
     // ...existing code...
 
@@ -90,7 +96,7 @@ public class OrchestrationService {
                 Tool tool = findTool(toolName);
                 ToolResult result;
                 if (tool == null) {
-                    result = new ToolResult(Messages.get(Messages.ORCHESTRATION_ERROR_UNKNOWN_TOOL, toolName));
+                    result = new ToolResult(Messages.get(MSG_UNKNOWN_TOOL, toolName));
                     log.warn("Unknown tool: {}", toolName);
                 } else {
                     try {
@@ -98,15 +104,14 @@ public class OrchestrationService {
                         if (result.hasQueryResult()) lastToolResult = result;
                     } catch (Exception e) {
                         log.error("Tool execution failed: {}", e.getMessage(), e);
-                        result = new ToolResult(Messages.get(Messages.ORCHESTRATION_ERROR_TOOL_EXEC, toolName, e.getMessage()));
+                        result = new ToolResult(Messages.get(MSG_TOOL_EXEC_FAILED, toolName, e.getMessage()));
                     }
                 }
                 history.add(Message.tool(tc.getId(), toolName, result.getText()));
             }
         }
 
-        return new ChatResult(
-                Messages.get(Messages.ORCHESTRATION_ERROR_TOOL_LOOP), null);
+        return new ChatResult(Messages.get(MSG_TOOL_LOOP), null);
     }
 
     private Tool findTool(String name) {

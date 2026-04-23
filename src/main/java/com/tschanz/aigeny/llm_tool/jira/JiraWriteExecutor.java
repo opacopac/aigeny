@@ -25,6 +25,13 @@ public class JiraWriteExecutor {
     private static final Logger log = LoggerFactory.getLogger(JiraWriteExecutor.class);
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    // ── Message keys ─────────────────────────────────────────────────────────
+    private static final String MSG_UPDATED       = "jira.write.updated";
+    private static final String MSG_AUTH_FAILED   = "jira.write.auth_failed";
+    private static final String MSG_FORBIDDEN     = "jira.write.forbidden";
+    private static final String MSG_ERROR         = "jira.write.error";
+    private static final String MSG_COMMENT_ADDED = "jira.write.comment_added";
+
     private final AigenyProperties props;
     private final HttpClient http;
 
@@ -71,15 +78,15 @@ public class JiraWriteExecutor {
         log.info("<< JIRA PUT status={}", resp.statusCode());
 
         if (resp.statusCode() == 204 || resp.statusCode() == 200) {
-            return Messages.get(Messages.JIRA_WRITE_UPDATED, issueKey);
+            return Messages.get(MSG_UPDATED, issueKey);
         }
         if (resp.statusCode() == 401) {
-            return Messages.get(Messages.JIRA_WRITE_AUTH_FAILED);
+            return Messages.get(MSG_AUTH_FAILED);
         }
         if (resp.statusCode() == 403) {
-            return Messages.get(Messages.JIRA_WRITE_FORBIDDEN, issueKey);
+            return Messages.get(MSG_FORBIDDEN, issueKey);
         }
-        return Messages.get(Messages.JIRA_WRITE_ERROR, resp.statusCode(), resp.body());
+        return Messages.get(MSG_ERROR, resp.statusCode(), resp.body());
     }
 
     private String addComment(String issueKey, Map<String, Object> params,
@@ -103,15 +110,15 @@ public class JiraWriteExecutor {
         log.info("<< JIRA POST comment status={}", resp.statusCode());
 
         if (resp.statusCode() == 201) {
-            return Messages.get(Messages.JIRA_WRITE_COMMENT_ADDED, issueKey);
+            return Messages.get(MSG_COMMENT_ADDED, issueKey);
         }
         if (resp.statusCode() == 401) {
-            return Messages.get(Messages.JIRA_WRITE_AUTH_FAILED);
+            return Messages.get(MSG_AUTH_FAILED);
         }
         if (resp.statusCode() == 403) {
-            return Messages.get(Messages.JIRA_WRITE_FORBIDDEN, issueKey);
+            return Messages.get(MSG_FORBIDDEN, issueKey);
         }
-        return Messages.get(Messages.JIRA_WRITE_ERROR, resp.statusCode(), resp.body());
+        return Messages.get(MSG_ERROR, resp.statusCode(), resp.body());
     }
 }
 

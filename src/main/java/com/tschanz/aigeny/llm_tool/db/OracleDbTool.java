@@ -29,6 +29,13 @@ public class OracleDbTool implements Tool {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final int MAX_ROWS = 5000;
 
+    // ── Message keys ─────────────────────────────────────────────────────────
+    private static final String MSG_NOT_CONFIGURED = "db.error.not_configured";
+    private static final String MSG_SELECT_ONLY    = "db.error.select_only";
+    private static final String MSG_DANGEROUS_SQL  = "db.error.dangerous_sql";
+    private static final String MSG_NO_CONNECTION  = "db.error.no_connection";
+    private static final String MSG_SQL_ERROR      = "db.error.sql";
+
     private static final Pattern SAFE_SQL = Pattern.compile(
             "^\\s*SELECT\\b.*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern DANGEROUS = Pattern.compile(
@@ -87,7 +94,7 @@ public class OracleDbTool implements Tool {
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
         if (!props.isDbConfigured()) {
-            return new ToolResult(Messages.get(Messages.DB_ERROR_NOT_CONFIGURED));
+            return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
         }
 
         JsonNode args = JSON.readTree(argumentsJson);
@@ -95,10 +102,10 @@ public class OracleDbTool implements Tool {
         String description = args.path("description").asText("Execute query");
 
         if (!SAFE_SQL.matcher(sql).matches()) {
-            return new ToolResult(Messages.get(Messages.DB_ERROR_SELECT_ONLY));
+            return new ToolResult(Messages.get(MSG_SELECT_ONLY));
         }
         if (DANGEROUS.matcher(sql).find()) {
-            return new ToolResult(Messages.get(Messages.DB_ERROR_DANGEROUS_SQL));
+            return new ToolResult(Messages.get(MSG_DANGEROUS_SQL));
         }
 
         log.info("▶ DB REQUEST  desc=\"{}\"", description);
@@ -107,7 +114,7 @@ public class OracleDbTool implements Tool {
         HikariDataSource ds = getPool();
         if (ds == null) {
             log.error("✗ DB REQUEST  FAILED - connection pool unavailable");
-            return new ToolResult(Messages.get(Messages.DB_ERROR_NO_CONNECTION));
+            return new ToolResult(Messages.get(MSG_NO_CONNECTION));
         }
 
         long t0 = System.currentTimeMillis();
@@ -140,7 +147,7 @@ public class OracleDbTool implements Tool {
         } catch (SQLException e) {
             long elapsed = System.currentTimeMillis() - t0;
             log.error("✗ DB REQUEST  FAILED elapsed={}ms error=\"{}\"", elapsed, e.getMessage());
-            return new ToolResult(Messages.get(Messages.DB_ERROR_SQL, e.getMessage()));
+            return new ToolResult(Messages.get(MSG_SQL_ERROR, e.getMessage()));
         }
     }
 }

@@ -63,6 +63,15 @@ public class ChatController {
     private static final String VAL_OK    = "ok";
     private static final String VAL_ERROR = "error";
 
+    // ── Message keys ─────────────────────────────────────────────────────────
+    private static final String MSG_ERROR_EMPTY_MESSAGE = "chat.error.empty_message";
+    private static final String MSG_ERROR_GENERIC       = "chat.error.generic";
+    private static final String MSG_JIRA_NO_PENDING     = "chat.jira.no_pending_action";
+    private static final String MSG_JIRA_NO_TOKEN       = "chat.jira.no_token";
+    private static final String MSG_JIRA_WRITE_ERROR    = "chat.jira.write_error";
+    private static final String MSG_STATUS_CANCELLED    = "chat.status.cancelled";
+    private static final String MSG_STATUS_CLEARED      = "chat.status.cleared";
+
     private final OrchestrationService orchestration;
     private final SchemaLoader schemaLoader;
     private final AigenyProperties props;
@@ -88,7 +97,7 @@ public class ChatController {
         String message = body.getOrDefault(REQ_MESSAGE, "").trim();
         if (message.isEmpty()) {
             return CompletableFuture.completedFuture(
-                    ResponseEntity.badRequest().body(Map.of(KEY_ERROR, Messages.get(Messages.CHAT_ERROR_EMPTY_MESSAGE))));
+                    ResponseEntity.badRequest().body(Map.of(KEY_ERROR, Messages.get(MSG_ERROR_EMPTY_MESSAGE))));
         }
 
         List<Message> history = getOrCreateHistory(session);
@@ -129,7 +138,7 @@ public class ChatController {
             } catch (Exception e) {
                 log.error("Chat error", e);
                 return ResponseEntity.ok(Map.of(
-                        KEY_RESPONSE,  Messages.get(Messages.CHAT_ERROR_GENERIC, e.getMessage()),
+                        KEY_RESPONSE,  Messages.get(MSG_ERROR_GENERIC, e.getMessage()),
                         KEY_HAS_EXPORT, false
                 ));
             } finally {
@@ -146,13 +155,13 @@ public class ChatController {
         PendingJiraAction pending = (PendingJiraAction) session.getAttribute(SESSION_PENDING_ACTION);
         if (pending == null) {
             return CompletableFuture.completedFuture(
-                    ResponseEntity.ok(Map.of(KEY_RESULT, Messages.get(Messages.CHAT_JIRA_NO_PENDING))));
+                    ResponseEntity.ok(Map.of(KEY_RESULT, Messages.get(MSG_JIRA_NO_PENDING))));
         }
         session.removeAttribute(SESSION_PENDING_ACTION);
         final String token = getEffectiveJiraToken(session, props);
         if (token == null || token.isBlank()) {
             return CompletableFuture.completedFuture(
-                    ResponseEntity.ok(Map.of(KEY_RESULT, Messages.get(Messages.CHAT_JIRA_NO_TOKEN))));
+                    ResponseEntity.ok(Map.of(KEY_RESULT, Messages.get(MSG_JIRA_NO_TOKEN))));
         }
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -161,7 +170,7 @@ public class ChatController {
             } catch (Exception e) {
                 log.error("Jira write failed", e);
                 return ResponseEntity.ok(Map.<String, Object>of(
-                        KEY_RESULT, Messages.get(Messages.CHAT_JIRA_WRITE_ERROR, e.getMessage())));
+                        KEY_RESULT, Messages.get(MSG_JIRA_WRITE_ERROR, e.getMessage())));
             }
         });
     }
@@ -171,7 +180,7 @@ public class ChatController {
     @PostMapping("/jira/cancel")
     public ResponseEntity<Map<String, String>> cancelJiraAction(HttpSession session) {
         session.removeAttribute(SESSION_PENDING_ACTION);
-        return ResponseEntity.ok(Map.of("status", Messages.get(Messages.CHAT_STATUS_CANCELLED)));
+        return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CANCELLED)));
     }
 
     // ── POST /api/chat/clear ─────────────────────────────────────────────────
@@ -180,7 +189,7 @@ public class ChatController {
     public ResponseEntity<Map<String, String>> clear(HttpSession session) {
         session.removeAttribute(SESSION_HISTORY);
         session.removeAttribute(SESSION_RESULT);
-        return ResponseEntity.ok(Map.of("status", Messages.get(Messages.CHAT_STATUS_CLEARED)));
+        return ResponseEntity.ok(Map.of("status", Messages.get(MSG_STATUS_CLEARED)));
     }
 
     // ── POST /api/schema/reload ──────────────────────────────────────────────
@@ -231,7 +240,7 @@ public class ChatController {
         String token = body.getOrDefault(REQ_TOKEN, "").strip();
         if (token.isEmpty()) {
             session.removeAttribute(SESSION_JIRA_TOKEN);
-            return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(Messages.CHAT_STATUS_CLEARED)));
+            return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CLEARED)));
         }
         session.setAttribute(SESSION_JIRA_TOKEN, token);
         log.info("User Jira token set for session {}", session.getId());
@@ -243,7 +252,7 @@ public class ChatController {
     @DeleteMapping("/jira/token")
     public ResponseEntity<Map<String, String>> clearJiraToken(HttpSession session) {
         session.removeAttribute(SESSION_JIRA_TOKEN);
-        return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(Messages.CHAT_STATUS_CLEARED)));
+        return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CLEARED)));
     }
 
     /** Returns the effective Jira token for the current session (user override or config fallback). */

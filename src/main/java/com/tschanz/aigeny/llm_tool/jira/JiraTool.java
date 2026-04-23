@@ -31,6 +31,16 @@ public class JiraTool implements Tool {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final int MAX_RESULTS = 50;
 
+    // ── Message keys ─────────────────────────────────────────────────────────
+    private static final String MSG_NOT_CONFIGURED   = "jira.error.not_configured";
+    private static final String MSG_NO_TOKEN         = "jira.error.no_token";
+    private static final String MSG_MISSING_JQL      = "jira.error.missing_jql_or_key";
+    private static final String MSG_ISSUE_NOT_FOUND  = "jira.error.issue_not_found";
+    private static final String MSG_AUTH_FAILED      = "jira.error.auth_failed_en";
+    private static final String MSG_HTTP_ERROR       = "jira.error.http_en";
+    private static final String MSG_NO_ISSUES        = "jira.no_issues_found";
+    private static final String MSG_ISSUES_FOUND     = "jira.issues_found";
+
     private final AigenyProperties props;
     private final HttpClient http;
 
@@ -67,7 +77,7 @@ public class JiraTool implements Tool {
         String baseUrl = jira.getBaseUrl() == null ? "" : jira.getBaseUrl().replaceAll("/$", "");
 
         if (baseUrl.isBlank()) {
-            return new ToolResult(Messages.get(Messages.JIRA_ERROR_NOT_CONFIGURED));
+            return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
         }
 
         // Resolve effective token: ThreadLocal (set by ChatController) takes priority over server config
@@ -77,7 +87,7 @@ public class JiraTool implements Tool {
         }
 
         if (effectiveToken == null || effectiveToken.isBlank()) {
-            return new ToolResult(Messages.get(Messages.JIRA_ERROR_NO_TOKEN));
+            return new ToolResult(Messages.get(MSG_NO_TOKEN));
         }
 
         JsonNode args = JSON.readTree(argumentsJson);
@@ -95,7 +105,7 @@ public class JiraTool implements Tool {
         }
 
         if (jql.isBlank()) {
-            return new ToolResult(Messages.get(Messages.JIRA_ERROR_MISSING_JQL));
+            return new ToolResult(Messages.get(MSG_MISSING_JQL));
         }
 
         return searchByJql(jql, maxResults, baseUrl, authHeader);
@@ -110,15 +120,15 @@ public class JiraTool implements Tool {
         HttpResponse<String> response = sendRequest(url, authHeader);
 
         if (response.statusCode() == 404) {
-            return new ToolResult(Messages.get(Messages.JIRA_ERROR_ISSUE_NOT_FOUND, issueKey));
+            return new ToolResult(Messages.get(MSG_ISSUE_NOT_FOUND, issueKey));
         }
         if (response.statusCode() == 401) {
             log.warn("   Response body: {}", response.body());
-            return new ToolResult(Messages.get(Messages.JIRA_ERROR_AUTH_FAILED_EN));
+            return new ToolResult(Messages.get(MSG_AUTH_FAILED));
         }
         if (response.statusCode() != 200) {
             log.error("<< JIRA RESPONSE status={} body={}", response.statusCode(), response.body());
-            return new ToolResult(Messages.get(Messages.JIRA_ERROR_HTTP_EN, response.statusCode(), response.body()));
+            return new ToolResult(Messages.get(MSG_HTTP_ERROR, response.statusCode(), response.body()));
         }
 
         log.info("<< JIRA RESPONSE status=200 bodySize={}B", response.body().length());
@@ -137,11 +147,11 @@ public class JiraTool implements Tool {
 
         if (response.statusCode() == 401) {
             log.warn("   Response body: {}", response.body());
-            return new ToolResult(Messages.get(Messages.JIRA_ERROR_AUTH_FAILED_EN));
+            return new ToolResult(Messages.get(MSG_AUTH_FAILED));
         }
         if (response.statusCode() != 200) {
             log.error("<< JIRA RESPONSE status={} body={}", response.statusCode(), response.body());
-            return new ToolResult(Messages.get(Messages.JIRA_ERROR_HTTP_EN, response.statusCode(), response.body()));
+            return new ToolResult(Messages.get(MSG_HTTP_ERROR, response.statusCode(), response.body()));
         }
 
         log.info("<< JIRA RESPONSE status=200 bodySize={}B", response.body().length());
@@ -198,14 +208,14 @@ public class JiraTool implements Tool {
         JsonNode issues = root.path("issues");
 
         if (!issues.isArray() || issues.isEmpty())
-            return new ToolResult(Messages.get(Messages.JIRA_NO_ISSUES_FOUND));
+            return new ToolResult(Messages.get(MSG_NO_ISSUES));
 
         log.info("   Jira total={} returned={}", total, issues.size());
 
         List<String> columns = List.of("KEY", "SUMMARY", "STATUS", "ASSIGNEE", "PRIORITY", "TYPE");
         List<Map<String, Object>> rows = new ArrayList<>();
         StringBuilder text = new StringBuilder();
-        text.append(Messages.get(Messages.JIRA_ISSUES_FOUND, total, issues.size()));
+        text.append(Messages.get(MSG_ISSUES_FOUND, total, issues.size()));
 
         for (JsonNode issue : issues) {
             String key = issue.path("key").asText();
