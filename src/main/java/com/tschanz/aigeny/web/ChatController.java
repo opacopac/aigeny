@@ -12,14 +12,18 @@ import com.tschanz.aigeny.llm_tool.jira.PendingJiraAction;
 import com.tschanz.aigeny.llm_tool.jira.PendingJiraActionContext;
 import com.tschanz.aigeny.llm_tool.QueryResult;
 import com.tschanz.aigeny.llm_tool.ToolResult;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -80,15 +84,18 @@ public class ChatController {
     private final SchemaLoader schemaLoader;
     private final AigenyProperties props;
     private final JiraWriteExecutor jiraWriteExecutor;
+    private final ObjectMapper objectMapper;
 
     public ChatController(OrchestrationService orchestration,
                           SchemaLoader schemaLoader,
                           AigenyProperties props,
-                          JiraWriteExecutor jiraWriteExecutor) {
+                          JiraWriteExecutor jiraWriteExecutor,
+                          ObjectMapper objectMapper) {
         this.orchestration     = orchestration;
         this.schemaLoader      = schemaLoader;
         this.props             = props;
         this.jiraWriteExecutor = jiraWriteExecutor;
+        this.objectMapper      = objectMapper;
     }
 
     // ── POST /api/chat ──────────────────────────────────────────────────────
@@ -155,7 +162,84 @@ public class ChatController {
         });
     }
 
-    // ── POST /api/jira/confirm ───────────────────────────────────────────────
+    // ── POST /api/chat/stream (SSE) ──────────────────────────────────────────
+
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter chatStream(
+            @RequestBody Map<String, String> body,
+            HttpSession session) {
+
+        String message = body.getOrDefault(REQ_MESSAGE, "").trim();
+        SseEmitter emitter = new SseEmitter(300_000L); // 5-min timeout
+
+        if (message.isEmpty()) {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    emitter.send(SseEmitter.event().data(
+                            objectMapper.writeValueAsString(Map.of("type", "error", "message", Messages.get(MSG_ERROR_EMPTY_MESSAGE)))));
+                    emitter.complete();
+                } catch (Exception ex) { emitter.completeWithError(ex); }
+            });
+            return emitter;
+        }
+
+        List<Message> history = getOrCreateHistory(session);
+        final String jiraToken = getEffectiveJiraToken(session, props);
+        final boolean jiraWriteEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
+
+        CompletableFuture.runAsync(() -> {
+            JiraTokenContext.set(jiraToken);
+            JiraWriteContext.set(jiraWriteEnabled);
+            PendingJiraActionContext.clear();
+            try {
+                ChatResult result = orchestration.chat(history, message, (toolName, description) -> {
+                    try {
+                        emitter.send(SseEmitter.event().data(
+                                objectMapper.writeValueAsString(Map.of(
+                                        "type", "tool_call",
+                                        "toolName", toolName,
+                                        "description", description))));
+                    } catch (Exception e) {
+                        log.warn("SSE tool_call send failed: {}", e.getMessage());
+                    }
+                });
+
+                if (result.hasExportData()) {
+                    session.setAttribute(SESSION_RESULT, result.lastToolResult().getQueryResult());
+                }
+
+                PendingJiraAction pending = PendingJiraActionContext.get();
+                Map<String, Object> payload = new HashMap<>();
+                payload.put("type", "done");
+                payload.put(KEY_RESPONSE, result.response());
+                payload.put(KEY_HAS_EXPORT, result.hasExportData());
+                if (pending != null) {
+                    session.setAttribute(SESSION_PENDING_ACTION, pending);
+                    payload.put(KEY_PENDING_ACTION, Map.of(
+                            KEY_DESCRIPTION, pending.getHumanDescription(),
+                            KEY_ISSUE_KEY,   pending.getIssueKey()));
+                }
+                emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(payload)));
+                emitter.complete();
+
+            } catch (Exception e) {
+                log.error("Chat stream error", e);
+                try {
+                    emitter.send(SseEmitter.event().data(
+                            objectMapper.writeValueAsString(Map.of("type", "error", "message", e.getMessage()))));
+                    emitter.complete();
+                } catch (Exception ex) { emitter.completeWithError(ex); }
+            } finally {
+                JiraTokenContext.clear();
+                JiraWriteContext.clear();
+                PendingJiraActionContext.clear();
+            }
+        });
+
+        return emitter;
+    }
+
+    // ── POST /api/jira/confirm ────────────────────────────────────────────────
 
     @PostMapping("/jira/confirm")
     public CompletableFuture<ResponseEntity<Map<String, Object>>> confirmJiraAction(HttpSession session) {

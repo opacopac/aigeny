@@ -1,5 +1,7 @@
 package com.tschanz.aigeny.orchestration;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;
 import com.tschanz.aigeny.llm.LlmClient;
 import com.tschanz.aigeny.llm.model.*;
@@ -14,6 +16,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiConsumer;
 
 /**
  * Core orchestration: builds the system prompt, manages the agentic tool-call loop,
@@ -34,6 +37,7 @@ public class OrchestrationService {
     private final LlmClient llmClient;
     private final List<Tool> tools;
     private final String systemPromptTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** Spring auto-collects all Tool beans into the list. */
     public OrchestrationService(LlmClient llmClient, List<Tool> tools) throws IOException {
@@ -45,19 +49,20 @@ public class OrchestrationService {
                 tools.size(), tools.stream().map(Tool::getName).toList());
     }
 
-    /**
-     * Process a user message within an ongoing conversation history.
-     *
-     * @param history     previous messages (mutated in place - caller owns this list)
-     * @param userMessage the new user input
-     * @return ChatResult with the final response text and optional QueryResult for export
-     */
     private static final String PERSONA_PRIMER =
             Messages.get(MSG_PERSONA_PRIMER);
 
-    // ...existing code...
-
+    /** Convenience overload without tool-call listener. */
     public ChatResult chat(List<Message> history, String userMessage) throws Exception {
+        return chat(history, userMessage, null);
+    }
+
+    /**
+     * Process a user message. Calls {@code onToolCall} with (toolName, description)
+     * each time a tool is about to be executed (may be {@code null}).
+     */
+    public ChatResult chat(List<Message> history, String userMessage,
+                           BiConsumer<String, String> onToolCall) throws Exception {
         List<ToolDefinition> toolDefs = tools.stream().map(Tool::getDefinition).toList();
 
         // Prime the persona on the very first message of a new conversation
@@ -99,6 +104,9 @@ public class OrchestrationService {
                     result = new ToolResult(Messages.get(MSG_UNKNOWN_TOOL, toolName));
                     log.warn("Unknown tool: {}", toolName);
                 } else {
+                    if (onToolCall != null) {
+                        onToolCall.accept(toolName, extractCallDescription(toolArgs, toolName));
+                    }
                     try {
                         result = tool.execute(toolArgs);
                         if (result.hasQueryResult()) lastToolResult = result;
@@ -116,6 +124,21 @@ public class OrchestrationService {
 
     private Tool findTool(String name) {
         return tools.stream().filter(t -> t.getName().equals(name)).findFirst().orElse(null);
+    }
+
+    /**
+     * Extracts the {@code description} field from the tool-call arguments JSON.
+     * Falls back to the tool name if the field is absent or the JSON is invalid.
+     */
+    private String extractCallDescription(String argsJson, String fallback) {
+        try {
+            JsonNode node = objectMapper.readTree(argsJson);
+            JsonNode desc = node.get("description");
+            if (desc != null && !desc.isNull() && !desc.asText().isBlank()) {
+                return desc.asText();
+            }
+        } catch (Exception ignored) {}
+        return fallback;
     }
 
     private String buildSystemPrompt() {

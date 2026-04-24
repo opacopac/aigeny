@@ -140,11 +140,53 @@ function showTypingIndicator() {
 
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
-  bubble.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+  bubble.innerHTML =
+    '<div class="typing-indicator" id="typingDots"><span></span><span></span><span></span></div>' +
+    '<ul class="tool-call-list" id="toolCallList"></ul>';
 
   div.append(header, bubble);
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
+}
+
+function updateTypingIndicator(toolName, description) {
+  const list = document.getElementById('toolCallList');
+  if (!list) return;
+  const li = document.createElement('li');
+  li.className = 'tool-call-item';
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'tool-call-name';
+  nameSpan.textContent = toolName;
+  const descSpan = document.createElement('span');
+  descSpan.className = 'tool-call-desc';
+  descSpan.textContent = description;
+  li.append(nameSpan, descSpan);
+  list.appendChild(li);
+  document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+/**
+ * Called when the final answer arrives:
+ * - Hides the bouncing dots
+ * - Keeps the tool-call list visible (if any calls were made)
+ * - Removes IDs from finalized elements so the next request gets fresh ones
+ * - If no calls were made at all, removes the indicator entirely
+ */
+function finalizeTypingIndicator() {
+  const indicator = document.getElementById('typingIndicator');
+  const dots      = document.getElementById('typingDots');
+  const list      = document.getElementById('toolCallList');
+
+  if (dots) dots.style.display = 'none';
+
+  if (list && list.children.length === 0) {
+    if (indicator) indicator.remove();
+  } else {
+    // Strip IDs so future getElementById calls find the new elements, not these
+    if (indicator) indicator.removeAttribute('id');
+    if (dots)      dots.removeAttribute('id');
+    if (list)      list.removeAttribute('id');
+  }
 }
 
 function removeTypingIndicator() {
@@ -412,25 +454,43 @@ async function sendMessage() {
   showTypingIndicator();
 
   try {
-    const res = await fetch('/api/chat', {
+    const response = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message })
     });
-    const data = await res.json();
-    removeTypingIndicator();
 
-    if (data.response) {
-      appendMessage('aigeny', data.response);
-    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-    if (data.pendingAction) {
-      showJiraConfirmation(data.pendingAction);
-    }
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    if (data.hasExport) {
-      hasExportData = true;
-      setExportButtons(true);
+      // SSE events are separated by double newline
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop(); // keep incomplete last chunk
+
+      for (const part of parts) {
+        const dataLine = part.split('\n').find(l => l.startsWith('data:'));
+        if (!dataLine) continue;
+        let data;
+        try { data = JSON.parse(dataLine.slice(5).trim()); } catch { continue; }
+
+        if (data.type === 'tool_call') {
+          updateTypingIndicator(data.toolName, data.description);
+        } else if (data.type === 'done') {
+          finalizeTypingIndicator();
+          if (data.response) appendMessage('aigeny', data.response);
+          if (data.pendingAction) showJiraConfirmation(data.pendingAction);
+          if (data.hasExport) { hasExportData = true; setExportButtons(true); }
+        } else if (data.type === 'error') {
+          removeTypingIndicator();
+          appendMessage('aigeny', 'Njet! Fehler, Towarischtsch: ' + (data.message || '?'));
+        }
+      }
     }
   } catch (err) {
     removeTypingIndicator();
