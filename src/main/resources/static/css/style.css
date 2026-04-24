@@ -86,7 +86,7 @@ html, body {
 
 /* ── HAL Panel ───────────────────────────────────────────────────────── */
 .hal-panel {
-  width: 260px;
+  width: 310px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -132,7 +132,7 @@ html, body {
 }
 .info-row:last-child { border-bottom: none; }
 .info-key { color: var(--text-dim); }
-.info-val { color: var(--text); font-weight: 500; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.info-val { color: var(--text); font-weight: 500; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .info-val.ok    { color: #44cc44; }
 .info-val.error { color: var(--red); }
 

@@ -520,8 +520,14 @@ async function loadStatus() {
     document.getElementById('infoTables').textContent= data.schemaTables || '0';
 
     const dbEl = document.getElementById('infoDb');
-    dbEl.textContent  = data.dbConfigured ? 'Connected' : 'Not configured';
-    dbEl.className    = 'info-val ' + (data.dbConfigured ? 'ok' : 'error');
+    if (data.dbConfigured) {
+      const user = data.dbUsername ? ` (${data.dbUsername})` : '';
+      dbEl.textContent = 'Connected' + user;
+      dbEl.className   = 'info-val ok';
+    } else {
+      dbEl.textContent = 'Not configured';
+      dbEl.className   = 'info-val error';
+    }
 
     const jiraEl  = document.getElementById('infoJira');
     const jiraBtn = document.getElementById('btnJiraToken');

@@ -60,6 +60,7 @@ public class ChatController {
     private static final String KEY_JIRA_CONFIGURED          = "jiraConfigured";
     private static final String KEY_JIRA_BASEURL_CONFIGURED  = "jiraBaseUrlConfigured";
     private static final String KEY_JIRA_WRITE_ENABLED       = "jiraWriteEnabled";
+    private static final String KEY_DB_USERNAME               = "dbUsername";
     private static final String KEY_SCHEMA_TABLES            = "schemaTables";
 
     // ── JSON response values ─────────────────────────────────────────────────
@@ -235,6 +236,7 @@ public class ChatController {
                 KEY_LLM_PROVIDER,            props.getLlm().getProvider(),
                 KEY_LLM_MODEL,               props.getLlm().getModel(),
                 KEY_DB_CONFIGURED,           props.isDbConfigured(),
+                KEY_DB_USERNAME,             props.getDb().getUsername(),
                 KEY_JIRA_CONFIGURED,         jiraTokenAvailable,
                 KEY_JIRA_BASEURL_CONFIGURED, jiraBaseUrlConfigured,
                 KEY_JIRA_WRITE_ENABLED,      jiraWriteEnabled,
