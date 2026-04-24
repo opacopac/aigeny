@@ -25,7 +25,7 @@ aigeny:
   llm:
     provider: claude
     api-key: "your_anthropic_api_key"
-    model: "claude-sonnet-4-5"
+    model: "claude-sonnet-4-6"
 ```
 
 ### 2. Build & Start
