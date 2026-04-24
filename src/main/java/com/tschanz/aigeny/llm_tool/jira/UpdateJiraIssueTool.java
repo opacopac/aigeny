@@ -44,6 +44,7 @@ public class UpdateJiraIssueTool implements Tool {
     private static final String MSG_ARG_ISSUE_KEY   = "jira.update.arg_issue_key_desc";
     private static final String MSG_ARG_SUMMARY     = "jira.update.arg_summary_desc";
     private static final String MSG_ARG_DESCRIPTION = "jira.update.arg_description_desc";
+    private static final String MSG_WRITE_DISABLED  = "jira.write.mode_disabled";
 
     private final AigenyProperties props;
 
@@ -73,6 +74,9 @@ public class UpdateJiraIssueTool implements Tool {
 
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
+        if (!JiraWriteContext.isEnabled()) {
+            return new ToolResult(Messages.get(MSG_WRITE_DISABLED));
+        }
         AigenyProperties.Jira jira = props.getJira();
         String baseUrl = jira.getBaseUrl() == null ? "" : jira.getBaseUrl().replaceAll("/$", "");
         if (baseUrl.isBlank()) {

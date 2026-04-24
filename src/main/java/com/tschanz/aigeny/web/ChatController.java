@@ -6,6 +6,7 @@ import com.tschanz.aigeny.llm.model.Message;
 import com.tschanz.aigeny.orchestration.ChatResult;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
 import com.tschanz.aigeny.llm_tool.jira.JiraTokenContext;
+import com.tschanz.aigeny.llm_tool.jira.JiraWriteContext;
 import com.tschanz.aigeny.llm_tool.jira.JiraWriteExecutor;
 import com.tschanz.aigeny.llm_tool.jira.PendingJiraAction;
 import com.tschanz.aigeny.llm_tool.jira.PendingJiraActionContext;
@@ -37,6 +38,7 @@ public class ChatController {
     private static final String SESSION_RESULT         = "lastQueryResult";
     private static final String SESSION_JIRA_TOKEN     = "jiraToken";
     private static final String SESSION_PENDING_ACTION = "pendingJiraAction";
+    private static final String SESSION_JIRA_WRITE     = "jiraWriteEnabled";
 
     // ── JSON request body keys ───────────────────────────────────────────────
     private static final String REQ_MESSAGE       = "message";
@@ -57,6 +59,7 @@ public class ChatController {
     private static final String KEY_DB_CONFIGURED            = "dbConfigured";
     private static final String KEY_JIRA_CONFIGURED          = "jiraConfigured";
     private static final String KEY_JIRA_BASEURL_CONFIGURED  = "jiraBaseUrlConfigured";
+    private static final String KEY_JIRA_WRITE_ENABLED       = "jiraWriteEnabled";
     private static final String KEY_SCHEMA_TABLES            = "schemaTables";
 
     // ── JSON response values ─────────────────────────────────────────────────
@@ -105,9 +108,11 @@ public class ChatController {
         // Read token in the HTTP thread (RequestContextHolder is available here)
         // then pass it into the async lambda via ThreadLocal
         final String jiraToken = getEffectiveJiraToken(session, props);
+        final boolean jiraWriteEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
 
         return CompletableFuture.supplyAsync(() -> {
             JiraTokenContext.set(jiraToken);
+            JiraWriteContext.set(jiraWriteEnabled);
             PendingJiraActionContext.clear();
             try {
                 ChatResult result = orchestration.chat(history, message);
@@ -143,6 +148,7 @@ public class ChatController {
                 ));
             } finally {
                 JiraTokenContext.clear();
+                JiraWriteContext.clear();
                 PendingJiraActionContext.clear();
             }
         });
@@ -163,7 +169,9 @@ public class ChatController {
             return CompletableFuture.completedFuture(
                     ResponseEntity.ok(Map.of(KEY_RESULT, Messages.get(MSG_JIRA_NO_TOKEN))));
         }
+        final boolean writeEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
         return CompletableFuture.supplyAsync(() -> {
+            JiraWriteContext.set(writeEnabled);
             try {
                 String result = jiraWriteExecutor.execute(pending, token);
                 return ResponseEntity.ok(Map.<String, Object>of(KEY_RESULT, result));
@@ -171,6 +179,8 @@ public class ChatController {
                 log.error("Jira write failed", e);
                 return ResponseEntity.ok(Map.<String, Object>of(
                         KEY_RESULT, Messages.get(MSG_JIRA_WRITE_ERROR, e.getMessage())));
+            } finally {
+                JiraWriteContext.clear();
             }
         });
     }
@@ -220,12 +230,14 @@ public class ChatController {
                 || props.isJiraConfigured();
         boolean jiraBaseUrlConfigured = props.getJira().getBaseUrl() != null
                 && !props.getJira().getBaseUrl().isBlank();
+        boolean jiraWriteEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
         return ResponseEntity.ok(Map.of(
                 KEY_LLM_PROVIDER,            props.getLlm().getProvider(),
                 KEY_LLM_MODEL,               props.getLlm().getModel(),
                 KEY_DB_CONFIGURED,           props.isDbConfigured(),
                 KEY_JIRA_CONFIGURED,         jiraTokenAvailable,
                 KEY_JIRA_BASEURL_CONFIGURED, jiraBaseUrlConfigured,
+                KEY_JIRA_WRITE_ENABLED,      jiraWriteEnabled,
                 KEY_SCHEMA_TABLES,           schemaLoader.getTableCount(),
                 KEY_HAS_EXPORT,              lastResult != null && !lastResult.isEmpty()
         ));
@@ -244,6 +256,18 @@ public class ChatController {
         }
         session.setAttribute(SESSION_JIRA_TOKEN, token);
         log.info("User Jira token set for session {}", session.getId());
+        return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
+    }
+
+    // ── POST /api/jira/write-mode ────────────────────────────────────────────
+
+    @PostMapping("/jira/write-mode")
+    public ResponseEntity<Map<String, String>> setJiraWriteMode(
+            @RequestBody Map<String, Object> body,
+            HttpSession session) {
+        boolean enabled = Boolean.parseBoolean(String.valueOf(body.getOrDefault("enabled", "false")));
+        session.setAttribute(SESSION_JIRA_WRITE, enabled);
+        log.info("Jira write mode {} for session {}", enabled ? "enabled" : "disabled", session.getId());
         return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
     }
 

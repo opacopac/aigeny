@@ -26,6 +26,7 @@ public class JiraWriteExecutor {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     // ── Message keys ─────────────────────────────────────────────────────────
+    private static final String MSG_WRITE_DISABLED = "jira.write.mode_disabled";
     private static final String MSG_UPDATED       = "jira.write.updated";
     private static final String MSG_AUTH_FAILED   = "jira.write.auth_failed";
     private static final String MSG_FORBIDDEN     = "jira.write.forbidden";
@@ -47,6 +48,9 @@ public class JiraWriteExecutor {
      * @return human-readable result message
      */
     public String execute(PendingJiraAction action, String token) throws Exception {
+        if (!JiraWriteContext.isEnabled()) {
+            return Messages.get(MSG_WRITE_DISABLED);
+        }
         String baseUrl = props.getJira().getBaseUrl().replaceAll("/$", "");
         String auth    = "Bearer " + token;
 

@@ -34,6 +34,7 @@ public class AddJiraCommentTool implements Tool {
     private static final String MSG_NOT_CONFIGURED = "jira.error.not_configured_de";
     private static final String MSG_MISSING_ARGS   = "jira.comment.missing_args";
     private static final String MSG_QUEUED         = "jira.comment.queued";
+    private static final String MSG_WRITE_DISABLED = "jira.write.mode_disabled";
 
     private final AigenyProperties props;
 
@@ -46,7 +47,9 @@ public class AddJiraCommentTool implements Tool {
     @Override
     public String getDescription() {
         return "Add a comment to an existing Jira issue. " +
-               "The action will be queued and the user must confirm it before execution. " +
+               "IMPORTANT: Only works when Jira write mode is enabled in the UI sidebar (toggle 'Jira Schreiben'). " +
+               "If write mode is disabled, the tool returns an error - do NOT ask for confirmation in that case. " +
+               "If write mode is enabled, the action will be queued and the user must confirm it before execution. " +
                "Provide 'issueKey' and 'comment'.";
     }
 
@@ -64,6 +67,9 @@ public class AddJiraCommentTool implements Tool {
 
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
+        if (!JiraWriteContext.isEnabled()) {
+            return new ToolResult(Messages.get(MSG_WRITE_DISABLED));
+        }
         AigenyProperties.Jira jira = props.getJira();
         String baseUrl = jira.getBaseUrl() == null ? "" : jira.getBaseUrl().replaceAll("/$", "");
         if (baseUrl.isBlank()) {

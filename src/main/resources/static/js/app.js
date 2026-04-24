@@ -10,6 +10,7 @@
 let isThinking = false;
 let hasExportData = false;
 const JIRA_TOKEN_KEY = 'aigeny.jiraToken';
+const JIRA_WRITE_KEY = 'aigeny.jiraWriteEnabled';
 
 // ── HAL Eye ────────────────────────────────────────────────────────────────
 
@@ -279,6 +280,44 @@ async function cancelJiraAction(confirmBlock) {
   appendMessage('aigeny', 'Njet! Aktion wurde abgebrochen, Towarischtsch. Choroscho, keine Änderungen gemacht, da!');
 }
 
+// ── Jira Write Mode ────────────────────────────────────────────────────────
+
+async function toggleJiraWriteMode(enabled) {
+  try {
+    await fetch('/api/jira/write-mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+    localStorage.setItem(JIRA_WRITE_KEY, enabled ? 'true' : 'false');
+    updateWriteToggleUI(enabled);
+  } catch (err) {
+    console.error('Failed to set Jira write mode:', err);
+  }
+}
+
+function updateWriteToggleUI(enabled) {
+  const toggle = document.getElementById('jiraWriteToggle');
+  if (toggle) toggle.checked = enabled;
+  const label = document.getElementById('jiraWriteLabel');
+  if (label) {
+    label.style.color = enabled ? 'var(--red)' : '';
+    label.textContent = '✏ Jira Schreiben (' + (enabled ? 'ein' : 'aus') + ')';
+  }
+}
+
+async function syncJiraWriteModeToSession() {
+  const enabled = localStorage.getItem(JIRA_WRITE_KEY) === 'true';
+  updateWriteToggleUI(enabled);
+  try {
+    await fetch('/api/jira/write-mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+  } catch (e) { /* ignore */ }
+}
+
 // ── Jira Token Modal ───────────────────────────────────────────────────────
 
 function openJiraTokenModal() {
@@ -486,6 +525,7 @@ async function loadStatus() {
 
     const jiraEl  = document.getElementById('infoJira');
     const jiraBtn = document.getElementById('btnJiraToken');
+    const jiraWriteRow = document.getElementById('jiraWriteToggleRow');
     if (data.jiraBaseUrlConfigured) {
       if (data.jiraConfigured) {
         jiraEl.textContent = 'Connected';
@@ -498,10 +538,12 @@ async function loadStatus() {
         jiraBtn.textContent = '+ Token eingeben';
         jiraBtn.classList.add('visible');
       }
+      if (jiraWriteRow) jiraWriteRow.style.display = 'flex';
     } else {
       jiraEl.textContent = 'Not configured';
       jiraEl.className   = 'info-val error';
       jiraBtn.classList.remove('visible');
+      if (jiraWriteRow) jiraWriteRow.style.display = 'none';
     }
 
     if (data.hasExport) {
@@ -518,7 +560,9 @@ async function loadStatus() {
 // ── Init ───────────────────────────────────────────────────────────────────
 
 window.addEventListener('load', () => {
-  syncJiraTokenToSession().then(() => loadStatus());
+  syncJiraTokenToSession()
+    .then(() => syncJiraWriteModeToSession())
+    .then(() => loadStatus());
   setInterval(loadStatus, 15000);
 
   // Welcome message

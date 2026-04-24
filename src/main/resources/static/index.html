@@ -40,6 +40,15 @@
       <div class="info-row"><span class="info-key">DB-Tabellen</span><span class="info-val" id="infoTables">—</span></div>
     </div>
     <button class="btn-secondary" onclick="reloadSchema()" title="DB-Schema neu laden">&#8635; DB-Schema neu laden</button>
+
+    <!-- Jira Write Mode Toggle -->
+    <div class="write-mode-toggle" id="jiraWriteToggleRow" style="display:none">
+      <span class="write-mode-label" id="jiraWriteLabel">&#9998; Jira Schreiben</span>
+      <label class="toggle-switch" title="Jira Schreibmodus aktivieren/deaktivieren">
+        <input type="checkbox" id="jiraWriteToggle" onchange="toggleJiraWriteMode(this.checked)"/>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
   </aside>
 
   <!-- Chat panel -->
