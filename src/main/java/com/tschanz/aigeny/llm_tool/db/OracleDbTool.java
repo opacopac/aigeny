@@ -108,12 +108,12 @@ public class OracleDbTool implements Tool {
             return new ToolResult(Messages.get(MSG_DANGEROUS_SQL));
         }
 
-        log.info("▶ DB REQUEST  desc=\"{}\"", description);
+        log.info("  DB REQUEST  desc=\"{}\"", description);
         log.info("  SQL: {}", sql);
 
         HikariDataSource ds = getPool();
         if (ds == null) {
-            log.error("✗ DB REQUEST  FAILED - connection pool unavailable");
+            log.error("  DB REQUEST  FAILED - connection pool unavailable");
             return new ToolResult(Messages.get(MSG_NO_CONNECTION));
         }
 
@@ -139,14 +139,14 @@ public class OracleDbTool implements Tool {
                 }
 
                 long elapsed = System.currentTimeMillis() - t0;
-                log.info("✓ DB RESPONSE rows={} cols={} elapsed={}ms", rows.size(), colCount, elapsed);
+                log.info("  DB RESPONSE rows={} cols={} elapsed={}ms", rows.size(), colCount, elapsed);
 
                 QueryResult qr = new QueryResult("Oracle DB", columns, rows);
                 return new ToolResult(qr.toText(), qr);
             }
         } catch (SQLException e) {
             long elapsed = System.currentTimeMillis() - t0;
-            log.error("✗ DB REQUEST  FAILED elapsed={}ms error=\"{}\"", elapsed, e.getMessage());
+            log.error("  DB REQUEST  FAILED elapsed={}ms error=\"{}\"", elapsed, e.getMessage());
             return new ToolResult(Messages.get(MSG_SQL_ERROR, e.getMessage()));
         }
     }
