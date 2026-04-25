@@ -54,15 +54,25 @@ public class OrchestrationService {
 
     /** Convenience overload without tool-call listener. */
     public ChatResult chat(List<Message> history, String userMessage) throws Exception {
-        return chat(history, userMessage, null);
+        return chat(history, userMessage, null, null);
+    }
+
+    /** Convenience overload with tool-call listener but no intermediate-message listener. */
+    public ChatResult chat(List<Message> history, String userMessage,
+                           BiConsumer<String, String> onToolCall) throws Exception {
+        return chat(history, userMessage, onToolCall, null);
     }
 
     /**
-     * Process a user message. Calls {@code onToolCall} with (toolName, description)
-     * each time a tool is about to be executed (may be {@code null}).
+     * Process a user message.
+     * <ul>
+     *   <li>{@code onToolCall} – called with (toolName, description) before each tool execution (may be {@code null})</li>
+     *   <li>{@code onIntermediateMessage} – called with the text when the LLM returns text alongside tool calls (may be {@code null})</li>
+     * </ul>
      */
     public ChatResult chat(List<Message> history, String userMessage,
-                           BiConsumer<String, String> onToolCall) throws Exception {
+                           BiConsumer<String, String> onToolCall,
+                           java.util.function.Consumer<String> onIntermediateMessage) throws Exception {
         List<ToolDefinition> toolDefs = tools.stream().map(Tool::getDefinition).toList();
 
         // Prime the persona on the very first message of a new conversation
@@ -88,6 +98,15 @@ public class OrchestrationService {
                 history.add(Message.assistant(content));
                 log.info("Final response ({} chars)", content.length());
                 return new ChatResult(content, lastToolResult);
+            }
+
+            // Emit intermediate text (LLM "thinking out loud" before calling tools)
+            if (response.hasIntermediateText()) {
+                String intermediate = response.getIntermediateText();
+                log.info("Intermediate message ({} chars)", intermediate.length());
+                if (onIntermediateMessage != null) {
+                    onIntermediateMessage.accept(intermediate);
+                }
             }
 
             Message assistantMsg = Message.assistantWithToolCalls(response.getToolCalls());

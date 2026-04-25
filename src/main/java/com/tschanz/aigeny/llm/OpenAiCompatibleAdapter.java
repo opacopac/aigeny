@@ -166,7 +166,9 @@ public class OpenAiCompatibleAdapter implements LlmClient {
                 call.setFunction(fc);
                 calls.add(call);
             }
-            return new ChatResponse(calls);
+            // OpenAI may also return text alongside tool calls (intermediate thought)
+            String text = message.path("content").asText("");
+            return new ChatResponse(calls, text.isBlank() ? null : text);
         }
 
         String content = message.path("content").asText("");

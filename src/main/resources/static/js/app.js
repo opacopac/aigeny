@@ -481,6 +481,11 @@ async function sendMessage() {
 
         if (data.type === 'tool_call') {
           updateTypingIndicator(data.toolName, data.description);
+        } else if (data.type === 'intermediate') {
+          // LLM sent text alongside tool calls - show it as an intermediate message
+          finalizeTypingIndicator();
+          appendMessage('aigeny', data.response);
+          showTypingIndicator();
         } else if (data.type === 'done') {
           finalizeTypingIndicator();
           if (data.response) appendMessage('aigeny', data.response);

@@ -206,7 +206,8 @@ public class AnthropicAdapter implements LlmClient {
         }
 
         if (!toolCalls.isEmpty()) {
-            return new ChatResponse(toolCalls);
+            String text = textContent.toString();
+            return new ChatResponse(toolCalls, text.isBlank() ? null : text);
         }
         return new ChatResponse(textContent.toString());
     }

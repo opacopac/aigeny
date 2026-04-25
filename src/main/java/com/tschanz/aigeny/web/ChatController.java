@@ -202,6 +202,15 @@ public class ChatController {
                     } catch (Exception e) {
                         log.warn("SSE tool_call send failed: {}", e.getMessage());
                     }
+                }, (intermediateText) -> {
+                    try {
+                        emitter.send(SseEmitter.event().data(
+                                objectMapper.writeValueAsString(Map.of(
+                                        "type", "intermediate",
+                                        "response", intermediateText))));
+                    } catch (Exception e) {
+                        log.warn("SSE intermediate send failed: {}", e.getMessage());
+                    }
                 });
 
                 if (result.hasExportData()) {
