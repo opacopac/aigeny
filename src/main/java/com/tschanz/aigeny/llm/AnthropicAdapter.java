@@ -53,6 +53,10 @@ public class AnthropicAdapter implements LlmClient {
         ObjectNode body = JSON.createObjectNode();
         body.put("model", llm.getModel());
         body.put("max_tokens", 8192);
+        // Automatic prompt caching: single top-level cache_control lets the API
+        // automatically move the breakpoint to the last cacheable block as the
+        // conversation grows - ideal for multi-turn chats.
+        body.putObject("cache_control").put("type", "ephemeral");
 
         // Extract system message (Claude takes it as a top-level field)
         String systemContent = null;
@@ -148,8 +152,31 @@ public class AnthropicAdapter implements LlmClient {
         } else {
             log.info("<< LLM RESPONSE status=200 elapsed={}ms type=text chars={}", elapsed, chatResponse.getContent() != null ? chatResponse.getContent().length() : 0);
         }
+        logCacheUsage(response.body());
         log.debug("   Raw response: {}", response.body());
         return chatResponse;
+    }
+
+    private void logCacheUsage(String json) {
+        try {
+            JsonNode root = JSON.readTree(json);
+            JsonNode usage = root.path("usage");
+            if (!usage.isMissingNode()) {
+                int inputTokens = usage.path("input_tokens").asInt(0);
+                int outputTokens = usage.path("output_tokens").asInt(0);
+                int cacheCreation = usage.path("cache_creation_input_tokens").asInt(0);
+                int cacheRead = usage.path("cache_read_input_tokens").asInt(0);
+                log.info("   Cache usage: input={} output={} cache_creation={} cache_read={}",
+                        inputTokens, outputTokens, cacheCreation, cacheRead);
+                if (cacheRead > 0) {
+                    log.info("   >> Cache HIT: {} tokens served from cache", cacheRead);
+                } else if (cacheCreation > 0) {
+                    log.info("   >> Cache MISS: {} tokens written to cache", cacheCreation);
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Could not parse cache usage from response", e);
+        }
     }
 
     private ChatResponse parseResponse(String json) throws Exception {
