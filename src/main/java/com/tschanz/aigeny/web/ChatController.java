@@ -234,8 +234,9 @@ public class ChatController {
             } catch (Exception e) {
                 log.error("Chat stream error", e);
                 try {
+                    String errMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     emitter.send(SseEmitter.event().data(
-                            objectMapper.writeValueAsString(Map.of("type", "error", "message", e.getMessage()))));
+                            objectMapper.writeValueAsString(Map.of("type", "error", "message", errMsg))));
                     emitter.complete();
                 } catch (Exception ex) { emitter.completeWithError(ex); }
             } finally {

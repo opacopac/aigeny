@@ -25,6 +25,7 @@ public class SchemaLoader {
 
     private final AigenyProperties props;
     private volatile int tableCount = 0;
+    private boolean dbReachable = false;
 
     public SchemaLoader(AigenyProperties props) {
         this.props = props;
@@ -48,6 +49,7 @@ public class SchemaLoader {
     public void reload() throws Exception {
         if (!props.isDbConfigured()) {
             tableCount = 0;
+            dbReachable = false;
             return;
         }
         AigenyProperties.Db db = props.getDb();
@@ -63,6 +65,7 @@ public class SchemaLoader {
         try (HikariDataSource ds = new HikariDataSource(hc);
              Connection conn = ds.getConnection()) {
             tableCount = countTables(conn);
+            dbReachable = true;
             log.info("DB reachable - {} accessible tables found", tableCount);
         }
     }
