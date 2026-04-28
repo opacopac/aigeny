@@ -25,9 +25,9 @@ import java.util.*;
  * Tool for searching Jira issues via REST API (Jira Server/Data Center).
  */
 @Service
-public class JiraTool implements Tool {
+public class QueryJiraTool implements Tool {
 
-    private static final Logger log = LoggerFactory.getLogger(JiraTool.class);
+    private static final Logger log = LoggerFactory.getLogger(QueryJiraTool.class);
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final int MAX_RESULTS = 50;
 
@@ -44,7 +44,7 @@ public class JiraTool implements Tool {
     private final AigenyProperties props;
     private final HttpClient http;
 
-    public JiraTool(AigenyProperties props) {
+    public QueryJiraTool(AigenyProperties props) {
         this.props = props;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))

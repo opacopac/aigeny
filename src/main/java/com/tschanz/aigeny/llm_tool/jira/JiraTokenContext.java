@@ -2,7 +2,7 @@ package com.tschanz.aigeny.llm_tool.jira;
 
 /**
  * Thread-local holder for the per-request Jira token override.
- * Set by ChatController before dispatching async work, read by JiraTool.
+ * Set by ChatController before dispatching async work, read by QueryJiraTool.
  */
 public final class JiraTokenContext {
 
