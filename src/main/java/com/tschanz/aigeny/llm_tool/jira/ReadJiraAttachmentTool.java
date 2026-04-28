@@ -10,6 +10,7 @@ import com.tschanz.aigeny.Messages;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.xwpf.usermodel.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -64,7 +65,7 @@ public class ReadJiraAttachmentTool implements Tool {
     @Override
     public String getDescription() {
         return "Download and read the content of a Jira attachment. " +
-               "Supported formats: plain text (.txt), CSV (.csv), Excel (.xls, .xlsx). " +
+               "Supported formats: plain text (.txt), CSV (.csv), Excel (.xls, .xlsx), Word (.docx). " +
                "Provide the 'attachmentUrl' from the attachment list returned by search_jira. " +
                "Optionally provide 'filename' if the URL does not reveal the file extension.";
     }
@@ -144,6 +145,8 @@ public class ReadJiraAttachmentTool implements Tool {
             return parseExcel(bytes, filename, false);
         } else if (lowerName.endsWith(".xls")) {
             return parseExcel(bytes, filename, true);
+        } else if (lowerName.endsWith(".docx")) {
+            return parseDocx(bytes, filename);
         } else if (lowerName.endsWith(".txt") || lowerName.endsWith(".csv")
                 || lowerName.endsWith(".log") || lowerName.endsWith(".xml")
                 || lowerName.endsWith(".json") || lowerName.endsWith(".md")) {
@@ -190,6 +193,71 @@ public class ReadJiraAttachmentTool implements Tool {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    // ── Word DOCX parsing ─────────────────────────────────────────────────────
+
+    private ToolResult parseDocx(byte[] bytes, String filename) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        sb.append("**Attachment: `").append(filename).append("`**\n\n");
+
+        try (InputStream is = new ByteArrayInputStream(bytes);
+             XWPFDocument doc = new XWPFDocument(is)) {
+
+            // Process body elements in document order (paragraphs and tables interleaved)
+            for (IBodyElement element : doc.getBodyElements()) {
+                if (element instanceof XWPFParagraph para) {
+                    String style = para.getStyle() == null ? "" : para.getStyle().toLowerCase();
+                    String text = para.getText();
+                    if (text.isBlank()) {
+                        sb.append("\n");
+                        continue;
+                    }
+                    // Map Word heading styles to Markdown headings
+                    if (style.startsWith("heading1") || style.equals("1")) {
+                        sb.append("# ").append(text).append("\n\n");
+                    } else if (style.startsWith("heading2") || style.equals("2")) {
+                        sb.append("## ").append(text).append("\n\n");
+                    } else if (style.startsWith("heading3") || style.equals("3")) {
+                        sb.append("### ").append(text).append("\n\n");
+                    } else if (para.getNumID() != null) {
+                        // List item
+                        sb.append("- ").append(text).append("\n");
+                    } else {
+                        sb.append(text).append("\n\n");
+                    }
+
+                } else if (element instanceof XWPFTable table) {
+                    // Render table as Markdown
+                    java.util.List<XWPFTableRow> rows = table.getRows();
+                    if (rows.isEmpty()) continue;
+
+                    // Header row
+                    XWPFTableRow headerRow = rows.get(0);
+                    sb.append("|");
+                    for (XWPFTableCell cell : headerRow.getTableCells()) {
+                        sb.append(" ").append(cell.getText().replace("|", "\\|").trim()).append(" |");
+                    }
+                    sb.append("\n|");
+                    for (int ci = 0; ci < headerRow.getTableCells().size(); ci++) sb.append("---|");
+                    sb.append("\n");
+
+                    // Data rows
+                    for (int ri = 1; ri < rows.size(); ri++) {
+                        sb.append("|");
+                        for (XWPFTableCell cell : rows.get(ri).getTableCells()) {
+                            sb.append(" ").append(cell.getText().replace("|", "\\|").trim()).append(" |");
+                        }
+                        sb.append("\n");
+                    }
+                    sb.append("\n");
+                }
+            }
+        }
+
+        boolean truncated = sb.length() > MAX_TEXT_CHARS + 200;
+        String result = truncated ? sb.substring(0, MAX_TEXT_CHARS) + "\n\n_...(truncated)_" : sb.toString();
+        return new ToolResult(result);
     }
 
     // ── Excel parsing ─────────────────────────────────────────────────────────
