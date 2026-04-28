@@ -113,7 +113,7 @@ public class JiraTool implements Tool {
 
     private ToolResult fetchIssueByKey(String issueKey, String baseUrl, String authHeader) throws Exception {
         String url = baseUrl + "/rest/api/2/issue/" + URLEncoder.encode(issueKey, StandardCharsets.UTF_8)
-                + "?fields=summary,status,assignee,priority,issuetype,created,updated,description,comment";
+                + "?fields=summary,status,assignee,priority,issuetype,created,updated,description,comment,attachment";
         log.info(">> JIRA REQUEST  issueKey={}", issueKey);
         log.info("   URL: {}", url);
 
@@ -197,6 +197,23 @@ public class JiraTool implements Tool {
                 sb.append("- *").append(c.path("author").path("displayName").asText("?")).append("*: ")
                   .append(c.path("body").asText("")).append("\n");
             }
+        }
+
+        JsonNode attachments = fields.path("attachment");
+        if (attachments.isArray() && !attachments.isEmpty()) {
+            sb.append("\n**Attachments (").append(attachments.size()).append("):**\n");
+            for (JsonNode att : attachments) {
+                String filename = att.path("filename").asText("-");
+                String contentUrl = att.path("content").asText("");
+                String mimeType = att.path("mimeType").asText("");
+                long size = att.path("size").asLong(0);
+                sb.append("- `").append(filename).append("`");
+                if (size > 0) sb.append(" (").append(size / 1024 + 1).append(" KB)");
+                if (!mimeType.isBlank()) sb.append(" [").append(mimeType).append("]");
+                if (!contentUrl.isBlank()) sb.append(" → URL: ").append(contentUrl);
+                sb.append("\n");
+            }
+            sb.append("\n_To read a TXT or Excel attachment, call `read_jira_attachment` with the URL above._\n");
         }
 
         return new ToolResult(sb.toString());
