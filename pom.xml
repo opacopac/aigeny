@@ -76,6 +76,51 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+
+            <!-- Launch4j: wraps the Spring Boot JAR into a Windows EXE -->
+            <plugin>
+                <groupId>com.akathist.maven.plugins.launch4j</groupId>
+                <artifactId>launch4j-maven-plugin</artifactId>
+                <version>2.5.1</version>
+                <executions>
+                    <execution>
+                        <id>create-exe</id>
+                        <!-- runs after 'package' has produced the fat JAR -->
+                        <phase>package</phase>
+                        <goals>
+                            <goal>launch4j</goal>
+                        </goals>
+                        <configuration>
+                            <!-- Path to the fat JAR produced by spring-boot-maven-plugin -->
+                            <jar>${project.build.directory}/${project.artifactId}-${project.version}.jar</jar>
+                            <!-- Output EXE -->
+                            <outfile>${project.build.directory}/${project.artifactId}-${project.version}.exe</outfile>
+                            <!-- Icon for the EXE (must be .ico format) -->
+                            <icon>${project.basedir}/src/main/resources/favicon.ico</icon>
+                            <!-- GUI app would suppress the console window; 'console' keeps it visible -->
+                            <headerType>console</headerType>
+                            <!-- No <classPath> here: Launch4j will use "java -jar" mode,
+                                 which lets Spring Boot's own JarLauncher (from the manifest)
+                                 handle the nested-JAR classloading correctly. -->
+                            <jre>
+                                <!-- Minimum Java version required on the end-user's machine -->
+                                <minVersion>21</minVersion>
+                            </jre>
+                            <versionInfo>
+                                <fileVersion>1.0.0.0</fileVersion>
+                                <txtFileVersion>${project.version}</txtFileVersion>
+                                <fileDescription>${project.name}</fileDescription>
+                                <copyright>tschanz</copyright>
+                                <productVersion>1.0.0.0</productVersion>
+                                <txtProductVersion>${project.version}</txtProductVersion>
+                                <productName>${project.name}</productName>
+                                <internalName>${project.artifactId}</internalName>
+                                <originalFilename>${project.artifactId}-${project.version}.exe</originalFilename>
+                            </versionInfo>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>
