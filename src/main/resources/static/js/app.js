@@ -349,13 +349,14 @@ function updateWriteToggleUI(enabled) {
 }
 
 async function syncJiraWriteModeToSession() {
-  const enabled = localStorage.getItem(JIRA_WRITE_KEY) === 'true';
-  updateWriteToggleUI(enabled);
+  // Always start with write mode disabled on page load for safety
+  localStorage.setItem(JIRA_WRITE_KEY, 'false');
+  updateWriteToggleUI(false);
   try {
     await fetch('/api/jira/write-mode', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled })
+      body: JSON.stringify({ enabled: false })
     });
   } catch (e) { /* ignore */ }
 }
