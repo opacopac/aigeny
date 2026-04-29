@@ -1,0 +1,8 @@
+### Installation ###
+1. Install Java 21 or higher, (e.g. from https://aka.ms/download-jdk/microsoft-jdk-25.0.2-windows-x64.msi)
+2. Copy the file "aigeny.yml" into your user home directory <user_home_directory>/.aigeny/
+3. Copy the .exe file into a directory of your choice
+
+### Running the Application ###
+1. Run the .exe file
+2. Open browser and navigate to http://localhost:8080
