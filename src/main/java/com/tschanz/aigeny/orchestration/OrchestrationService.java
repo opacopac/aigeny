@@ -54,13 +54,13 @@ public class OrchestrationService {
 
     /** Convenience overload without tool-call listener. */
     public ChatResult chat(List<Message> history, String userMessage) throws Exception {
-        return chat(history, userMessage, null, null);
+        return chat(history, userMessage, null, null, null);
     }
 
     /** Convenience overload with tool-call listener but no intermediate-message listener. */
     public ChatResult chat(List<Message> history, String userMessage,
                            BiConsumer<String, String> onToolCall) throws Exception {
-        return chat(history, userMessage, onToolCall, null);
+        return chat(history, userMessage, onToolCall, null, null);
     }
 
     /**
@@ -73,6 +73,18 @@ public class OrchestrationService {
     public ChatResult chat(List<Message> history, String userMessage,
                            BiConsumer<String, String> onToolCall,
                            java.util.function.Consumer<String> onIntermediateMessage) throws Exception {
+        return chat(history, userMessage, onToolCall, onIntermediateMessage, null);
+    }
+
+    /**
+     * Full overload with cancellation support.
+     * {@code isCancelled} is polled at the start of each loop iteration; when it returns {@code true}
+     * an {@link InterruptedException} is thrown to abort the loop.
+     */
+    public ChatResult chat(List<Message> history, String userMessage,
+                           BiConsumer<String, String> onToolCall,
+                           java.util.function.Consumer<String> onIntermediateMessage,
+                           java.util.function.Supplier<Boolean> isCancelled) throws Exception {
         List<ToolDefinition> toolDefs = tools.stream().map(Tool::getDefinition).toList();
 
         // Prime the persona on the very first message of a new conversation
@@ -86,6 +98,10 @@ public class OrchestrationService {
 
         int iterations = 0;
         while (iterations++ < MAX_TOOL_ITERATIONS) {
+            if (isCancelled != null && isCancelled.get()) {
+                log.info("Chat loop cancelled by user after {} iteration(s)", iterations - 1);
+                throw new InterruptedException("Cancelled by user");
+            }
             List<Message> fullMessages = new ArrayList<>();
             fullMessages.add(Message.system(buildSystemPrompt()));
             fullMessages.addAll(history);

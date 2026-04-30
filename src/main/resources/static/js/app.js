@@ -9,6 +9,7 @@
 // ── State ──────────────────────────────────────────────────────────────────
 let isThinking = false;
 let hasExportData = false;
+let currentAbortController = null;
 const JIRA_TOKEN_KEY = 'aigeny.jiraToken';
 const JIRA_WRITE_KEY = 'aigeny.jiraWriteEnabled';
 
@@ -454,11 +455,14 @@ async function sendMessage() {
   setThinking(true);
   showTypingIndicator();
 
+  currentAbortController = new AbortController();
+
   try {
     const response = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ message }),
+      signal: currentAbortController.signal
     });
 
     const reader = response.body.getReader();
@@ -492,6 +496,9 @@ async function sendMessage() {
           if (data.response) appendMessage('aigeny', data.response);
           if (data.pendingAction) showJiraConfirmation(data.pendingAction);
           if (data.hasExport) { hasExportData = true; setExportButtons(true); }
+        } else if (data.type === 'cancelled') {
+          removeTypingIndicator();
+          appendMessage('aigeny', '_Abgebrochen, Towarischtsch. AIgeny steht wieder bereit._');
         } else if (data.type === 'error') {
           removeTypingIndicator();
           appendMessage('aigeny', 'Njet! Fehler, Towarischtsch: ' + (data.message || '?'));
@@ -499,11 +506,26 @@ async function sendMessage() {
       }
     }
   } catch (err) {
-    removeTypingIndicator();
-    appendMessage('aigeny', 'Njet! Netzwerkfehler, Towarischtsch: ' + err.message);
+    if (err.name === 'AbortError') {
+      // fetch was aborted by stopGeneration() – backend was already notified separately
+      removeTypingIndicator();
+    } else {
+      removeTypingIndicator();
+      appendMessage('aigeny', 'Njet! Netzwerkfehler, Towarischtsch: ' + err.message);
+    }
   } finally {
+    currentAbortController = null;
     setThinking(false);
   }
+}
+
+async function stopGeneration() {
+  if (!isThinking) return;
+  // Signal the backend to stop the orchestration loop.
+  // We intentionally do NOT abort the fetch here – that would forcibly close the TCP
+  // connection and cause an IOException on the server side when it tries to write the
+  // final 'cancelled' event. Instead we let the backend close the stream gracefully.
+  fetch('/api/chat/cancel', { method: 'POST' }).catch(() => {});
 }
 
 // Enter = send, Shift+Enter = new line
@@ -558,6 +580,8 @@ function exportData(format) {
 function setThinking(thinking) {
   isThinking = thinking;
   document.getElementById('sendBtn').disabled = thinking;
+  document.getElementById('sendBtn').style.display = thinking ? 'none' : '';
+  document.getElementById('stopBtn').style.display = thinking ? '' : 'none';
   document.getElementById('halStatusText').textContent =
     thinking ? 'AIgeny mysleet... (denkt nach)' : 'Bereit, Towarischtsch.';
   setStatusIndicator(thinking ? 'busy' : 'ok', thinking ? 'Denkt nach...' : 'Bereit');

@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * REST controller for the chat interface and status endpoints.
@@ -43,6 +44,7 @@ public class ChatController {
     private static final String SESSION_JIRA_TOKEN     = "jiraToken";
     private static final String SESSION_PENDING_ACTION = "pendingJiraAction";
     private static final String SESSION_JIRA_WRITE     = "jiraWriteEnabled";
+    private static final String SESSION_CANCEL_FLAG    = "chatCancelFlag";
 
     // ── JSON request body keys ───────────────────────────────────────────────
     private static final String REQ_MESSAGE       = "message";
@@ -187,6 +189,13 @@ public class ChatController {
         final String jiraToken = getEffectiveJiraToken(session, props);
         final boolean jiraWriteEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
 
+        // Per-request cancellation flag – stored in session so /api/chat/cancel can flip it
+        AtomicBoolean cancelFlag = new AtomicBoolean(false);
+        session.setAttribute(SESSION_CANCEL_FLAG, cancelFlag);
+        emitter.onCompletion(() -> cancelFlag.set(true));
+        emitter.onTimeout(()   -> cancelFlag.set(true));
+        emitter.onError(t      -> cancelFlag.set(true));
+
         CompletableFuture.runAsync(() -> {
             JiraTokenContext.set(jiraToken);
             JiraWriteContext.set(jiraWriteEnabled);
@@ -211,7 +220,7 @@ public class ChatController {
                     } catch (Exception e) {
                         log.warn("SSE intermediate send failed: {}", e.getMessage());
                     }
-                });
+                }, cancelFlag::get);
 
                 if (result.hasExportData()) {
                     session.setAttribute(SESSION_RESULT, result.lastToolResult().getQueryResult());
@@ -231,6 +240,13 @@ public class ChatController {
                 emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(payload)));
                 emitter.complete();
 
+            } catch (InterruptedException ie) {
+                log.info("Chat stream cancelled by user for session {}", session.getId());
+                try {
+                    emitter.send(SseEmitter.event().data(
+                            objectMapper.writeValueAsString(Map.of("type", "cancelled"))));
+                    emitter.complete();
+                } catch (Exception ex) { emitter.completeWithError(ex); }
             } catch (Exception e) {
                 log.error("Chat stream error", e);
                 try {
@@ -240,6 +256,7 @@ public class ChatController {
                     emitter.complete();
                 } catch (Exception ex) { emitter.completeWithError(ex); }
             } finally {
+                session.removeAttribute(SESSION_CANCEL_FLAG);
                 JiraTokenContext.clear();
                 JiraWriteContext.clear();
                 PendingJiraActionContext.clear();
@@ -295,6 +312,18 @@ public class ChatController {
         session.removeAttribute(SESSION_HISTORY);
         session.removeAttribute(SESSION_RESULT);
         return ResponseEntity.ok(Map.of("status", Messages.get(MSG_STATUS_CLEARED)));
+    }
+
+    // ── POST /api/chat/cancel ────────────────────────────────────────────────
+
+    @PostMapping("/chat/cancel")
+    public ResponseEntity<Map<String, String>> cancelChat(HttpSession session) {
+        AtomicBoolean flag = (AtomicBoolean) session.getAttribute(SESSION_CANCEL_FLAG);
+        if (flag != null) {
+            flag.set(true);
+            log.info("Chat cancelled via /api/chat/cancel for session {}", session.getId());
+        }
+        return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
     }
 
     // ── POST /api/schema/reload ──────────────────────────────────────────────

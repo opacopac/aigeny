@@ -310,6 +310,26 @@ html, body {
 .btn-send:hover:not(:disabled) { background: #ee1111; box-shadow: 0 0 14px var(--red-glow); }
 .btn-send:disabled { background: #3a1a1a; color: #666; cursor: not-allowed; }
 
+.btn-stop {
+  background: #4a1a00;
+  color: #ff6633;
+  border: 1px solid #aa3300;
+  border-radius: var(--radius);
+  padding: 0 22px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+  animation: pulse-stop 1.2s ease-in-out infinite;
+}
+.btn-stop:hover { background: #6a2a00; box-shadow: 0 0 14px rgba(200,60,0,0.5); }
+
+@keyframes pulse-stop {
+  0%, 100% { box-shadow: 0 0 4px rgba(200,60,0,0.3); }
+  50%       { box-shadow: 0 0 12px rgba(200,60,0,0.7); }
+}
+
 /* ── Action bar ──────────────────────────────────────────────────────── */
 .action-bar {
   display: flex;
