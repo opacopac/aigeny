@@ -27,7 +27,7 @@ import java.util.List;
  * - Tool call results are sent as user messages with type "tool_result"
  * - Response content is a typed array of blocks (text / tool_use)
  *
- * Supported models: claude-opus-4-5, claude-sonnet-4-5, claude-haiku-3-5, etc.
+ * Supported models: claude-opus-4-6, claude-sonnet-4-6, claude-haiku-3-5, etc.
  * Configure: aigeny.llm.provider=claude, aigeny.llm.base-url=https://api.anthropic.com/v1
  */
 public class AnthropicAdapter implements LlmClient {

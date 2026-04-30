@@ -57,18 +57,18 @@ server:
 #    provider: claude
 #    api-key:  sk-ant-YOUR_KEY
 #    base-url: https://api.anthropic.com/v1
-#    model:    claude-opus-4-5
-#             (alternatives: claude-sonnet-4-5, claude-haiku-3-5)
+#    model:    claude-sonnet-4-6
+#              (alternatives: claude-opus-4-6, claude-haiku-4-5)
 # ─────────────────────────────────────────────────────────────────────────────
 aigeny:
-  # ── Default: local Ollama (no API key needed) ─────────────────────────────
+  # ── Default: Anthropic Claude (set AIGENY_LLM_API_KEY or ~/.aigeny/aigeny.yml) ─
   # These values are overridden by ~/.aigeny/aigeny.yml or environment variables
   # (e.g. AIGENY_LLM_PROVIDER, AIGENY_LLM_MODEL, ...) / docker-compose.yml.
   llm:
-    provider: ollama
-    api-key: ollama
-    base-url: http://localhost:11434/v1
-    model: llama3.1:8b
+    provider: claude
+    api-key: ""
+    base-url: https://api.anthropic.com/v1
+    model: claude-sonnet-4-6
 
   db:
     # jdbc:oracle:thin:@hostname:1521/SERVICENAME

@@ -91,7 +91,6 @@ aigeny:
 
   jira:
     base-url: "https://flow.sbb.ch"
-    username: "john.doe"
     token: "your_api_token"
 ```
 
@@ -104,7 +103,6 @@ export AIGENY_DB_URL=jdbc:oracle:thin:@myhost:1521/MYSERVICE
 export AIGENY_DB_USERNAME=readonly_user
 export AIGENY_DB_PASSWORD=secret
 export AIGENY_JIRA_BASE_URL=https://flow.sbb.ch
-export AIGENY_JIRA_USERNAME=john.doe
 export AIGENY_JIRA_TOKEN=your_api_token
 java -jar target/aigeny-*.jar
 ```
@@ -145,7 +143,7 @@ aigeny:
     provider: claude
     api-key: "your_anthropic_api_key"
     base-url: "https://api.anthropic.com/v1"
-    model: "claude-sonnet-4-5"
+    model: "claude-sonnet-4-6"
 ```
 
 Or for Groq:
@@ -167,10 +165,16 @@ aigeny:
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/chat` | Send a message `{"message":"..."}`, get `{"response":"...","hasExport":true/false}` |
+| `POST` | `/api/chat/stream` | Same as `/api/chat` but as SSE stream (events: `tool_call`, `intermediate`, `done`, `error`) |
 | `POST` | `/api/chat/clear` | Clear session history |
 | `POST` | `/api/schema/reload` | Reload DB schema from Oracle |
 | `GET` | `/api/status` | LLM/DB/Jira connection status |
 | `GET` | `/api/export/csv` | Download last query result as CSV |
+| `POST` | `/api/jira/token` | Set Jira API token for the current session `{"token":"..."}` |
+| `DELETE` | `/api/jira/token` | Clear the Jira API token from the current session |
+| `POST` | `/api/jira/write-mode` | Enable/disable Jira write mode `{"enabled":true/false}` |
+| `POST` | `/api/jira/confirm` | Confirm a pending Jira write action |
+| `POST` | `/api/jira/cancel` | Cancel a pending Jira write action |
 
 ---
 
@@ -204,9 +208,11 @@ src/main/java/com/tschanz/aigeny/
 │   ├── db/
 │   │   └── OracleDbTool.java    # Oracle DB query tool
 │   └── jira/
-│       ├── JiraTool.java        # Jira search tool
+│       ├── QueryJiraTool.java       # Jira search tool
+│       ├── ReadJiraAttachmentTool.java
 │       ├── AddJiraCommentTool.java
 │       ├── UpdateJiraIssueTool.java
+│       ├── JiraWriteContext.java
 │       ├── JiraWriteExecutor.java
 │       ├── JiraTokenContext.java
 │       ├── PendingJiraAction.java
