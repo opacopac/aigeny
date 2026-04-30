@@ -113,7 +113,7 @@ public class QueryJiraTool implements Tool {
 
     private ToolResult fetchIssueByKey(String issueKey, String baseUrl, String authHeader) throws Exception {
         String url = baseUrl + "/rest/api/2/issue/" + URLEncoder.encode(issueKey, StandardCharsets.UTF_8)
-                + "?fields=summary,status,assignee,priority,issuetype,created,updated,description,comment,attachment";
+                + "?fields=summary,status,assignee,priority,issuetype,created,updated,description,comment,attachment,issuelinks";
         log.info(">> JIRA REQUEST  issueKey={}", issueKey);
         log.info("   URL: {}", url);
 
@@ -196,6 +196,28 @@ public class QueryJiraTool implements Tool {
                 JsonNode c = comments.get(i);
                 sb.append("- *").append(c.path("author").path("displayName").asText("?")).append("*: ")
                   .append(c.path("body").asText("")).append("\n");
+            }
+        }
+
+        JsonNode issueLinks = fields.path("issuelinks");
+        if (issueLinks.isArray() && !issueLinks.isEmpty()) {
+            sb.append("\n**Linked Issues (").append(issueLinks.size()).append("):**\n");
+            for (JsonNode link : issueLinks) {
+                String typeName = link.path("type").path("name").asText("?");
+                JsonNode outward = link.path("outwardIssue");
+                JsonNode inward  = link.path("inwardIssue");
+                if (!outward.isMissingNode()) {
+                    String direction = link.path("type").path("outward").asText(typeName);
+                    sb.append("- _").append(direction).append("_ **").append(outward.path("key").asText()).append("**: ")
+                      .append(outward.path("fields").path("summary").asText(""))
+                      .append(" [").append(outward.path("fields").path("status").path("name").asText("-")).append("]\n");
+                }
+                if (!inward.isMissingNode()) {
+                    String direction = link.path("type").path("inward").asText(typeName);
+                    sb.append("- _").append(direction).append("_ **").append(inward.path("key").asText()).append("**: ")
+                      .append(inward.path("fields").path("summary").asText(""))
+                      .append(" [").append(inward.path("fields").path("status").path("name").asText("-")).append("]\n");
+                }
             }
         }
 
