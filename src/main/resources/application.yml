@@ -78,7 +78,11 @@ aigeny:
 
   jira:
     # Base URL of your Jira instance. Token is entered per-user via the UI.
-    base-url: ""
+    base-url: "https://flow.sbb.ch"
+
+  bitbucket:
+    # Base URL of your Bitbucket Server/Data Center instance. Token is entered per-user via the UI.
+    base-url: "https://code.sbb.ch"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging:

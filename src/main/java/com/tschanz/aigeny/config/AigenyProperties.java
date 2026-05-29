@@ -26,6 +26,7 @@ public class AigenyProperties {
     private Llm llm = new Llm();
     private Db db = new Db();
     private Jira jira = new Jira();
+    private Bitbucket bitbucket = new Bitbucket();
 
     /**
      * After Spring has bound all properties (YAML + env vars), resolve any
@@ -40,6 +41,7 @@ public class AigenyProperties {
         db.password  = readSecretFile("AIGENY_DB_PASSWORD_FILE",  db.password);
         jira.token   = readSecretFile("AIGENY_JIRA_TOKEN_FILE",   jira.token);
         llm.apiKey   = readSecretFile("AIGENY_LLM_API_KEY_FILE",  llm.apiKey);
+        bitbucket.token = readSecretFile("AIGENY_BITBUCKET_TOKEN_FILE", bitbucket.token);
     }
 
     private static String readSecretFile(String envVar, String currentValue) {
@@ -67,6 +69,11 @@ public class AigenyProperties {
             && jira.token != null && !jira.token.isBlank();
     }
 
+    public boolean isBitbucketConfigured() {
+        return bitbucket.baseUrl != null && !bitbucket.baseUrl.isBlank()
+            && bitbucket.token != null && !bitbucket.token.isBlank();
+    }
+
     // ── Getters / Setters ───────────────────────────────────────────────────
 
     public Llm getLlm()   { return llm; }
@@ -77,6 +84,9 @@ public class AigenyProperties {
 
     public Jira getJira() { return jira; }
     public void setJira(Jira jira) { this.jira = jira; }
+
+    public Bitbucket getBitbucket() { return bitbucket; }
+    public void setBitbucket(Bitbucket bitbucket) { this.bitbucket = bitbucket; }
 
     // ── Nested classes ──────────────────────────────────────────────────────
 
@@ -118,6 +128,18 @@ public class AigenyProperties {
         /** Jira base URL, e.g. https://flow.sbb.ch */
         private String baseUrl = "";
         /** API token (Personal Access Token) – entered per-user via the UI */
+        private String token = "";
+
+        public String getBaseUrl() { return baseUrl; }
+        public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+        public String getToken() { return token; }
+        public void setToken(String token) { this.token = token; }
+    }
+
+    public static class Bitbucket {
+        /** Bitbucket Server base URL, e.g. https://code.example.com */
+        private String baseUrl = "";
+        /** Personal Access Token – entered per-user via the UI */
         private String token = "";
 
         public String getBaseUrl() { return baseUrl; }

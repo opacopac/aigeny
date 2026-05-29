@@ -1,0 +1,302 @@
+package com.tschanz.aigeny.llm_tool.bitbucket;
+
+import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.llm.model.ToolDefinition;
+import com.tschanz.aigeny.llm_tool.Tool;
+import com.tschanz.aigeny.llm_tool.ToolResult;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Map;
+
+/**
+ * Read-only Bitbucket tool: search/list repositories, branches, commits and files.
+ * Supports Bitbucket Server / Data Center REST API v1.
+ */
+@Service
+public class SearchBitbucketTool implements Tool {
+
+    private static final Logger log = LoggerFactory.getLogger(SearchBitbucketTool.class);
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    private final AigenyProperties props;
+    private final HttpClient http;
+
+    public SearchBitbucketTool(AigenyProperties props) {
+        this.props = props;
+        this.http = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(15))
+                .build();
+    }
+
+    @Override public String getName() { return "search_bitbucket"; }
+
+    @Override
+    public String getDescription() {
+        return "Search and browse Bitbucket repositories (read-only). " +
+               "Actions: 'list_repos' – list repos in a project; " +
+               "'list_branches' – list branches of a repo; " +
+               "'list_files' – list files/folders in a repo path; " +
+               "'search_code' – search for text across a repo (Bitbucket Server code search); " +
+               "'list_commits' – recent commits on a branch. " +
+               "Always specify 'action'. For repo-level actions also specify 'projectKey' and 'repoSlug'.";
+    }
+
+    @Override
+    public ToolDefinition getDefinition() {
+        Map<String, Object> propsMap = Map.of(
+            "action",     Map.of("type", "string",
+                                 "description", "One of: list_repos, list_branches, list_files, search_code, list_commits"),
+            "projectKey", Map.of("type", "string",
+                                 "description", "Bitbucket project key (e.g. NOVA)"),
+            "repoSlug",   Map.of("type", "string",
+                                 "description", "Repository slug/name"),
+            "branch",     Map.of("type", "string",
+                                 "description", "Branch name (default: default branch)"),
+            "path",       Map.of("type", "string",
+                                 "description", "Directory or file path inside the repo (for list_files)"),
+            "query",      Map.of("type", "string",
+                                 "description", "Search term (for search_code)"),
+            "limit",      Map.of("type", "integer",
+                                 "description", "Max results to return (default 25, max 100)")
+        );
+        return new ToolDefinition(getName(), getDescription(),
+                Map.of("type", "object", "properties", propsMap,
+                       "required", new String[]{"action"}));
+    }
+
+    @Override
+    public ToolResult execute(String argumentsJson) throws Exception {
+        AigenyProperties.Bitbucket bb = props.getBitbucket();
+        String baseUrl = (bb.getBaseUrl() == null ? "" : bb.getBaseUrl()).replaceAll("/$", "");
+
+        if (baseUrl.isBlank()) {
+            return new ToolResult("Bitbucket ist nicht konfiguriert (base-url fehlt).");
+        }
+
+        String effectiveToken = BitbucketTokenContext.get();
+        if (effectiveToken == null || effectiveToken.isBlank()) {
+            effectiveToken = bb.getToken();
+        }
+        if (effectiveToken == null || effectiveToken.isBlank()) {
+            return new ToolResult("Kein Bitbucket-Token gesetzt. Bitte Token im UI eingeben.");
+        }
+
+        JsonNode args   = JSON.readTree(argumentsJson);
+        String action   = args.path("action").asText("").trim();
+        String project  = args.path("projectKey").asText("").trim();
+        String repo     = args.path("repoSlug").asText("").trim();
+        String branch   = args.path("branch").asText("").trim();
+        String path     = args.path("path").asText("").trim();
+        String query    = args.path("query").asText("").trim();
+        int limit       = Math.min(args.path("limit").asInt(25), 100);
+
+        String auth = "Bearer " + effectiveToken;
+
+        return switch (action) {
+            case "list_repos"    -> listRepos(baseUrl, auth, project, limit);
+            case "list_branches" -> listBranches(baseUrl, auth, project, repo, limit);
+            case "list_files"    -> listFiles(baseUrl, auth, project, repo, branch, path, limit);
+            case "search_code"   -> searchCode(baseUrl, auth, project, repo, query, limit);
+            case "list_commits"  -> listCommits(baseUrl, auth, project, repo, branch, limit);
+            default              -> new ToolResult("Unbekannte Aktion: " + action +
+                                     ". Erlaubt: list_repos, list_branches, list_files, search_code, list_commits");
+        };
+    }
+
+    // ── list repos ────────────────────────────────────────────────────────────
+
+    private ToolResult listRepos(String base, String auth, String project, int limit) throws Exception {
+        String url = project.isBlank()
+                ? base + "/rest/api/1.0/repos?limit=" + limit
+                : base + "/rest/api/1.0/projects/" + enc(project) + "/repos?limit=" + limit;
+        log.info(">> BB list_repos  url={}", url);
+        HttpResponse<String> resp = get(url, auth);
+        if (!isOk(resp)) return errorResult(resp);
+
+        JsonNode root = JSON.readTree(resp.body());
+        JsonNode values = root.path("values");
+        if (!values.isArray() || values.isEmpty()) return new ToolResult("Keine Repositories gefunden.");
+
+        StringBuilder sb = new StringBuilder("**Repositories");
+        if (!project.isBlank()) sb.append(" in Projekt ").append(project);
+        sb.append(":**\n\n");
+        sb.append("| Slug | Name | Projekt | Clone URL |\n|---|---|---|---|\n");
+        for (JsonNode r : values) {
+            String slug    = r.path("slug").asText("-");
+            String name    = r.path("name").asText("-");
+            String prj     = r.path("project").path("key").asText("-");
+            String cloneUrl = "";
+            for (JsonNode link : r.path("links").path("clone")) {
+                if ("http".equals(link.path("name").asText())) { cloneUrl = link.path("href").asText(""); break; }
+            }
+            sb.append("| ").append(slug).append(" | ").append(name)
+              .append(" | ").append(prj).append(" | ").append(cloneUrl).append(" |\n");
+        }
+        return new ToolResult(sb.toString());
+    }
+
+    // ── list branches ─────────────────────────────────────────────────────────
+
+    private ToolResult listBranches(String base, String auth, String project, String repo, int limit) throws Exception {
+        if (project.isBlank() || repo.isBlank()) return new ToolResult("projectKey und repoSlug sind erforderlich.");
+        String url = base + "/rest/api/1.0/projects/" + enc(project) + "/repos/" + enc(repo)
+                + "/branches?limit=" + limit + "&orderBy=MODIFICATION";
+        log.info(">> BB list_branches  url={}", url);
+        HttpResponse<String> resp = get(url, auth);
+        if (!isOk(resp)) return errorResult(resp);
+
+        JsonNode values = JSON.readTree(resp.body()).path("values");
+        if (!values.isArray() || values.isEmpty()) return new ToolResult("Keine Branches gefunden.");
+
+        StringBuilder sb = new StringBuilder("**Branches in " + project + "/" + repo + ":**\n\n");
+        for (JsonNode b : values) {
+            String displayId = b.path("displayId").asText("-");
+            boolean isDefault = b.path("isDefault").asBoolean(false);
+            sb.append("- `").append(displayId).append("`");
+            if (isDefault) sb.append(" _(default)_");
+            sb.append("\n");
+        }
+        return new ToolResult(sb.toString());
+    }
+
+    // ── list files ────────────────────────────────────────────────────────────
+
+    private ToolResult listFiles(String base, String auth, String project, String repo,
+                                  String branch, String path, int limit) throws Exception {
+        if (project.isBlank() || repo.isBlank()) return new ToolResult("projectKey und repoSlug sind erforderlich.");
+        StringBuilder url = new StringBuilder(base + "/rest/api/1.0/projects/" + enc(project)
+                + "/repos/" + enc(repo) + "/files");
+        if (!path.isBlank()) url.append("/").append(path);
+        url.append("?limit=").append(limit);
+        if (!branch.isBlank()) url.append("&at=refs/heads/").append(enc(branch));
+        log.info(">> BB list_files  url={}", url);
+        HttpResponse<String> resp = get(url.toString(), auth);
+        if (!isOk(resp)) return errorResult(resp);
+
+        JsonNode values = JSON.readTree(resp.body()).path("values");
+        if (!values.isArray() || values.isEmpty()) return new ToolResult("Keine Dateien gefunden.");
+
+        StringBuilder sb = new StringBuilder("**Dateien in " + project + "/" + repo);
+        if (!path.isBlank()) sb.append("/").append(path);
+        sb.append(":**\n\n");
+        for (JsonNode f : values) sb.append("- `").append(f.asText()).append("`\n");
+        return new ToolResult(sb.toString());
+    }
+
+    // ── search code ───────────────────────────────────────────────────────────
+
+    private ToolResult searchCode(String base, String auth, String project, String repo,
+                                   String query, int limit) throws Exception {
+        if (query.isBlank()) return new ToolResult("Suchbegriff (query) ist erforderlich.");
+
+        // Bitbucket Server Code Search API (requires Bitbucket 5.x+)
+        StringBuilder url = new StringBuilder(base + "/rest/search/1.0/search?query=" + enc(query)
+                + "&limit=" + limit);
+        if (!project.isBlank()) url.append("&project=").append(enc(project));
+        if (!repo.isBlank())    url.append("&repository=").append(enc(repo));
+        log.info(">> BB search_code  url={}", url);
+        HttpResponse<String> resp = get(url.toString(), auth);
+
+        if (resp.statusCode() == 404) {
+            // Code Search plugin not available – fallback message
+            return new ToolResult("Bitbucket Code Search ist auf diesem Server nicht verfügbar (Plugin fehlt). " +
+                    "Verwende stattdessen list_files und dann read_bitbucket_file um spezifische Dateien zu lesen.");
+        }
+        if (!isOk(resp)) return errorResult(resp);
+
+        JsonNode root = JSON.readTree(resp.body());
+        JsonNode hits = root.path("values");
+        if (!hits.isArray() || hits.isEmpty()) return new ToolResult("Keine Treffer für: " + query);
+
+        StringBuilder sb = new StringBuilder("**Code-Suche nach \"" + query + "\" – ")
+                .append(root.path("size").asInt(0)).append(" Treffer:**\n\n");
+        for (JsonNode hit : hits) {
+            String file = hit.path("file").path("path").path("toString").asText(
+                    hit.path("file").path("path").path("name").asText("-"));
+            String projKey  = hit.path("file").path("project").path("key").asText("-");
+            String repoSlug = hit.path("file").path("repository").path("slug").asText("-");
+            sb.append("- **").append(projKey).append("/").append(repoSlug).append("** `").append(file).append("`\n");
+            JsonNode lines = hit.path("hitContexts");
+            if (lines.isArray()) {
+                for (JsonNode ctx : lines) {
+                    JsonNode segments = ctx.path("segments");
+                    if (segments.isArray()) {
+                        for (JsonNode seg : segments) {
+                            if (seg.path("type").asText().equals("MATCH")) {
+                                sb.append("  > `").append(seg.path("text").asText("").trim()).append("`\n");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return new ToolResult(sb.toString());
+    }
+
+    // ── list commits ──────────────────────────────────────────────────────────
+
+    private ToolResult listCommits(String base, String auth, String project, String repo,
+                                    String branch, int limit) throws Exception {
+        if (project.isBlank() || repo.isBlank()) return new ToolResult("projectKey und repoSlug sind erforderlich.");
+        StringBuilder url = new StringBuilder(base + "/rest/api/1.0/projects/" + enc(project)
+                + "/repos/" + enc(repo) + "/commits?limit=" + limit);
+        if (!branch.isBlank()) url.append("&until=refs/heads/").append(enc(branch));
+        log.info(">> BB list_commits  url={}", url);
+        HttpResponse<String> resp = get(url.toString(), auth);
+        if (!isOk(resp)) return errorResult(resp);
+
+        JsonNode values = JSON.readTree(resp.body()).path("values");
+        if (!values.isArray() || values.isEmpty()) return new ToolResult("Keine Commits gefunden.");
+
+        StringBuilder sb = new StringBuilder("**Commits in " + project + "/" + repo);
+        if (!branch.isBlank()) sb.append(" @ ").append(branch);
+        sb.append(":**\n\n");
+        sb.append("| Hash | Autor | Datum | Nachricht |\n|---|---|---|---|\n");
+        for (JsonNode c : values) {
+            String hash    = c.path("displayId").asText(c.path("id").asText("-").substring(0, Math.min(8, c.path("id").asText("").length())));
+            String author  = c.path("author").path("displayName").asText(c.path("author").path("name").asText("-"));
+            long   ts      = c.path("authorTimestamp").asLong(0);
+            String date    = ts > 0 ? new java.text.SimpleDateFormat("yyyy-MM-dd").format(new java.util.Date(ts)) : "-";
+            String msg     = c.path("message").asText("-").replace("\n", " ").replace("|", "\\|");
+            if (msg.length() > 80) msg = msg.substring(0, 77) + "...";
+            sb.append("| `").append(hash).append("` | ").append(author)
+              .append(" | ").append(date).append(" | ").append(msg).append(" |\n");
+        }
+        return new ToolResult(sb.toString());
+    }
+
+    // ── HTTP helpers ──────────────────────────────────────────────────────────
+
+    private HttpResponse<String> get(String url, String auth) throws Exception {
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(30))
+                .header("Authorization", auth)
+                .header("Accept", "application/json")
+                .GET().build();
+        return http.send(req, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private boolean isOk(HttpResponse<String> resp) { return resp.statusCode() == 200; }
+
+    private ToolResult errorResult(HttpResponse<String> resp) {
+        if (resp.statusCode() == 401) return new ToolResult("Bitbucket: Authentifizierung fehlgeschlagen – Token ungültig oder abgelaufen.");
+        if (resp.statusCode() == 403) return new ToolResult("Bitbucket: Keine Berechtigung für diese Ressource.");
+        if (resp.statusCode() == 404) return new ToolResult("Bitbucket: Ressource nicht gefunden (404).");
+        return new ToolResult("Bitbucket HTTP-Fehler " + resp.statusCode() + ": " + resp.body());
+    }
+
+    private static String enc(String s) { return URLEncoder.encode(s, StandardCharsets.UTF_8); }
+}
+

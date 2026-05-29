@@ -10,6 +10,7 @@ import com.tschanz.aigeny.llm_tool.jira.JiraWriteContext;
 import com.tschanz.aigeny.llm_tool.jira.JiraWriteExecutor;
 import com.tschanz.aigeny.llm_tool.jira.PendingJiraAction;
 import com.tschanz.aigeny.llm_tool.jira.PendingJiraActionContext;
+import com.tschanz.aigeny.llm_tool.bitbucket.BitbucketTokenContext;
 import com.tschanz.aigeny.llm_tool.QueryResult;
 import com.tschanz.aigeny.llm_tool.ToolResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,6 +46,7 @@ public class ChatController {
     private static final String SESSION_PENDING_ACTION = "pendingJiraAction";
     private static final String SESSION_JIRA_WRITE     = "jiraWriteEnabled";
     private static final String SESSION_CANCEL_FLAG    = "chatCancelFlag";
+    private static final String SESSION_BITBUCKET_TOKEN = "bitbucketToken";
 
     // ── JSON request body keys ───────────────────────────────────────────────
     private static final String REQ_MESSAGE       = "message";
@@ -66,6 +68,8 @@ public class ChatController {
     private static final String KEY_JIRA_CONFIGURED          = "jiraConfigured";
     private static final String KEY_JIRA_BASEURL_CONFIGURED  = "jiraBaseUrlConfigured";
     private static final String KEY_JIRA_WRITE_ENABLED       = "jiraWriteEnabled";
+    private static final String KEY_BITBUCKET_CONFIGURED          = "bitbucketConfigured";
+    private static final String KEY_BITBUCKET_BASEURL_CONFIGURED  = "bitbucketBaseUrlConfigured";
     private static final String KEY_DB_USERNAME               = "dbUsername";
     private static final String KEY_SCHEMA_TABLES            = "schemaTables";
 
@@ -119,10 +123,12 @@ public class ChatController {
         // then pass it into the async lambda via ThreadLocal
         final String jiraToken = getEffectiveJiraToken(session, props);
         final boolean jiraWriteEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
+        final String bitbucketToken = getEffectiveBitbucketToken(session, props);
 
         return CompletableFuture.supplyAsync(() -> {
             JiraTokenContext.set(jiraToken);
             JiraWriteContext.set(jiraWriteEnabled);
+            BitbucketTokenContext.set(bitbucketToken);
             PendingJiraActionContext.clear();
             try {
                 ChatResult result = orchestration.chat(history, message);
@@ -159,6 +165,7 @@ public class ChatController {
             } finally {
                 JiraTokenContext.clear();
                 JiraWriteContext.clear();
+                BitbucketTokenContext.clear();
                 PendingJiraActionContext.clear();
             }
         });
@@ -188,6 +195,7 @@ public class ChatController {
         List<Message> history = getOrCreateHistory(session);
         final String jiraToken = getEffectiveJiraToken(session, props);
         final boolean jiraWriteEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
+        final String bitbucketToken = getEffectiveBitbucketToken(session, props);
 
         // Per-request cancellation flag – stored in session so /api/chat/cancel can flip it
         AtomicBoolean cancelFlag = new AtomicBoolean(false);
@@ -199,6 +207,7 @@ public class ChatController {
         CompletableFuture.runAsync(() -> {
             JiraTokenContext.set(jiraToken);
             JiraWriteContext.set(jiraWriteEnabled);
+            BitbucketTokenContext.set(bitbucketToken);
             PendingJiraActionContext.clear();
             try {
                 ChatResult result = orchestration.chat(history, message, (toolName, description) -> {
@@ -259,6 +268,7 @@ public class ChatController {
                 session.removeAttribute(SESSION_CANCEL_FLAG);
                 JiraTokenContext.clear();
                 JiraWriteContext.clear();
+                BitbucketTokenContext.clear();
                 PendingJiraActionContext.clear();
             }
         });
@@ -355,17 +365,24 @@ public class ChatController {
         boolean jiraBaseUrlConfigured = props.getJira().getBaseUrl() != null
                 && !props.getJira().getBaseUrl().isBlank();
         boolean jiraWriteEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
-        return ResponseEntity.ok(Map.of(
-                KEY_LLM_PROVIDER,            props.getLlm().getProvider(),
-                KEY_LLM_MODEL,               props.getLlm().getModel(),
-                KEY_DB_CONFIGURED,           props.isDbConfigured(),
-                KEY_DB_USERNAME,             props.getDb().getUsername(),
-                KEY_JIRA_CONFIGURED,         jiraTokenAvailable,
-                KEY_JIRA_BASEURL_CONFIGURED, jiraBaseUrlConfigured,
-                KEY_JIRA_WRITE_ENABLED,      jiraWriteEnabled,
-                KEY_SCHEMA_TABLES,           schemaLoader.getTableCount(),
-                KEY_HAS_EXPORT,              lastResult != null && !lastResult.isEmpty()
-        ));
+        String userBitbucketToken = (String) session.getAttribute(SESSION_BITBUCKET_TOKEN);
+        boolean bitbucketTokenAvailable = (userBitbucketToken != null && !userBitbucketToken.isBlank())
+                || props.isBitbucketConfigured();
+        boolean bitbucketBaseUrlConfigured = props.getBitbucket().getBaseUrl() != null
+                && !props.getBitbucket().getBaseUrl().isBlank();
+        Map<String, Object> statusMap = new HashMap<>();
+        statusMap.put(KEY_LLM_PROVIDER,                props.getLlm().getProvider());
+        statusMap.put(KEY_LLM_MODEL,                   props.getLlm().getModel());
+        statusMap.put(KEY_DB_CONFIGURED,               props.isDbConfigured());
+        statusMap.put(KEY_DB_USERNAME,                 props.getDb().getUsername());
+        statusMap.put(KEY_JIRA_CONFIGURED,             jiraTokenAvailable);
+        statusMap.put(KEY_JIRA_BASEURL_CONFIGURED,     jiraBaseUrlConfigured);
+        statusMap.put(KEY_JIRA_WRITE_ENABLED,          jiraWriteEnabled);
+        statusMap.put(KEY_BITBUCKET_CONFIGURED,        bitbucketTokenAvailable);
+        statusMap.put(KEY_BITBUCKET_BASEURL_CONFIGURED, bitbucketBaseUrlConfigured);
+        statusMap.put(KEY_SCHEMA_TABLES,               schemaLoader.getTableCount());
+        statusMap.put(KEY_HAS_EXPORT,                  lastResult != null && !lastResult.isEmpty());
+        return ResponseEntity.ok(statusMap);
     }
 
     // ── POST /api/jira/token ─────────────────────────────────────────────────
@@ -409,6 +426,29 @@ public class ChatController {
         String userToken = session != null ? (String) session.getAttribute(SESSION_JIRA_TOKEN) : null;
         if (userToken != null && !userToken.isBlank()) return userToken;
         return props.getJira().getToken();
+    }
+
+    // ── POST /api/bitbucket/token ────────────────────────────────────────────
+
+    @PostMapping("/bitbucket/token")
+    public ResponseEntity<Map<String, String>> setBitbucketToken(
+            @RequestBody Map<String, String> body,
+            HttpSession session) {
+        String token = body.getOrDefault(REQ_TOKEN, "").strip();
+        if (token.isEmpty()) {
+            session.removeAttribute(SESSION_BITBUCKET_TOKEN);
+            return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CLEARED)));
+        }
+        session.setAttribute(SESSION_BITBUCKET_TOKEN, token);
+        log.info("User Bitbucket token set for session {}", session.getId());
+        return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
+    }
+
+    /** Returns the effective Bitbucket token for the current session (user override or config fallback). */
+    public static String getEffectiveBitbucketToken(HttpSession session, AigenyProperties props) {
+        String userToken = session != null ? (String) session.getAttribute(SESSION_BITBUCKET_TOKEN) : null;
+        if (userToken != null && !userToken.isBlank()) return userToken;
+        return props.getBitbucket().getToken();
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ let hasExportData = false;
 let currentAbortController = null;
 const JIRA_TOKEN_KEY = 'aigeny.jiraToken';
 const JIRA_WRITE_KEY = 'aigeny.jiraWriteEnabled';
+const BITBUCKET_TOKEN_KEY = 'aigeny.bitbucketToken';
 
 // ── HAL Eye ────────────────────────────────────────────────────────────────
 
@@ -439,8 +440,86 @@ async function syncJiraTokenToSession() {
 
 // Close modal on Escape
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') document.getElementById('jiraTokenModal').style.display = 'none';
+  if (e.key === 'Escape') {
+    document.getElementById('jiraTokenModal').style.display = 'none';
+    document.getElementById('bitbucketTokenModal').style.display = 'none';
+  }
 });
+
+// ── Bitbucket Token Modal ──────────────────────────────────────────────────
+
+function openBitbucketTokenModal() {
+  const stored = localStorage.getItem(BITBUCKET_TOKEN_KEY) || '';
+  document.getElementById('bitbucketTokenInput').value = stored;
+  document.getElementById('bitbucketTokenHint').textContent = stored ? '✔ Token ist gespeichert.' : '';
+  document.getElementById('bitbucketTokenHint').className = stored ? 'modal-hint ok' : 'modal-hint';
+  document.getElementById('bitbucketTokenModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('bitbucketTokenInput').focus(), 50);
+}
+
+function closeBitbucketTokenModal(e) {
+  if (e && e.target !== document.getElementById('bitbucketTokenModal')) return;
+  document.getElementById('bitbucketTokenModal').style.display = 'none';
+}
+
+async function saveBitbucketToken() {
+  const token = document.getElementById('bitbucketTokenInput').value.trim();
+  const hint  = document.getElementById('bitbucketTokenHint');
+  try {
+    const res = await fetch('/api/bitbucket/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (token) {
+      localStorage.setItem(BITBUCKET_TOKEN_KEY, token);
+      hint.textContent = '✔ Token gespeichert! Da, choroscho!';
+      hint.className = 'modal-hint ok';
+    } else {
+      localStorage.removeItem(BITBUCKET_TOKEN_KEY);
+      hint.textContent = 'Token gelöscht.';
+      hint.className = 'modal-hint';
+    }
+    setTimeout(() => {
+      document.getElementById('bitbucketTokenModal').style.display = 'none';
+      loadStatus();
+    }, 900);
+  } catch (err) {
+    hint.textContent = 'Njet! Fehler: ' + err.message;
+    hint.className = 'modal-hint error';
+  }
+}
+
+async function clearBitbucketToken() {
+  localStorage.removeItem(BITBUCKET_TOKEN_KEY);
+  await fetch('/api/bitbucket/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: '' })
+  });
+  document.getElementById('bitbucketTokenInput').value = '';
+  const hint = document.getElementById('bitbucketTokenHint');
+  hint.textContent = 'Token gelöscht.';
+  hint.className = 'modal-hint';
+  setTimeout(() => {
+    document.getElementById('bitbucketTokenModal').style.display = 'none';
+    loadStatus();
+  }, 600);
+}
+
+/** Send stored Bitbucket token to backend session (called on page load) */
+async function syncBitbucketTokenToSession() {
+  const token = localStorage.getItem(BITBUCKET_TOKEN_KEY);
+  if (!token) return;
+  try {
+    await fetch('/api/bitbucket/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+  } catch (e) { /* ignore */ }
+}
 
 
 
@@ -642,6 +721,26 @@ async function loadStatus() {
       if (jiraWriteRow) jiraWriteRow.style.display = 'none';
     }
 
+    const bbEl  = document.getElementById('infoBitbucket');
+    const bbBtn = document.getElementById('btnBitbucketToken');
+    if (data.bitbucketBaseUrlConfigured) {
+      if (data.bitbucketConfigured) {
+        bbEl.textContent = 'Connected';
+        bbEl.className   = 'info-val ok';
+        bbBtn.textContent = '✎ Token ändern';
+        bbBtn.classList.add('visible');
+      } else {
+        bbEl.textContent = 'Kein Token';
+        bbEl.className   = 'info-val error';
+        bbBtn.textContent = '+ Token eingeben';
+        bbBtn.classList.add('visible');
+      }
+    } else {
+      bbEl.textContent = 'Not configured';
+      bbEl.className   = 'info-val error';
+      if (bbBtn) bbBtn.classList.remove('visible');
+    }
+
     if (data.hasExport) {
       hasExportData = true;
       setExportButtons(true);
@@ -658,6 +757,7 @@ async function loadStatus() {
 window.addEventListener('load', () => {
   syncJiraTokenToSession()
     .then(() => syncJiraWriteModeToSession())
+    .then(() => syncBitbucketTokenToSession())
     .then(() => loadStatus());
   setInterval(loadStatus, 15000);
 

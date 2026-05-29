@@ -38,6 +38,11 @@
         <span class="info-val" id="infoJira">—</span>
         <button class="btn-token" id="btnJiraToken" onclick="openJiraTokenModal()" title="Jira Personal Access Token eingeben">Token eingeben</button>
       </div>
+      <div class="info-row">
+        <span class="info-key">Bitbucket</span>
+        <span class="info-val" id="infoBitbucket">—</span>
+        <button class="btn-token" id="btnBitbucketToken" onclick="openBitbucketTokenModal()" title="Bitbucket Personal Access Token eingeben">Token eingeben</button>
+      </div>
       <div class="info-row"><span class="info-key">DB-Tabellen</span><span class="info-val" id="infoTables">—</span></div>
     </div>
     <button class="btn-secondary" onclick="reloadSchema()" title="DB-Schema neu laden">&#8635; DB-Schema neu laden</button>
@@ -100,6 +105,25 @@
       <button class="btn-send" onclick="saveJiraToken()">💾 Speichern</button>
       <button class="btn-secondary" onclick="clearJiraToken()">🗑 Token löschen</button>
       <button class="btn-secondary" onclick="closeJiraTokenModal()">Abbrechen</button>
+    </div>
+  </div>
+</div>
+<!-- ── Bitbucket Token Modal ─────────────────────────────────────────────── -->
+<div id="bitbucketTokenModal" class="modal-overlay" style="display:none" onclick="closeBitbucketTokenModal(event)">
+  <div class="modal-box">
+    <h2>🔑 Bitbucket Personal Access Token</h2>
+    <p class="modal-desc">
+      Gib deinen persönlichen Bitbucket-Token ein.<br>
+      <strong>Wo findest du den Token?</strong><br>
+      Bitbucket öffnen → <em>Profil</em> (oben rechts) → <em>Personal access tokens</em> → Token erstellen (nur Lese-Rechte nötig).
+    </p>
+    <input type="password" id="bitbucketTokenInput" class="modal-input"
+           placeholder="Token eingeben..." autocomplete="off"/>
+    <div class="modal-hint" id="bitbucketTokenHint"></div>
+    <div class="modal-actions">
+      <button class="btn-send" onclick="saveBitbucketToken()">💾 Speichern</button>
+      <button class="btn-secondary" onclick="clearBitbucketToken()">🗑 Token löschen</button>
+      <button class="btn-secondary" onclick="closeBitbucketTokenModal()">Abbrechen</button>
     </div>
   </div>
 </div>
