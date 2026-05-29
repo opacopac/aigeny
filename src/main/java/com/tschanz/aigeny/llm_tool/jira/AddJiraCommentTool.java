@@ -45,6 +45,16 @@ public class AddJiraCommentTool implements Tool {
     @Override public String getName() { return TOOL_NAME; }
 
     @Override
+    public String getCallDescription(String argumentsJson) {
+        try {
+            JsonNode args = JSON.readTree(argumentsJson);
+            String issueKey = args.path(ARG_ISSUE_KEY).asText("").trim();
+            return "Kommentar hinzufügen zu " + (issueKey.isBlank() ? "Jira-Ticket" : issueKey);
+        } catch (Exception ignored) {}
+        return "Jira-Kommentar hinzufügen";
+    }
+
+    @Override
     public String getDescription() {
         return "Add a comment to an existing Jira issue. " +
                "IMPORTANT: Only works when Jira write mode is enabled in the UI sidebar (toggle 'Jira Schreiben'). " +

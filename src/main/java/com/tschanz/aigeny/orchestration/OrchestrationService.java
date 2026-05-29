@@ -1,7 +1,5 @@
 package com.tschanz.aigeny.orchestration;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;
 import com.tschanz.aigeny.llm.LlmClient;
 import com.tschanz.aigeny.llm.model.*;
@@ -37,7 +35,6 @@ public class OrchestrationService {
     private final LlmClient llmClient;
     private final List<Tool> tools;
     private final String systemPromptTemplate;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** Spring auto-collects all Tool beans into the list. */
     public OrchestrationService(LlmClient llmClient, List<Tool> tools) throws IOException {
@@ -140,7 +137,7 @@ public class OrchestrationService {
                     log.warn("Unknown tool: {}", toolName);
                 } else {
                     if (onToolCall != null) {
-                        onToolCall.accept(toolName, extractCallDescription(toolArgs, toolName));
+                        onToolCall.accept(toolName, tool.getCallDescription(toolArgs));
                     }
                     try {
                         result = tool.execute(toolArgs);
@@ -161,20 +158,6 @@ public class OrchestrationService {
         return tools.stream().filter(t -> t.getName().equals(name)).findFirst().orElse(null);
     }
 
-    /**
-     * Extracts the {@code description} field from the tool-call arguments JSON.
-     * Falls back to the tool name if the field is absent or the JSON is invalid.
-     */
-    private String extractCallDescription(String argsJson, String fallback) {
-        try {
-            JsonNode node = objectMapper.readTree(argsJson);
-            JsonNode desc = node.get("description");
-            if (desc != null && !desc.isNull() && !desc.asText().isBlank()) {
-                return desc.asText();
-            }
-        } catch (Exception ignored) {}
-        return fallback;
-    }
 
     private String buildSystemPrompt() {
         return systemPromptTemplate;

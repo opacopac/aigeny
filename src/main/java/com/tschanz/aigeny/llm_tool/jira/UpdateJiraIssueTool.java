@@ -55,6 +55,22 @@ public class UpdateJiraIssueTool implements Tool {
     @Override public String getName() { return TOOL_NAME; }
 
     @Override
+    public String getCallDescription(String argumentsJson) {
+        try {
+            JsonNode args = JSON.readTree(argumentsJson);
+            String issueKey    = args.path(ARG_ISSUE_KEY).asText("").trim();
+            boolean hasSummary = !args.path(ARG_SUMMARY).asText("").isBlank();
+            boolean hasDesc    = !args.path(ARG_DESCRIPTION).asText("").isBlank();
+            String fields = hasSummary && hasDesc ? "Summary & Beschreibung"
+                          : hasSummary ? "Summary"
+                          : hasDesc    ? "Beschreibung"
+                          : "Felder";
+            return "Jira-Ticket aktualisieren: " + (issueKey.isBlank() ? "?" : issueKey) + " (" + fields + ")";
+        } catch (Exception ignored) {}
+        return "Jira-Ticket aktualisieren";
+    }
+
+    @Override
     public String getDescription() {
         return Messages.get(MSG_TOOL_DESC);
     }

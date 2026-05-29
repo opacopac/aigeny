@@ -63,6 +63,23 @@ public class ReadJiraAttachmentTool implements Tool {
     @Override public String getName() { return "read_jira_attachment"; }
 
     @Override
+    public String getCallDescription(String argumentsJson) {
+        try {
+            JsonNode args = JSON.readTree(argumentsJson);
+            String filename = args.path("filename").asText("").trim();
+            if (!filename.isBlank()) return "Anhang lesen: " + filename;
+            // Try to extract filename from URL
+            String url = args.path("attachmentUrl").asText("").trim();
+            if (!url.isBlank()) {
+                String[] parts = url.split("/");
+                String lastPart = parts[parts.length - 1].split("\\?")[0];
+                if (lastPart.contains(".")) return "Anhang lesen: " + lastPart;
+            }
+        } catch (Exception ignored) {}
+        return "Jira-Anhang lesen";
+    }
+
+    @Override
     public String getDescription() {
         return "Download and read the content of a Jira attachment. " +
                "Supported formats: plain text (.txt), CSV (.csv), Excel (.xls, .xlsx), Word (.docx). " +

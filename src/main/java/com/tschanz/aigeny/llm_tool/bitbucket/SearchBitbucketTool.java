@@ -42,14 +42,42 @@ public class SearchBitbucketTool implements Tool {
     @Override public String getName() { return "search_bitbucket"; }
 
     @Override
+    public String getCallDescription(String argumentsJson) {
+        try {
+            JsonNode args = JSON.readTree(argumentsJson);
+            String action   = args.path("action").asText("?");
+            String project  = args.path("projectKey").asText("");
+            String repo     = args.path("repoSlug").asText("");
+            String branch   = args.path("branch").asText("");
+            String path     = args.path("path").asText("");
+            String query    = args.path("query").asText("");
+            String location = (!project.isBlank() && !repo.isBlank()) ? project + "/" + repo
+                            : !project.isBlank() ? project : "";
+            return switch (action) {
+                case "list_repos"   -> "Repos auflisten" + (location.isBlank() ? "" : " in " + location);
+                case "list_branches"-> "Branches auflisten in " + location;
+                case "list_files"   -> "Dateien auflisten in " + location + (!path.isBlank() ? "/" + path : "") + (!branch.isBlank() ? " (" + branch + ")" : "");
+                case "search_code"  -> "Code-Suche nach \"" + query + "\"" + (location.isBlank() ? "" : " in " + location);
+                case "list_commits" -> "Commits auflisten in " + location + (!branch.isBlank() ? " @ " + branch : "");
+                default             -> "Bitbucket: " + action;
+            };
+        } catch (Exception e) {
+            return getName();
+        }
+    }
+
+    @Override
     public String getDescription() {
         return "Search and browse Bitbucket repositories (read-only). " +
                "Actions: 'list_repos' – list repos in a project; " +
                "'list_branches' – list branches of a repo; " +
                "'list_files' – list files/folders in a repo path; " +
-               "'search_code' – search for text across a repo (Bitbucket Server code search); " +
+               "'search_code' – search for text across repos using Bitbucket query syntax " +
+               "(e.g. query='project:MVP_OEVP DiscountCampaignOffersValidator' or " +
+               "query='repo:novap_pflege SomeClass' – project/repo filters go IN the query string); " +
                "'list_commits' – recent commits on a branch. " +
-               "Always specify 'action'. For repo-level actions also specify 'projectKey' and 'repoSlug'.";
+               "Always specify 'action'. For repo-level actions also specify 'projectKey' and 'repoSlug'. " +
+               "For search_code use the 'query' field with optional project:/repo: prefixes.";
     }
 
     @Override
@@ -200,46 +228,87 @@ public class SearchBitbucketTool implements Tool {
                                    String query, int limit) throws Exception {
         if (query.isBlank()) return new ToolResult("Suchbegriff (query) ist erforderlich.");
 
-        // Bitbucket Server Code Search API (requires Bitbucket 5.x+)
-        StringBuilder url = new StringBuilder(base + "/rest/search/1.0/search?query=" + enc(query)
-                + "&limit=" + limit);
-        if (!project.isBlank()) url.append("&project=").append(enc(project));
-        if (!repo.isBlank())    url.append("&repository=").append(enc(repo));
-        log.info(">> BB search_code  url={}", url);
-        HttpResponse<String> resp = get(url.toString(), auth);
+        // Bitbucket Server Code Search API: POST /rest/search/1.0/search with JSON body
+        String url = base + "/rest/search/1.0/search";
+
+        // Build JSON body – Bitbucket Server Search accepts project/repo filters
+        // directly inside the query string as "project:KEY repo:SLUG <term>".
+        StringBuilder effectiveQuery = new StringBuilder();
+        if (!project.isBlank()) effectiveQuery.append("project:").append(project).append(" ");
+        if (!repo.isBlank())    effectiveQuery.append("repo:").append(repo).append(" ");
+        effectiveQuery.append(query.trim());
+
+        String bodyJson = "{\"query\":\""
+                + effectiveQuery.toString().replace("\\", "\\\\").replace("\"", "\\\"")
+                + "\",\"entities\":{\"code\":{}},\"limits\":{\"primary\":"
+                + limit + "}}";
+        log.info(">> BB search_code  url={} body={}", url, bodyJson);
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(30))
+                .header("Authorization", auth)
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
+                .build();
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
 
         if (resp.statusCode() == 404) {
-            // Code Search plugin not available – fallback message
             return new ToolResult("Bitbucket Code Search ist auf diesem Server nicht verfügbar (Plugin fehlt). " +
                     "Verwende stattdessen list_files und dann read_bitbucket_file um spezifische Dateien zu lesen.");
         }
         if (!isOk(resp)) return errorResult(resp);
 
+        log.debug("<< BB search_code raw response: {}", resp.body());
+
         JsonNode root = JSON.readTree(resp.body());
-        JsonNode hits = root.path("values");
+        // Actual Bitbucket Server Code Search response structure:
+        // {"scope": {...}, "code": {"values": [...], "count": N}, "query": {...}}
+        // Each value: {"repository": {...}, "file": "<path-string>", "hitContexts": [[{line,text},...]], ...}
+        JsonNode codeNode = root.path("code");
+        JsonNode hits = codeNode.path("values");
+        int count = codeNode.path("count").asInt(0);
+
         if (!hits.isArray() || hits.isEmpty()) return new ToolResult("Keine Treffer für: " + query);
 
-        StringBuilder sb = new StringBuilder("**Code-Suche nach \"" + query + "\" – ")
-                .append(root.path("size").asInt(0)).append(" Treffer:**\n\n");
+        // Remove debug fallback – format is now known
+        StringBuilder sb = new StringBuilder("**Code-Suche nach \"" + query + "\"");
+        if (!project.isBlank()) sb.append(" in ").append(project);
+        sb.append(" – ").append(count).append(" Treffer:**\n\n");
+
         for (JsonNode hit : hits) {
-            String file = hit.path("file").path("path").path("toString").asText(
-                    hit.path("file").path("path").path("name").asText("-"));
-            String projKey  = hit.path("file").path("project").path("key").asText("-");
-            String repoSlug = hit.path("file").path("repository").path("slug").asText("-");
-            sb.append("- **").append(projKey).append("/").append(repoSlug).append("** `").append(file).append("`\n");
-            JsonNode lines = hit.path("hitContexts");
-            if (lines.isArray()) {
-                for (JsonNode ctx : lines) {
-                    JsonNode segments = ctx.path("segments");
-                    if (segments.isArray()) {
-                        for (JsonNode seg : segments) {
-                            if (seg.path("type").asText().equals("MATCH")) {
-                                sb.append("  > `").append(seg.path("text").asText("").trim()).append("`\n");
-                            }
-                        }
+            // "repository" is a top-level field in the hit
+            String hitProject = hit.path("repository").path("project").path("key").asText("-");
+            String hitRepo    = hit.path("repository").path("slug").asText("-");
+            // "file" is a plain string with the full path
+            String filePath   = hit.path("file").asText("-");
+
+            sb.append("- **").append(hitProject).append("/").append(hitRepo)
+              .append("** `").append(filePath).append("`\n");
+
+            // hitContexts is an array of arrays of {line, text} objects
+            JsonNode contextGroups = hit.path("hitContexts");
+            if (contextGroups.isArray()) {
+                for (JsonNode group : contextGroups) {
+                    if (!group.isArray()) continue;
+                    for (JsonNode lineNode : group) {
+                        String text = lineNode.path("text").asText("").trim();
+                        if (text.isBlank()) continue;
+                        // Strip HTML: <em> tags (match markers) and HTML entities
+                        text = text.replaceAll("</?em>", "**")
+                                   .replace("&quot;", "\"")
+                                   .replace("&lt;", "<")
+                                   .replace("&gt;", ">")
+                                   .replace("&amp;", "&")
+                                   .replace("&#x2F;", "/")
+                                   .replaceAll("&[a-zA-Z0-9#]+;", "");
+                        int lineNum = lineNode.path("line").asInt(0);
+                        sb.append("  ").append(lineNum > 0 ? lineNum + ": " : "").append(text).append("\n");
                     }
                 }
             }
+            sb.append("\n");
         }
         return new ToolResult(sb.toString());
     }
@@ -277,6 +346,37 @@ public class SearchBitbucketTool implements Tool {
     }
 
     // ── HTTP helpers ──────────────────────────────────────────────────────────
+
+    /**
+     * Resolves a Bitbucket Server "path" node to a full file path string.
+     * The node can be a plain string or an object with various fields:
+     *   - "toString": "src/main/java/Foo.java"  (preferred)
+     *   - "components": ["src","main","java","Foo.java"]  (fallback)
+     *   - "parent" + "name": "src/main/java" + "Foo.java"  (fallback)
+     *   - "name": "Foo.java"  (last resort)
+     */
+    private static String resolvePath(JsonNode pathNode) {
+        if (pathNode == null || pathNode.isMissingNode()) return "-";
+        if (pathNode.isTextual()) return pathNode.asText("-");
+        // "toString" field (Bitbucket serializes the Java toString())
+        String ts = pathNode.path("toString").asText("");
+        if (!ts.isBlank()) return ts;
+        // components array: ["src", "main", "java", "Foo.java"]
+        JsonNode components = pathNode.path("components");
+        if (components.isArray() && !components.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (JsonNode c : components) {
+                if (!sb.isEmpty()) sb.append("/");
+                sb.append(c.asText());
+            }
+            return sb.toString();
+        }
+        // parent + name
+        String parent = pathNode.path("parent").asText("");
+        String name   = pathNode.path("name").asText("");
+        if (!name.isBlank()) return parent.isBlank() ? name : parent + "/" + name;
+        return "-";
+    }
 
     private HttpResponse<String> get(String url, String auth) throws Exception {
         HttpRequest req = HttpRequest.newBuilder()

@@ -54,6 +54,18 @@ public class QueryJiraTool implements Tool {
     @Override public String getName() { return "search_jira"; }
 
     @Override
+    public String getCallDescription(String argumentsJson) {
+        try {
+            JsonNode args = JSON.readTree(argumentsJson);
+            String issueKey = args.path("issueKey").asText("").trim();
+            String jql      = args.path("jql").asText("").trim();
+            if (!issueKey.isBlank()) return "Jira-Ticket lesen: " + issueKey;
+            if (!jql.isBlank()) return "Jira-Suche: " + (jql.length() > 60 ? jql.substring(0, 57) + "..." : jql);
+        } catch (Exception ignored) {}
+        return "Jira durchsuchen";
+    }
+
+    @Override
     public String getDescription() {
         return "Search Jira issues using JQL, or fetch a single issue directly by key. " +
                "To fetch a specific ticket, provide 'issueKey' (e.g. 'NOVA-100000') instead of jql. " +

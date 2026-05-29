@@ -42,6 +42,22 @@ public class ReadBitbucketFileTool implements Tool {
     @Override public String getName() { return "read_bitbucket_file"; }
 
     @Override
+    public String getCallDescription(String argumentsJson) {
+        try {
+            JsonNode args = JSON.readTree(argumentsJson);
+            String project  = args.path("projectKey").asText("");
+            String repo     = args.path("repoSlug").asText("");
+            String filePath = args.path("filePath").asText("");
+            StringBuilder sb = new StringBuilder("Datei lesen: ");
+            if (!project.isBlank() && !repo.isBlank()) sb.append(project).append("/").append(repo).append(" – ");
+            sb.append(filePath.isBlank() ? "?" : filePath);
+            return sb.toString();
+        } catch (Exception e) {
+            return getName();
+        }
+    }
+
+    @Override
     public String getDescription() {
         return "Read the raw content of a single file from a Bitbucket repository (read-only). " +
                "Provide 'projectKey', 'repoSlug', 'filePath' (e.g. 'src/main/java/Foo.java'). " +
