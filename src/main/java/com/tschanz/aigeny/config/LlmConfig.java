@@ -12,11 +12,12 @@ import org.springframework.context.annotation.Configuration;
  * Creates the correct LlmClient bean based on aigeny.llm.provider.
  *
  * OpenAI-compatible (same adapter):
- *   ollama   → local Ollama server
- *   groq     → Groq cloud (free tier, rate-limited)
- *   openai   → OpenAI API
- *   azure    → Azure OpenAI
- *   grok     → xAI Grok API (OpenAI-compatible)
+ *   ollama         → local Ollama server
+ *   groq           → Groq cloud (free tier, rate-limited)
+ *   openai         → OpenAI API
+ *   azure          → Azure OpenAI
+ *   grok           → xAI Grok API (OpenAI-compatible)
+ *   github-models  → GitHub Models API (PAT as api-key, base-url: https://models.inference.ai.azure.com)
  *
  * Native API (dedicated adapter):
  *   claude   → Anthropic Claude API
@@ -33,9 +34,10 @@ public class LlmConfig {
                 provider, props.getLlm().getModel());
 
         return switch (provider.toLowerCase()) {
-            case "claude" -> new AnthropicAdapter(props);
-            default       -> new OpenAiCompatibleAdapter(props);
-            // ollama, groq, openai, azure, grok all use OpenAI-compatible format
+            case "claude"        -> new AnthropicAdapter(props);
+            case "github-models" -> new OpenAiCompatibleAdapter(props);
+            // ollama, groq, openai, azure, grok – and any unknown provider – use OpenAI-compatible format
+            default              -> new OpenAiCompatibleAdapter(props);
         };
     }
 }

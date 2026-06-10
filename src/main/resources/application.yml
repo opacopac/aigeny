@@ -59,6 +59,19 @@ server:
 #    base-url: https://api.anthropic.com/v1
 #    model:    claude-sonnet-4-6
 #              (alternatives: claude-opus-4-6, claude-haiku-4-5)
+#
+#  GitHub Models (offiziell, OpenAI-kompatibel, PAT als API-Key):
+#    provider: github-models
+#    api-key:  github_pat_YOUR_PAT   # PAT mit Scope "models:read" (oder Classic PAT)
+#    base-url: https://models.inference.ai.azure.com
+#    model:    gpt-4o
+#    Weitere Modelle (Auswahl):
+#      OpenAI:     gpt-4o, gpt-4o-mini, o1, o3-mini
+#      Anthropic:  claude-3-7-sonnet, claude-3-5-sonnet
+#      Meta:       meta-llama-3.1-405b-instruct, llama-3.3-70b-instruct
+#      Mistral:    mistral-large, mistral-nemo
+#      Microsoft:  phi-4, phi-3.5-mini-instruct
+#    Vollständige Modellliste: https://github.com/marketplace/models
 # ─────────────────────────────────────────────────────────────────────────────
 aigeny:
   # ── Default: Anthropic Claude (set AIGENY_LLM_API_KEY or ~/.aigeny/aigeny.yml) ─
