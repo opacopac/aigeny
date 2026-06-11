@@ -118,26 +118,39 @@ public class GitHubCopilotAdapter implements LlmClient {
 
     private ChatResponse parseResponse(String json) throws Exception {
         JsonNode root = JSON.readTree(json);
-        JsonNode choice = root.path("choices").get(0);
-        JsonNode message = choice.path("message");
-        JsonNode toolCallsNode = message.path("tool_calls");
-        if (toolCallsNode.isArray() && !toolCallsNode.isEmpty()) {
-            List<ToolCall> calls = new ArrayList<>();
-            for (JsonNode tc : toolCallsNode) {
-                ToolCall call = new ToolCall();
-                call.setId(tc.path("id").asText());
-                call.setType(tc.path("type").asText("function"));
-                ToolCall.FunctionCall fc = new ToolCall.FunctionCall();
-                fc.setName(tc.path("function").path("name").asText());
-                fc.setArguments(tc.path("function").path("arguments").asText());
-                call.setFunction(fc);
-                calls.add(call);
+        JsonNode choices = root.path("choices");
+
+        // GitHub Copilot with Claude models may split text content and tool_calls
+        // across multiple entries in the choices array. We must merge them all.
+        List<ToolCall> allCalls = new ArrayList<>();
+        StringBuilder allText = new StringBuilder();
+
+        for (JsonNode choice : choices) {
+            JsonNode message = choice.path("message");
+            String content = message.path("content").asText("");
+            if (!content.isBlank()) {
+                allText.append(content);
             }
-            String text = message.path("content").asText("");
-            return new ChatResponse(calls, text.isBlank() ? null : text);
+            JsonNode toolCallsNode = message.path("tool_calls");
+            if (toolCallsNode.isArray()) {
+                for (JsonNode tc : toolCallsNode) {
+                    ToolCall call = new ToolCall();
+                    call.setId(tc.path("id").asText());
+                    call.setType(tc.path("type").asText("function"));
+                    ToolCall.FunctionCall fc = new ToolCall.FunctionCall();
+                    fc.setName(tc.path("function").path("name").asText());
+                    fc.setArguments(tc.path("function").path("arguments").asText());
+                    call.setFunction(fc);
+                    allCalls.add(call);
+                }
+            }
         }
-        String content = message.path("content").asText("");
-        return new ChatResponse(content);
+
+        if (!allCalls.isEmpty()) {
+            String text = allText.toString();
+            return new ChatResponse(allCalls, text.isBlank() ? null : text);
+        }
+        return new ChatResponse(allText.toString());
     }
 }
 
