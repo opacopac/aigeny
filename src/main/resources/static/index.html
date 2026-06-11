@@ -43,6 +43,11 @@
         <span class="info-val" id="infoBitbucket">—</span>
         <button class="btn-token" id="btnBitbucketToken" onclick="openBitbucketTokenModal()" title="Bitbucket Personal Access Token eingeben">Token eingeben</button>
       </div>
+      <div class="info-row">
+        <span class="info-key">GitHub</span>
+        <span class="info-val" id="infoGithub">—</span>
+        <button class="btn-token visible" id="btnGithubConnect" onclick="openGithubConnectModal()" title="Mit GitHub (Copilot) verbinden">Verbinden</button>
+      </div>
       <div class="info-row"><span class="info-key">DB-Tabellen</span><span class="info-val" id="infoTables">—</span></div>
     </div>
     <button class="btn-secondary" onclick="reloadSchema()" title="DB-Schema neu laden">&#8635; DB-Schema neu laden</button>
@@ -127,6 +132,48 @@
     </div>
   </div>
 </div>
+
+<!-- ── GitHub Connect Modal ──────────────────────────────────────────────── -->
+<div id="githubConnectModal" class="modal-overlay" style="display:none" onclick="closeGithubConnectModal(event)">
+  <div class="modal-box">
+    <h2>🐙 GitHub verbinden</h2>
+    <p class="modal-desc" id="githubConnectIntro">
+      AIgeny kann sich als mit deinem GitHub-Konto verbinden (<strong>OAuth-App</strong> with Scope <code>read:user</code>).
+      Damit lassen sich anschliessend die über <em>GitHub Copilot</em> verfügbaren LLM-Modelle nutzen.
+    </p>
+    <div id="githubConnectStart">
+      <div class="modal-actions">
+        <button class="btn-send" onclick="startGithubConnect()">🔗 Verbinden starten</button>
+        <button class="btn-secondary" onclick="closeGithubConnectModal()">Abbrechen</button>
+      </div>
+    </div>
+    <div id="githubConnectPairing" style="display:none">
+      <p class="modal-desc">
+        1. Öffne <a id="githubVerificationLink" href="#" target="_blank" rel="noopener">github.com/login/device</a><br>
+        2. Gib folgenden Code ein und bestätige den Zugriff:
+      </p>
+      <div style="text-align:center; margin:18px 0">
+        <code id="githubUserCode" style="font-size:28px; letter-spacing:4px; padding:8px 16px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); color:var(--text-code);">XXXX-XXXX</code>
+        <button class="btn-secondary" style="margin-left:10px" onclick="copyGithubUserCode()">📋 Kopieren</button>
+      </div>
+      <div class="modal-hint" id="githubConnectHint">Warte auf Bestätigung…</div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeGithubConnectModal()">Schliessen</button>
+      </div>
+    </div>
+    <div id="githubConnectConnected" style="display:none">
+      <p class="modal-desc">
+        ✅ Verbunden als <strong id="githubLoginName">—</strong>.<br>
+        Die Liste der verfügbaren Modelle wurde ins Log geschrieben.
+      </p>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="disconnectGithub()">🔌 Trennen</button>
+        <button class="btn-secondary" onclick="closeGithubConnectModal()">Schliessen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
 

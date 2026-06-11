@@ -443,6 +443,8 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     document.getElementById('jiraTokenModal').style.display = 'none';
     document.getElementById('bitbucketTokenModal').style.display = 'none';
+    const gh = document.getElementById('githubConnectModal');
+    if (gh) gh.style.display = 'none';
   }
 });
 
@@ -518,6 +520,127 @@ async function syncBitbucketTokenToSession() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token })
     });
+  } catch (e) { /* ignore */ }
+}
+
+// ── GitHub Copilot Connect (OAuth Device Flow) ─────────────────────────────
+
+let githubPollTimer = null;
+
+function openGithubConnectModal() {
+  document.getElementById('githubConnectModal').style.display = 'flex';
+  refreshGithubConnectView();
+}
+
+function closeGithubConnectModal(e) {
+  if (e && e.target !== document.getElementById('githubConnectModal')) return;
+  document.getElementById('githubConnectModal').style.display = 'none';
+  if (githubPollTimer) { clearInterval(githubPollTimer); githubPollTimer = null; }
+}
+
+async function refreshGithubConnectView() {
+  try {
+    const res = await fetch('/api/github/status');
+    const data = await res.json();
+    const start     = document.getElementById('githubConnectStart');
+    const pairing   = document.getElementById('githubConnectPairing');
+    const connected = document.getElementById('githubConnectConnected');
+    if (data.connected) {
+      start.style.display = 'none';
+      pairing.style.display = 'none';
+      connected.style.display = '';
+      document.getElementById('githubLoginName').textContent = data.login || '(unbekannt)';
+    } else if (data.pairing) {
+      start.style.display = 'none';
+      pairing.style.display = '';
+      connected.style.display = 'none';
+      ensureGithubPolling();
+    } else {
+      start.style.display = '';
+      pairing.style.display = 'none';
+      connected.style.display = 'none';
+    }
+  } catch (e) {
+    console.error('GitHub status failed', e);
+  }
+}
+
+async function startGithubConnect() {
+  try {
+    const res = await fetch('/api/github/connect', { method: 'POST' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    document.getElementById('githubUserCode').textContent = data.userCode;
+    const link = document.getElementById('githubVerificationLink');
+    link.href = data.verificationUri;
+    link.textContent = data.verificationUri;
+    document.getElementById('githubConnectStart').style.display = 'none';
+    document.getElementById('githubConnectPairing').style.display = '';
+    document.getElementById('githubConnectHint').textContent =
+      'Warte auf Bestätigung… (Code läuft in ' + Math.round(data.expiresIn / 60) + ' Min ab)';
+    // Open the verification URL in a new tab automatically
+    try { window.open(data.verificationUri, '_blank', 'noopener'); } catch (e) { /* ignore */ }
+    ensureGithubPolling();
+  } catch (err) {
+    appendMessage('aigeny', 'Njet! GitHub Verbindung konnte nicht gestartet werden: ' + err.message);
+  }
+}
+
+function ensureGithubPolling() {
+  if (githubPollTimer) return;
+  githubPollTimer = setInterval(async () => {
+    try {
+      const res = await fetch('/api/github/status');
+      const data = await res.json();
+      if (data.connected) {
+        clearInterval(githubPollTimer); githubPollTimer = null;
+        document.getElementById('githubConnectPairing').style.display = 'none';
+        document.getElementById('githubConnectConnected').style.display = '';
+        document.getElementById('githubLoginName').textContent = data.login || '(unbekannt)';
+        loadStatus();
+        appendMessage('aigeny',
+          'Da, GitHub-Verbindung steht, Towarischtsch! Verfügbare Modelle stehen im Log, choroscho!');
+      } else if (!data.pairing) {
+        // pairing ended without success (timeout/error)
+        clearInterval(githubPollTimer); githubPollTimer = null;
+        document.getElementById('githubConnectHint').textContent =
+          'Njet! Pairing fehlgeschlagen' + (data.lastError ? ': ' + data.lastError : '.');
+      }
+    } catch (e) { /* keep trying */ }
+  }, 2500);
+}
+
+function copyGithubUserCode() {
+  const code = document.getElementById('githubUserCode').textContent;
+  navigator.clipboard.writeText(code).catch(() => {});
+}
+
+async function disconnectGithub() {
+  await fetch('/api/github/disconnect', { method: 'POST' });
+  refreshGithubConnectView();
+  loadStatus();
+}
+
+async function refreshGithubInfoBox() {
+  try {
+    const res = await fetch('/api/github/status');
+    const data = await res.json();
+    const el  = document.getElementById('infoGithub');
+    const btn = document.getElementById('btnGithubConnect');
+    if (!el || !btn) return;
+    if (data.connected) {
+      el.textContent = data.login ? 'Connected (' + data.login + ')' : 'Connected';
+      el.className   = 'info-val ok';
+      btn.textContent = '🔌 Trennen';
+    } else if (data.pairing) {
+      el.textContent = 'Pairing…';
+      el.className   = 'info-val';
+      btn.textContent = '⏳ läuft…';
+    } else {
+      el.textContent = 'Nicht verbunden';
+      el.className   = 'info-val error';
+      btn.textContent = '+ Verbinden';
+    }
   } catch (e) { /* ignore */ }
 }
 
@@ -745,6 +868,8 @@ async function loadStatus() {
       hasExportData = true;
       setExportButtons(true);
     }
+
+    refreshGithubInfoBox();
 
     if (!isThinking) setStatusIndicator('ok', 'Ready');
   } catch {

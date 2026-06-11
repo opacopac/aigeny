@@ -1,6 +1,8 @@
 package com.tschanz.aigeny.config;
 
 import com.tschanz.aigeny.llm.AnthropicAdapter;
+import com.tschanz.aigeny.llm.GitHubCopilotAdapter;
+import com.tschanz.aigeny.llm.GitHubCopilotService;
 import com.tschanz.aigeny.llm.LlmClient;
 import com.tschanz.aigeny.llm.OpenAiCompatibleAdapter;
 import org.slf4j.Logger;
@@ -28,16 +30,17 @@ public class LlmConfig {
     private static final Logger log = LoggerFactory.getLogger(LlmConfig.class);
 
     @Bean
-    public LlmClient llmClient(AigenyProperties props) {
+    public LlmClient llmClient(AigenyProperties props, GitHubCopilotService github) {
         String provider = props.getLlm().getProvider();
         log.info("Initialising LLM adapter for provider: {} / model: {}",
                 provider, props.getLlm().getModel());
 
         return switch (provider.toLowerCase()) {
-            case "claude"        -> new AnthropicAdapter(props);
-            case "github-models" -> new OpenAiCompatibleAdapter(props);
+            case "claude"         -> new AnthropicAdapter(props);
+            case "github-copilot" -> new GitHubCopilotAdapter(props, github);
+            case "github-models"  -> new OpenAiCompatibleAdapter(props);
             // ollama, groq, openai, azure, grok – and any unknown provider – use OpenAI-compatible format
-            default              -> new OpenAiCompatibleAdapter(props);
+            default               -> new OpenAiCompatibleAdapter(props);
         };
     }
 }

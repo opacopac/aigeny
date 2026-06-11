@@ -72,6 +72,14 @@ server:
 #      Mistral:    mistral-large, mistral-nemo
 #      Microsoft:  phi-4, phi-3.5-mini-instruct
 #    Vollständige Modellliste: https://github.com/marketplace/models
+#
+#  GitHub Copilot (OAuth-Pairing über Connect-Button, Scope read:user):
+#    provider: github-copilot
+#    api-key:  (wird ignoriert – Token kommt aus dem Device-Flow,
+#               persistiert unter ~/.aigeny/github-copilot.json)
+#    base-url: (wird ignoriert – kommt von api.githubcopilot.com)
+#    model:    gpt-4o          (z.B. gpt-4o, gpt-4o-mini, o1, claude-3.5-sonnet)
+#    Vollständige Modellliste wird beim Verbinden ins Log geschrieben.
 # ─────────────────────────────────────────────────────────────────────────────
 aigeny:
   # ── Default: Anthropic Claude (set AIGENY_LLM_API_KEY or ~/.aigeny/aigeny.yml) ─
