@@ -1,90 +1,40 @@
 spring:
   application:
     name: AIgeny
-  # Load an optional external config file from the user's home directory.
-  # Create ~/.aigeny/aigeny.yml to override any setting below without editing this file.
+  # Load optional external config from ~/.aigeny/aigeny.yml (overrides everything below)
   config:
     import: "optional:file:${user.home}/.aigeny/aigeny.yml"
   mvc:
     async:
-      request-timeout: 300000   # 5 minutes - Ollama can be slow on CPU
+      request-timeout: 300000   # 5 min – Ollama on CPU can be slow
 
 server:
   port: 8080
 
 # ── AIgeny configuration ──────────────────────────────────────────────────────
-# All values can also be overridden via environment variables.
-# Spring Boot maps  aigeny.db.password  →  AIGENY_DB_PASSWORD  automatically.
-#
-# For Docker secrets, set the _FILE variant of the env var:
-#   AIGENY_DB_PASSWORD_FILE=/run/secrets/db_password
+# Override via environment variables (Spring Boot auto-mapping):
+#   aigeny.llm.api-key  →  AIGENY_LLM_API_KEY
+#   aigeny.db.password  →  AIGENY_DB_PASSWORD
+# Or use Docker-secret _FILE variants:
 #   AIGENY_LLM_API_KEY_FILE=/run/secrets/llm_api_key
-# AIgeny reads the file and uses its contents as the value.
+#   AIGENY_DB_PASSWORD_FILE=/run/secrets/db_password
 #
-# ── LLM Provider Presets ──────────────────────────────────────────────────────
+# ── Supported LLM providers ───────────────────────────────────────────────────
 #
-#  Ollama (default - local, free, private):
-#    provider: ollama
-#    api-key:  ollama
-#    base-url: http://localhost:11434/v1
-#    model:    llama3.1:8b
+#  provider         adapter              notes
+#  ───────────────  ───────────────────  ──────────────────────────────────────
+#  claude           AnthropicAdapter     native Anthropic API
+#  github-copilot   GitHubCopilotAdapter OAuth device-flow; no api-key needed
+#  openai           OpenAiCompatibleAdapter
+#  ollama           OpenAiCompatibleAdapter  local, base-url: http://localhost:11434/v1
+#  azure            OpenAiCompatibleAdapter
+#  groq             OpenAiCompatibleAdapter  free cloud tier, rate-limited
+#  grok             OpenAiCompatibleAdapter  xAI Grok
+#  <anything else>  OpenAiCompatibleAdapter  fallback
 #
-#  Groq (free cloud tier, rate-limited):
-#    provider: groq
-#    api-key:  gsk_YOUR_KEY
-#    base-url: https://api.groq.com/openai/v1
-#    model:    llama-3.3-70b-versatile
-#
-#  OpenAI:
-#    provider: openai
-#    api-key:  sk-YOUR_KEY
-#    base-url: https://api.openai.com/v1
-#    model:    gpt-4o-mini
-#
-#  Azure OpenAI:
-#    provider: azure
-#    api-key:  YOUR_AZURE_KEY
-#    base-url: https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_DEPLOY
-#    model:    gpt-4o
-#
-#  xAI Grok (OpenAI-compatible):
-#    provider: grok
-#    api-key:  xai-YOUR_KEY
-#    base-url: https://api.x.ai/v1
-#    model:    grok-3
-#
-#  Anthropic Claude (native API):
-#    provider: claude
-#    api-key:  sk-ant-YOUR_KEY
-#    base-url: https://api.anthropic.com/v1
-#    model:    claude-sonnet-4-6
-#              (alternatives: claude-opus-4-6, claude-haiku-4-5)
-#
-#  GitHub Models (offiziell, OpenAI-kompatibel, PAT als API-Key):
-#    provider: github-models
-#    api-key:  github_pat_YOUR_PAT   # PAT mit Scope "models:read" (oder Classic PAT)
-#    base-url: https://models.inference.ai.azure.com
-#    model:    gpt-4o
-#    Weitere Modelle (Auswahl):
-#      OpenAI:     gpt-4o, gpt-4o-mini, o1, o3-mini
-#      Anthropic:  claude-3-7-sonnet, claude-3-5-sonnet
-#      Meta:       meta-llama-3.1-405b-instruct, llama-3.3-70b-instruct
-#      Mistral:    mistral-large, mistral-nemo
-#      Microsoft:  phi-4, phi-3.5-mini-instruct
-#    Vollständige Modellliste: https://github.com/marketplace/models
-#
-#  GitHub Copilot (OAuth-Pairing über Connect-Button, Scope read:user):
-#    provider: github-copilot
-#    api-key:  (wird ignoriert – Token kommt aus dem Device-Flow,
-#               persistiert unter ~/.aigeny/github-copilot.json)
-#    base-url: (wird ignoriert – kommt von api.githubcopilot.com)
-#    model:    gpt-4o          (z.B. gpt-4o, gpt-4o-mini, o1, claude-3.5-sonnet)
-#    Vollständige Modellliste wird beim Verbinden ins Log geschrieben.
 # ─────────────────────────────────────────────────────────────────────────────
 aigeny:
-  # ── Default: Anthropic Claude (set AIGENY_LLM_API_KEY or ~/.aigeny/aigeny.yml) ─
-  # These values are overridden by ~/.aigeny/aigeny.yml or environment variables
-  # (e.g. AIGENY_LLM_PROVIDER, AIGENY_LLM_MODEL, ...) / docker-compose.yml.
+  # ── Default LLM – override in ~/.aigeny/aigeny.yml or via env vars ──────────
   llm:
     provider: claude
     api-key: ""
@@ -92,18 +42,15 @@ aigeny:
     model: claude-sonnet-4-6
 
   db:
-    # jdbc:oracle:thin:@hostname:1521/SERVICENAME
     url: ""
     username: ""
-    password: ""   # or use AIGENY_DB_PASSWORD_FILE for Docker secrets
+    password: ""   # or AIGENY_DB_PASSWORD_FILE for Docker secrets
 
   jira:
-    # Base URL of your Jira instance. Token is entered per-user via the UI.
-    base-url: "https://flow.sbb.ch"
+    base-url: ""   # e.g. https://jira.example.com  – token entered via UI
 
   bitbucket:
-    # Base URL of your Bitbucket Server/Data Center instance. Token is entered per-user via the UI.
-    base-url: "https://code.sbb.ch"
+    base-url: ""   # e.g. https://git.example.com   – token entered via UI
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging:
@@ -112,4 +59,3 @@ logging:
     com.zaxxer.hikari: WARN
   file:
     name: ${user.home}/.aigeny/aigeny.log
-

@@ -811,6 +811,11 @@ async function loadStatus() {
     document.getElementById('infoModel').textContent = data.llmModel     || '—';
     document.getElementById('infoTables').textContent= data.schemaTables || '0';
 
+    const githubRow = document.getElementById('githubInfoRow');
+    if (githubRow) {
+      githubRow.style.display = (data.llmProvider === 'github-copilot') ? '' : 'none';
+    }
+
     const dbEl = document.getElementById('infoDb');
     if (data.dbConfigured) {
       const user = data.dbUsername ? ` (${data.dbUsername})` : '';

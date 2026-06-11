@@ -29,7 +29,12 @@
     <canvas id="halEye" width="220" height="220"></canvas>
     <div class="hal-label">AIgeny</div>
   <div class="hal-status" id="halStatusText">Bereit, Towarischtsch.</div>
-  <div class="info-box" id="infoBox">
+    <div class="info-box" id="infoBox">
+      <div class="info-row" id="githubInfoRow">
+        <span class="info-key">GitHub</span>
+        <span class="info-val" id="infoGithub">—</span>
+        <button class="btn-token visible" id="btnGithubConnect" onclick="openGithubConnectModal()" title="Mit GitHub (Copilot) verbinden">Verbinden</button>
+      </div>
       <div class="info-row"><span class="info-key">LLM</span><span class="info-val" id="infoLlm">—</span></div>
       <div class="info-row"><span class="info-key">Modell</span><span class="info-val" id="infoModel">—</span></div>
       <div class="info-row"><span class="info-key">DB</span><span class="info-val" id="infoDb">—</span></div>
@@ -42,11 +47,6 @@
         <span class="info-key">Bitbucket</span>
         <span class="info-val" id="infoBitbucket">—</span>
         <button class="btn-token" id="btnBitbucketToken" onclick="openBitbucketTokenModal()" title="Bitbucket Personal Access Token eingeben">Token eingeben</button>
-      </div>
-      <div class="info-row">
-        <span class="info-key">GitHub</span>
-        <span class="info-val" id="infoGithub">—</span>
-        <button class="btn-token visible" id="btnGithubConnect" onclick="openGithubConnectModal()" title="Mit GitHub (Copilot) verbinden">Verbinden</button>
       </div>
       <div class="info-row"><span class="info-key">DB-Tabellen</span><span class="info-val" id="infoTables">—</span></div>
     </div>
