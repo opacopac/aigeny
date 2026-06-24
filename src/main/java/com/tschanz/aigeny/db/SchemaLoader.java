@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
 import java.sql.*;
@@ -24,11 +25,13 @@ public class SchemaLoader {
     private static final Logger log = LoggerFactory.getLogger(SchemaLoader.class);
 
     private final AigenyProperties props;
+    private final Environment env;
     private volatile int tableCount = 0;
     private boolean dbReachable = false;
 
-    public SchemaLoader(AigenyProperties props) {
+    public SchemaLoader(AigenyProperties props, Environment env) {
         this.props = props;
+        this.env   = env;
     }
 
     /** Load table count automatically on startup if DB is configured. */
@@ -43,6 +46,15 @@ public class SchemaLoader {
         } else {
             log.info("DB not configured - skipping table count");
         }
+
+        String port = env.getProperty("server.port", "8080");
+        String url  = "http://localhost:" + port;
+        System.out.println();
+        System.out.println("==========================================");
+        System.out.println("  AIgeny is ready!");
+        System.out.println("  Open a browser at " + url);
+        System.out.println("==========================================");
+        System.out.println();
     }
 
     /** Reconnects and refreshes the table count. */
