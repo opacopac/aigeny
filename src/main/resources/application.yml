@@ -49,6 +49,7 @@ aigeny:
     url: ""
     username: ""
     password: ""   # or AIGENY_DB_PASSWORD_FILE for Docker secrets
+    schema: ""     # optional: Oracle schema if different from username (e.g. username=readonly_user, schema=MYAPP)
 
   jira:
     base-url: ""   # e.g. https://jira.example.com  – token entered via UI

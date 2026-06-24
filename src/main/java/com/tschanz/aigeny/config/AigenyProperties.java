@@ -115,6 +115,13 @@ public class AigenyProperties {
         private String url = "";
         private String username = "";
         private String password = "";
+        /**
+         * Optional Oracle schema to set as CURRENT_SCHEMA for the session.
+         * When blank the username is used as the schema (Oracle default).
+         * Set this when the DB user and the data schema are different,
+         * e.g. username=READONLY_USER, schema=NOVAP_INTE.
+         */
+        private String schema = "";
 
         public String getUrl() { return url; }
         public void setUrl(String url) { this.url = url; }
@@ -122,6 +129,17 @@ public class AigenyProperties {
         public void setUsername(String username) { this.username = username; }
         public String getPassword() { return password; }
         public void setPassword(String password) { this.password = password; }
+        public String getSchema() { return schema; }
+        public void setSchema(String schema) { this.schema = schema; }
+
+        /**
+         * Returns the effective Oracle schema name.
+         * Uses the explicitly configured schema if set, otherwise falls back to the username
+         * (in Oracle the username equals the schema by default).
+         */
+        public String getEffectiveSchema() {
+            return (schema != null && !schema.isBlank()) ? schema : username;
+        }
     }
 
     public static class Jira {

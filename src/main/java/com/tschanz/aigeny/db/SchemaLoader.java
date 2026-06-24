@@ -61,10 +61,17 @@ public class SchemaLoader {
         hc.setConnectionTimeout(10_000);
         hc.setReadOnly(true);
         hc.setPoolName("AIgeny-Schema");
+        // If a dedicated schema is configured (different from the login user),
+        // switch the Oracle session schema for accurate table counting.
+        String effectiveSchema = db.getEffectiveSchema();
+        if (!effectiveSchema.isBlank() && !effectiveSchema.equalsIgnoreCase(db.getUsername())) {
+            hc.setConnectionInitSql("ALTER SESSION SET CURRENT_SCHEMA = " + effectiveSchema);
+            log.info("SchemaLoader: CURRENT_SCHEMA will be set to {}", effectiveSchema);
+        }
 
         try (HikariDataSource ds = new HikariDataSource(hc);
              Connection conn = ds.getConnection()) {
-            tableCount = countTables(conn);
+            tableCount = countTables(conn, effectiveSchema);
             dbReachable = true;
             log.info("DB reachable - {} accessible tables found", tableCount);
         }
@@ -72,11 +79,15 @@ public class SchemaLoader {
 
     public int getTableCount() { return tableCount; }
 
-    private int countTables(Connection conn) {
+    private int countTables(Connection conn, String schema) {
+        // Filter by owner when a schema is known, so the count reflects only that schema.
+        String ownerFilter = (schema != null && !schema.isBlank())
+                ? " AND owner = '" + schema.toUpperCase() + "'" : "";
         String sql = """
             SELECT COUNT(*) FROM all_tables
             WHERE tablespace_name = 'USERS'
-            AND table_name NOT LIKE 'HTE!_%' ESCAPE '!'
+            """ + ownerFilter + """
+            \nAND table_name NOT LIKE 'HTE!_%' ESCAPE '!'
             AND table_name NOT LIKE 'WWV!_%' ESCAPE '!'
             """;
         try (PreparedStatement ps = conn.prepareStatement(sql);

@@ -61,6 +61,13 @@ public class OracleDbTool implements Tool {
                 hc.setConnectionTimeout(15_000);
                 hc.setReadOnly(true);
                 hc.setPoolName("AIgeny-Oracle");
+                // If a dedicated schema is configured (different from the login user),
+                // switch the Oracle session schema so unqualified table references work.
+                String effectiveSchema = db.getEffectiveSchema();
+                if (!effectiveSchema.isBlank() && !effectiveSchema.equalsIgnoreCase(db.getUsername())) {
+                    hc.setConnectionInitSql("ALTER SESSION SET CURRENT_SCHEMA = " + effectiveSchema);
+                    log.info("Oracle pool: CURRENT_SCHEMA will be set to {}", effectiveSchema);
+                }
                 pool = new HikariDataSource(hc);
                 log.info("Oracle connection pool created");
             } catch (Exception e) {
