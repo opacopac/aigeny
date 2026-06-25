@@ -6,14 +6,13 @@
    ───────────────────────────────────────────────────────────────────────── */
 
 import { HalEyeAnimator } from './hal-eye.js';
-import { renderMarkdown } from './markdown.js';
+import { initChat, appendMessage } from './chat.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let isThinking = false;
 let hasExportData = false;
-let currentAbortController = null;
-const JIRA_TOKEN_KEY = 'aigeny.jiraToken';
-const JIRA_WRITE_KEY = 'aigeny.jiraWriteEnabled';
+const JIRA_TOKEN_KEY      = 'aigeny.jiraToken';
+const JIRA_WRITE_KEY      = 'aigeny.jiraWriteEnabled';
 const BITBUCKET_TOKEN_KEY = 'aigeny.bitbucketToken';
 
 // ── HAL Eye ────────────────────────────────────────────────────────────────
@@ -24,162 +23,6 @@ const _halAnimator = new HalEyeAnimator(
 );
 _halAnimator.start(() => isThinking);
 
-// ── Chat rendering ─────────────────────────────────────────────────────────
-
-function appendMessage(role, text) {
-  const container = document.getElementById('chatMessages');
-  const div = document.createElement('div');
-  div.className = 'message ' + role;
-
-  const header = document.createElement('div');
-  header.className = 'message-header';
-  const dot = document.createElement('span');
-  dot.className = 'dot';
-  const name = document.createElement('span');
-  name.textContent = role === 'user' ? 'Du' : 'AIgeny';
-  header.append(dot, name);
-
-  const bubble = document.createElement('div');
-  bubble.className = 'message-bubble';
-  bubble.innerHTML = renderMarkdown(text);
-
-  div.append(header, bubble);
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-  return div;
-}
-
-function showTypingIndicator() {
-  const container = document.getElementById('chatMessages');
-  const div = document.createElement('div');
-  div.id = 'typingIndicator';
-  div.className = 'message aigeny';
-
-  const header = document.createElement('div');
-  header.className = 'message-header';
-  const dot = document.createElement('span'); dot.className = 'dot';
-  const name = document.createElement('span'); name.textContent = 'AIgeny';
-  header.append(dot, name);
-
-  const bubble = document.createElement('div');
-  bubble.className = 'message-bubble';
-  bubble.innerHTML =
-    '<div class="typing-indicator" id="typingDots"><span></span><span></span><span></span></div>' +
-    '<ul class="tool-call-list" id="toolCallList"></ul>';
-
-  div.append(header, bubble);
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-}
-
-function updateTypingIndicator(toolName, description) {
-  const list = document.getElementById('toolCallList');
-  if (!list) return;
-  const li = document.createElement('li');
-  li.className = 'tool-call-item';
-  const nameSpan = document.createElement('span');
-  nameSpan.className = 'tool-call-name';
-  nameSpan.textContent = toolName;
-  const descSpan = document.createElement('span');
-  descSpan.className = 'tool-call-desc';
-  descSpan.textContent = description;
-  li.append(nameSpan, descSpan);
-  list.appendChild(li);
-  document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
-}
-
-/**
- * Called when the final answer arrives:
- * - Hides the bouncing dots
- * - Keeps the tool-call list visible (if any calls were made)
- * - Removes IDs from finalized elements so the next request gets fresh ones
- * - If no calls were made at all, removes the indicator entirely
- */
-function finalizeTypingIndicator() {
-  const indicator = document.getElementById('typingIndicator');
-  const dots      = document.getElementById('typingDots');
-  const list      = document.getElementById('toolCallList');
-
-  if (dots) dots.style.display = 'none';
-
-  if (list && list.children.length === 0) {
-    if (indicator) indicator.remove();
-  } else {
-    // Strip IDs so future getElementById calls find the new elements, not these
-    if (indicator) indicator.removeAttribute('id');
-    if (dots)      dots.removeAttribute('id');
-    if (list)      list.removeAttribute('id');
-  }
-}
-
-function removeTypingIndicator() {
-  const el = document.getElementById('typingIndicator');
-  if (el) el.remove();
-}
-
-
-// ── Jira Write Confirmation ────────────────────────────────────────────────
-
-function showJiraConfirmation(pendingAction) {
-  const container = document.getElementById('chatMessages');
-  const div = document.createElement('div');
-  div.className = 'message aigeny jira-confirm-msg';
-  div.id = 'jiraConfirmBlock';
-
-  const header = document.createElement('div');
-  header.className = 'message-header';
-  const dot = document.createElement('span'); dot.className = 'dot';
-  const name = document.createElement('span'); name.textContent = 'AIgeny';
-  header.append(dot, name);
-
-  const bubble = document.createElement('div');
-  bubble.className = 'message-bubble';
-
-  const descHtml = renderMarkdown(
-    '⚠️ **Jira Schreibaktion' + (pendingAction.description.startsWith('**') ? 'en' : '') + ' – Bestätigung erforderlich!**\n\n' +
-    pendingAction.description + '\n\nSoll ich diese Aktion' + (pendingAction.description.startsWith('**') ? 'en' : '') + ' wirklich ausführen, Towarischtsch?'
-  );
-
-  const btnRow = document.createElement('div');
-  btnRow.className = 'jira-confirm-buttons';
-
-  const confirmBtn = document.createElement('button');
-  confirmBtn.className = 'btn btn-confirm';
-  confirmBtn.textContent = '✔ Da! Ausführen';
-  confirmBtn.onclick = () => executeJiraAction(div);
-
-  const cancelBtn = document.createElement('button');
-  cancelBtn.className = 'btn btn-cancel';
-  cancelBtn.textContent = '✗ Njet! Abbrechen';
-  cancelBtn.onclick = () => cancelJiraAction(div);
-
-  btnRow.append(confirmBtn, cancelBtn);
-  bubble.innerHTML = descHtml;
-  bubble.appendChild(btnRow);
-
-  div.append(header, bubble);
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-}
-
-async function executeJiraAction(confirmBlock) {
-  confirmBlock.querySelectorAll('button').forEach(b => b.disabled = true);
-  try {
-    const res  = await fetch('/api/jira/confirm', { method: 'POST' });
-    const data = await res.json();
-    confirmBlock.remove();
-    appendMessage('aigeny', data.result || 'Aktion ausgeführt, da!');
-  } catch (err) {
-    confirmBlock.remove();
-    appendMessage('aigeny', 'Njet! Netzwerkfehler: ' + err.message);
-  }
-}
-
-async function cancelJiraAction(confirmBlock) {
-  await fetch('/api/jira/cancel', { method: 'POST' }).catch(() => {});
-  confirmBlock.remove();
-  appendMessage('aigeny', 'Njet! Aktion wurde abgebrochen, Towarischtsch. Choroscho, keine Änderungen gemacht, da!');
-}
 
 // ── Jira Write Mode ────────────────────────────────────────────────────────
 
@@ -502,111 +345,8 @@ async function refreshGithubInfoBox() {
 }
 
 
-
-async function sendMessage() {
-  if (isThinking) return;
-  const input = document.getElementById('userInput');
-  const message = input.value.trim();
-  if (!message) return;
-
-  input.value = '';
-  appendMessage('user', message);
-  setThinking(true);
-  showTypingIndicator();
-
-  currentAbortController = new AbortController();
-
-  try {
-    const response = await fetch('/api/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
-      signal: currentAbortController.signal
-    });
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      // SSE events are separated by double newline
-      const parts = buffer.split('\n\n');
-      buffer = parts.pop(); // keep incomplete last chunk
-
-      for (const part of parts) {
-        const dataLine = part.split('\n').find(l => l.startsWith('data:'));
-        if (!dataLine) continue;
-        let data;
-        try { data = JSON.parse(dataLine.slice(5).trim()); } catch { continue; }
-
-        if (data.type === 'tool_call') {
-          updateTypingIndicator(data.toolName, data.description);
-        } else if (data.type === 'intermediate') {
-          // LLM sent text alongside tool calls - show it as an intermediate message
-          finalizeTypingIndicator();
-          appendMessage('aigeny', data.response);
-          showTypingIndicator();
-        } else if (data.type === 'done') {
-          finalizeTypingIndicator();
-          if (data.response) appendMessage('aigeny', data.response);
-          if (data.pendingAction) showJiraConfirmation(data.pendingAction);
-          if (data.hasExport) { hasExportData = true; setExportButtons(true); }
-        } else if (data.type === 'cancelled') {
-          removeTypingIndicator();
-          appendMessage('aigeny', '_Abgebrochen, Towarischtsch. AIgeny steht wieder bereit._');
-        } else if (data.type === 'error') {
-          removeTypingIndicator();
-          appendMessage('aigeny', 'Njet! Fehler, Towarischtsch: ' + (data.message || '?'));
-        }
-      }
-    }
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      // fetch was aborted by stopGeneration() – backend was already notified separately
-      removeTypingIndicator();
-    } else {
-      removeTypingIndicator();
-      appendMessage('aigeny', 'Njet! Netzwerkfehler, Towarischtsch: ' + err.message);
-    }
-  } finally {
-    currentAbortController = null;
-    setThinking(false);
-  }
-}
-
-async function stopGeneration() {
-  if (!isThinking) return;
-  // Signal the backend to stop the orchestration loop.
-  // We intentionally do NOT abort the fetch here – that would forcibly close the TCP
-  // connection and cause an IOException on the server side when it tries to write the
-  // final 'cancelled' event. Instead we let the backend close the stream gracefully.
-  fetch('/api/chat/cancel', { method: 'POST' }).catch(() => {});
-}
-
-// Enter = send, Shift+Enter = new line
-document.getElementById('userInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-});
-
 // ── Controls ───────────────────────────────────────────────────────────────
 
-async function clearChat() {
-  await fetch('/api/chat/clear', { method: 'POST' });
-  document.getElementById('chatMessages').innerHTML = '';
-  hasExportData = false;
-  setExportButtons(false);
-  // Greeting
-  appendMessage('aigeny',
-    'Da, Chat wurde geleert, Towarischtsch! AIgeny ist bereit für neue Fragen. ' +
-    'Was möchtest du heute aus Datenbank wissen?');
-}
 
 async function reloadSchema() {
   const btn = event.target;
@@ -630,9 +370,6 @@ async function reloadSchema() {
   }
 }
 
-function exportData(format) {
-  window.location.href = '/api/export/' + format;
-}
 
 // ── State helpers ──────────────────────────────────────────────────────────
 
@@ -742,13 +479,29 @@ async function loadStatus() {
 // ── Init ───────────────────────────────────────────────────────────────────
 
 window.addEventListener('load', () => {
+  // Wire up chat module with app-level state callbacks
+  initChat({
+    isThinkingFn:       () => isThinking,
+    setThinkingFn:      (v) => setThinking(v),
+    setExportEnabledFn: (v) => { hasExportData = v; setExportButtons(v); },
+  });
+
+  // Expose functions called from HTML onclick attributes.
+  // These will be replaced with addEventListener when each module is extracted.
+  Object.assign(window, {
+    openGithubConnectModal, closeGithubConnectModal,
+    startGithubConnect, copyGithubUserCode, disconnectGithub,
+    openJiraTokenModal, closeJiraTokenModal, saveJiraToken, clearJiraToken,
+    openBitbucketTokenModal, closeBitbucketTokenModal, saveBitbucketToken, clearBitbucketToken,
+    reloadSchema, toggleJiraWriteMode,
+  });
+
   syncJiraTokenToSession()
     .then(() => syncJiraWriteModeToSession())
     .then(() => syncBitbucketTokenToSession())
     .then(() => loadStatus());
   setInterval(loadStatus, 15000);
 
-  // Welcome message
   appendMessage('aigeny',
     'Privet Towarischtsch! Ich bin AIgeny - dein persönlicher Daten-Assistent mit russische Seele.\n\n' +
     'Du kannst mir Fragen zur Datenbank stellen, Berichte anfordern oder Jira-Tickets suchen.\n\n' +

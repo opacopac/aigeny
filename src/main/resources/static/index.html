@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/css/style.css"/>
   <link rel="stylesheet" href="/css/hal-eye.css"/>
   <link rel="stylesheet" href="/css/markdown.css"/>
+  <link rel="stylesheet" href="/css/chat.css"/>
 </head>
 <body>
 
@@ -75,20 +76,20 @@
       <textarea id="userInput"
                 placeholder="Stell AIgeny eine Frage zur Datenbank oder zu Jira, Towarischtsch..."
                 rows="3"></textarea>
-      <button class="btn-send" id="sendBtn" onclick="sendMessage()">
+      <button class="btn-send" id="sendBtn">
         &#9654; Senden
       </button>
-      <button class="btn-stop" id="stopBtn" onclick="stopGeneration()" style="display:none">
+      <button class="btn-stop" id="stopBtn" style="display:none">
         &#9632; Stop
       </button>
     </div>
 
     <!-- Export & control bar -->
     <div class="action-bar">
-      <button class="btn-export" id="btnCsv" disabled onclick="exportData('csv')" title="Als CSV herunterladen">
+      <button class="btn-export" id="btnCsv" disabled title="Als CSV herunterladen">
         &#8595; CSV exportieren
       </button>
-      <button class="btn-secondary" onclick="clearChat()">&#10005; Chat leeren (z.B. neues Thema)</button>
+      <button class="btn-secondary" id="btnClearChat">&#10005; Chat leeren (z.B. neues Thema)</button>
     </div>
   </section>
 
