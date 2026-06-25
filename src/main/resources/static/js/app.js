@@ -10,22 +10,40 @@ import { initChat, appendMessage } from './chat.js';
 import { GithubConnector } from './github-connect.js';
 import { TokenModal } from './token-modal.js';
 import { JiraWriteMode } from './jira-write-mode.js';
+import { StatusPanel } from './status-panel.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let isThinking = false;
 let hasExportData = false;
 
 // ── HAL Eye ────────────────────────────────────────────────────────────────
-// Canvas elements are available because ES-module scripts are deferred by default.
 const _halAnimator = new HalEyeAnimator(
   document.getElementById('halEye'),
   document.getElementById('halEyeMini')
 );
 _halAnimator.start(() => isThinking);
 
+// ── Status Panel ───────────────────────────────────────────────────────────
+const _statusPanel = new StatusPanel({
+  infoLlm:       document.getElementById('infoLlm'),
+  infoModel:     document.getElementById('infoModel'),
+  infoTables:    document.getElementById('infoTables'),
+  infoDb:        document.getElementById('infoDb'),
+  infoJira:      document.getElementById('infoJira'),
+  btnJiraToken:  document.getElementById('btnJiraToken'),
+  jiraWriteRow:  document.getElementById('jiraWriteToggleRow'),
+  infoBitbucket: document.getElementById('infoBitbucket'),
+  btnBitbucket:  document.getElementById('btnBitbucketToken'),
+  githubInfoRow: document.getElementById('githubInfoRow'),
+  statusDot:     document.getElementById('statusDot'),
+  statusText:    document.getElementById('statusText'),
+  sendBtn:       document.getElementById('sendBtn'),
+  stopBtn:       document.getElementById('stopBtn'),
+  halStatusText: document.getElementById('halStatusText'),
+  btnCsv:        document.getElementById('btnCsv'),
+});
 
 // ── Jira Write Mode ────────────────────────────────────────────────────────
-
 const _jiraWriteMode = new JiraWriteMode(
   'aigeny.jiraWriteEnabled',
   '/api/jira/write-mode',
@@ -77,7 +95,6 @@ document.addEventListener('keydown', e => {
   }
 });
 
-
 // ── GitHub Copilot Connect (OAuth Device Flow) ─────────────────────────────
 
 const _githubConnector = new GithubConnector({
@@ -99,7 +116,6 @@ function startGithubConnect()           { _githubConnector.startConnect(); }
 function copyGithubUserCode()           { _githubConnector.copyUserCode(); }
 function disconnectGithub()             { _githubConnector.disconnect(); }
 async function refreshGithubInfoBox()   { await _githubConnector.refreshInfoBox(); }
-
 
 // ── Controls ───────────────────────────────────────────────────────────────
 
@@ -131,23 +147,11 @@ async function reloadSchema() {
 
 function setThinking(thinking) {
   isThinking = thinking;
-  document.getElementById('sendBtn').disabled = thinking;
-  document.getElementById('sendBtn').style.display = thinking ? 'none' : '';
-  document.getElementById('stopBtn').style.display = thinking ? '' : 'none';
-  document.getElementById('halStatusText').textContent =
-    thinking ? 'AIgeny mysleet... (denkt nach)' : 'Bereit, Towarischtsch.';
-  setStatusIndicator(thinking ? 'busy' : 'ok', thinking ? 'Denkt nach...' : 'Bereit');
+  _statusPanel.setThinking(thinking);
 }
 
 function setExportButtons(enabled) {
-  document.getElementById('btnCsv').disabled = !enabled;
-}
-
-function setStatusIndicator(type, text) {
-  const dot  = document.getElementById('statusDot');
-  const span = document.getElementById('statusText');
-  dot.className  = 'status-dot ' + type;
-  span.textContent = text;
+  _statusPanel.setExportEnabled(enabled);
 }
 
 // ── Status polling ─────────────────────────────────────────────────────────
@@ -156,79 +160,12 @@ async function loadStatus() {
   try {
     const res  = await fetch('/api/status');
     const data = await res.json();
-
-    document.getElementById('infoLlm').textContent   = data.llmProvider  || '—';
-    document.getElementById('infoModel').textContent = data.llmModel     || '—';
-    document.getElementById('infoTables').textContent= data.schemaTables || '0';
-
-    const githubRow = document.getElementById('githubInfoRow');
-    if (githubRow) {
-      githubRow.style.display = (data.llmProvider === 'github-copilot') ? '' : 'none';
-    }
-
-    const dbEl = document.getElementById('infoDb');
-    if (data.dbConfigured) {
-      const user = data.dbUsername ? ` (${data.dbUsername})` : '';
-      dbEl.textContent = 'Connected' + user;
-      dbEl.className   = 'info-val ok';
-    } else {
-      dbEl.textContent = 'Not configured';
-      dbEl.className   = 'info-val error';
-    }
-
-    const jiraEl  = document.getElementById('infoJira');
-    const jiraBtn = document.getElementById('btnJiraToken');
-    const jiraWriteRow = document.getElementById('jiraWriteToggleRow');
-    if (data.jiraBaseUrlConfigured) {
-      if (data.jiraConfigured) {
-        jiraEl.textContent = 'Connected';
-        jiraEl.className   = 'info-val ok';
-        jiraBtn.textContent = '✎ Token ändern';
-        jiraBtn.classList.add('visible');
-      } else {
-        jiraEl.textContent = 'Kein Token';
-        jiraEl.className   = 'info-val error';
-        jiraBtn.textContent = '+ Token eingeben';
-        jiraBtn.classList.add('visible');
-      }
-      if (jiraWriteRow) jiraWriteRow.style.display = 'flex';
-    } else {
-      jiraEl.textContent = 'Not configured';
-      jiraEl.className   = 'info-val error';
-      jiraBtn.classList.remove('visible');
-      if (jiraWriteRow) jiraWriteRow.style.display = 'none';
-    }
-
-    const bbEl  = document.getElementById('infoBitbucket');
-    const bbBtn = document.getElementById('btnBitbucketToken');
-    if (data.bitbucketBaseUrlConfigured) {
-      if (data.bitbucketConfigured) {
-        bbEl.textContent = 'Connected';
-        bbEl.className   = 'info-val ok';
-        bbBtn.textContent = '✎ Token ändern';
-        bbBtn.classList.add('visible');
-      } else {
-        bbEl.textContent = 'Kein Token';
-        bbEl.className   = 'info-val error';
-        bbBtn.textContent = '+ Token eingeben';
-        bbBtn.classList.add('visible');
-      }
-    } else {
-      bbEl.textContent = 'Not configured';
-      bbEl.className   = 'info-val error';
-      if (bbBtn) bbBtn.classList.remove('visible');
-    }
-
-    if (data.hasExport) {
-      hasExportData = true;
-      setExportButtons(true);
-    }
-
+    _statusPanel.applyStatus(data);
+    if (data.hasExport) { hasExportData = true; setExportButtons(true); }
     refreshGithubInfoBox();
-
-    if (!isThinking) setStatusIndicator('ok', 'Ready');
+    if (!isThinking) _statusPanel.setStatusIndicator('ok', 'Ready');
   } catch {
-    if (!isThinking) setStatusIndicator('error', 'Server nicht erreichbar');
+    if (!isThinking) _statusPanel.setStatusIndicator('error', 'Server nicht erreichbar');
   }
 }
 
