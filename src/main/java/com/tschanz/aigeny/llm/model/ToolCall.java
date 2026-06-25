@@ -13,6 +13,15 @@ public class ToolCall {
     private String type = "function";
     private FunctionCall function;
 
+    // Default constructor for Jackson
+    public ToolCall() {}
+
+    // Constructor for testing/manual creation
+    public ToolCall(String id, FunctionCall function) {
+        this.id = id;
+        this.function = function;
+    }
+
     public String getId()         { return id; }
     public void   setId(String id){ this.id = id; }
 
@@ -26,6 +35,15 @@ public class ToolCall {
     public static class FunctionCall {
         private String name;
         private String arguments; // JSON string
+
+        // Default constructor for Jackson
+        public FunctionCall() {}
+
+        // Constructor for testing/manual creation
+        public FunctionCall(String name, String arguments) {
+            this.name = name;
+            this.arguments = arguments;
+        }
 
         public String getName()      { return name; }
         public void   setName(String n){ this.name = n; }
