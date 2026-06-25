@@ -96,7 +96,7 @@ public class AddJiraCommentTool implements Tool {
 
         String humanDesc = "Kommentar zu Jira-Ticket **" + issueKey + "** hinzufügen:\n> " + comment;
 
-        PendingJiraActionContext.set(new PendingJiraAction(
+        PendingJiraActionContext.add(new PendingJiraAction(
                 PendingJiraAction.ActionType.ADD_COMMENT, issueKey,
                 Map.of(ARG_COMMENT, comment), humanDesc));
 

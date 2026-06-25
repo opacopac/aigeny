@@ -279,8 +279,8 @@ function showJiraConfirmation(pendingAction) {
   bubble.className = 'message-bubble';
 
   const descHtml = renderMarkdown(
-    '⚠️ **Jira Schreibaktion – Bestätigung erforderlich!**\n\n' +
-    pendingAction.description + '\n\nSoll ich diese Aktion wirklich ausführen, Towarischtsch?'
+    '⚠️ **Jira Schreibaktion' + (pendingAction.description.startsWith('**') ? 'en' : '') + ' – Bestätigung erforderlich!**\n\n' +
+    pendingAction.description + '\n\nSoll ich diese Aktion' + (pendingAction.description.startsWith('**') ? 'en' : '') + ' wirklich ausführen, Towarischtsch?'
   );
 
   const btnRow = document.createElement('div');

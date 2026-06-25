@@ -8,7 +8,7 @@ import java.util.Map;
  */
 public class PendingJiraAction implements Serializable {
 
-    public enum ActionType { UPDATE_ISSUE, ADD_COMMENT }
+    public enum ActionType { UPDATE_ISSUE, ADD_COMMENT, CREATE_ISSUE }
 
     private final ActionType actionType;
     private final String issueKey;

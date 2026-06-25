@@ -125,7 +125,7 @@ public class QueryJiraTool implements Tool {
 
     private ToolResult fetchIssueByKey(String issueKey, String baseUrl, String authHeader) throws Exception {
         String url = baseUrl + "/rest/api/2/issue/" + URLEncoder.encode(issueKey, StandardCharsets.UTF_8)
-                + "?fields=summary,status,assignee,priority,issuetype,created,updated,description,comment,attachment,issuelinks";
+                + "?fields=summary,status,assignee,priority,issuetype,created,updated,description,comment,attachment,issuelinks,subtasks";
         log.info(">> JIRA REQUEST  issueKey={}", issueKey);
         log.info("   URL: {}", url);
 
@@ -230,6 +230,16 @@ public class QueryJiraTool implements Tool {
                       .append(inward.path("fields").path("summary").asText(""))
                       .append(" [").append(inward.path("fields").path("status").path("name").asText("-")).append("]\n");
                 }
+            }
+        }
+
+        JsonNode subtasks = fields.path("subtasks");
+        if (subtasks.isArray() && !subtasks.isEmpty()) {
+            sb.append("\n**Sub-Tasks (").append(subtasks.size()).append("):**\n");
+            for (JsonNode st : subtasks) {
+                sb.append("- **").append(st.path("key").asText()).append("**: ")
+                  .append(st.path("fields").path("summary").asText(""))
+                  .append(" [").append(st.path("fields").path("status").path("name").asText("-")).append("]\n");
             }
         }
 

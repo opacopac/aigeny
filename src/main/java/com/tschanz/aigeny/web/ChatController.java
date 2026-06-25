@@ -138,16 +138,28 @@ public class ChatController {
                     session.setAttribute(SESSION_RESULT, result.lastToolResult().getQueryResult());
                 }
 
-                // Check for a pending Jira write action queued by a tool
-                PendingJiraAction pending = PendingJiraActionContext.get();
-                if (pending != null) {
-                    session.setAttribute(SESSION_PENDING_ACTION, pending);
+                // Check for pending Jira write actions queued by tools
+                List<PendingJiraAction> pendingActions142 = PendingJiraActionContext.get();
+                if (pendingActions142 != null && !pendingActions142.isEmpty()) {
+                    session.setAttribute(SESSION_PENDING_ACTION, pendingActions142);
+                    StringBuilder combinedDesc = new StringBuilder();
+                    if (pendingActions142.size() == 1) {
+                        combinedDesc.append(pendingActions142.get(0).getHumanDescription());
+                    } else {
+                        combinedDesc.append("**").append(pendingActions142.size())
+                                .append(" Aktionen werden ausgeführt:**\n\n");
+                        for (int i = 0; i < pendingActions142.size(); i++) {
+                            combinedDesc.append("**").append(i + 1).append(".** ")
+                                    .append(pendingActions142.get(i).getHumanDescription())
+                                    .append("\n\n");
+                        }
+                    }
                     return ResponseEntity.ok(Map.of(
-                            KEY_RESPONSE,      result.response(),
-                            KEY_HAS_EXPORT,    result.hasExportData(),
+                            KEY_RESPONSE,       result.response(),
+                            KEY_HAS_EXPORT,     result.hasExportData(),
                             KEY_PENDING_ACTION, Map.of(
-                                    KEY_DESCRIPTION, pending.getHumanDescription(),
-                                    KEY_ISSUE_KEY,   pending.getIssueKey()
+                                    KEY_DESCRIPTION, combinedDesc.toString().trim(),
+                                    KEY_ISSUE_KEY,   ""
                             )
                     ));
                 }
@@ -235,16 +247,30 @@ public class ChatController {
                     session.setAttribute(SESSION_RESULT, result.lastToolResult().getQueryResult());
                 }
 
-                PendingJiraAction pending = PendingJiraActionContext.get();
+                List<PendingJiraAction> pendingActions = PendingJiraActionContext.get();
                 Map<String, Object> payload = new HashMap<>();
                 payload.put("type", "done");
                 payload.put(KEY_RESPONSE, result.response());
                 payload.put(KEY_HAS_EXPORT, result.hasExportData());
-                if (pending != null) {
-                    session.setAttribute(SESSION_PENDING_ACTION, pending);
-                    payload.put(KEY_PENDING_ACTION, Map.of(
-                            KEY_DESCRIPTION, pending.getHumanDescription(),
-                            KEY_ISSUE_KEY,   pending.getIssueKey()));
+                if (pendingActions != null && !pendingActions.isEmpty()) {
+                    session.setAttribute(SESSION_PENDING_ACTION, pendingActions);
+                    // Build a combined description for the confirmation dialog
+                    StringBuilder combinedDesc = new StringBuilder();
+                    if (pendingActions.size() == 1) {
+                        combinedDesc.append(pendingActions.get(0).getHumanDescription());
+                    } else {
+                        combinedDesc.append("**").append(pendingActions.size())
+                                .append(" Aktionen werden ausgeführt:**\n\n");
+                        for (int i = 0; i < pendingActions.size(); i++) {
+                            combinedDesc.append("**").append(i + 1).append(".** ")
+                                    .append(pendingActions.get(i).getHumanDescription())
+                                    .append("\n\n");
+                        }
+                    }
+                    Map<String, Object> pendingPayload = new HashMap<>();
+                    pendingPayload.put(KEY_DESCRIPTION, combinedDesc.toString().trim());
+                    pendingPayload.put(KEY_ISSUE_KEY, "");
+                    payload.put(KEY_PENDING_ACTION, pendingPayload);
                 }
                 emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(payload)));
                 emitter.complete();
@@ -280,8 +306,10 @@ public class ChatController {
 
     @PostMapping("/jira/confirm")
     public CompletableFuture<ResponseEntity<Map<String, Object>>> confirmJiraAction(HttpSession session) {
-        PendingJiraAction pending = (PendingJiraAction) session.getAttribute(SESSION_PENDING_ACTION);
-        if (pending == null) {
+        @SuppressWarnings("unchecked")
+        List<PendingJiraAction> pendingActions =
+                (List<PendingJiraAction>) session.getAttribute(SESSION_PENDING_ACTION);
+        if (pendingActions == null || pendingActions.isEmpty()) {
             return CompletableFuture.completedFuture(
                     ResponseEntity.ok(Map.of(KEY_RESULT, Messages.get(MSG_JIRA_NO_PENDING))));
         }
@@ -292,15 +320,21 @@ public class ChatController {
                     ResponseEntity.ok(Map.of(KEY_RESULT, Messages.get(MSG_JIRA_NO_TOKEN))));
         }
         final boolean writeEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
+        final List<PendingJiraAction> actions = pendingActions;
         return CompletableFuture.supplyAsync(() -> {
             JiraWriteContext.set(writeEnabled);
             try {
-                String result = jiraWriteExecutor.execute(pending, token);
-                return ResponseEntity.ok(Map.<String, Object>of(KEY_RESULT, result));
-            } catch (Exception e) {
-                log.error("Jira write failed", e);
-                return ResponseEntity.ok(Map.<String, Object>of(
-                        KEY_RESULT, Messages.get(MSG_JIRA_WRITE_ERROR, e.getMessage())));
+                StringBuilder combined = new StringBuilder();
+                for (PendingJiraAction action : actions) {
+                    try {
+                        String res = jiraWriteExecutor.execute(action, token);
+                        combined.append(res).append("\n");
+                    } catch (Exception e) {
+                        log.error("Jira write failed for action {}", action.getActionType(), e);
+                        combined.append(Messages.get(MSG_JIRA_WRITE_ERROR, e.getMessage())).append("\n");
+                    }
+                }
+                return ResponseEntity.ok(Map.<String, Object>of(KEY_RESULT, combined.toString().trim()));
             } finally {
                 JiraWriteContext.clear();
             }

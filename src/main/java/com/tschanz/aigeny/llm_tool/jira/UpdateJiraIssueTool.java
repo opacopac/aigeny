@@ -119,7 +119,7 @@ public class UpdateJiraIssueTool implements Tool {
         if (!summary.isBlank())     desc.append(Messages.get(MSG_DESC_SUMMARY,  summary));
         if (!description.isBlank()) desc.append(Messages.get(MSG_DESC_DESC, description));
 
-        PendingJiraActionContext.set(new PendingJiraAction(
+        PendingJiraActionContext.add(new PendingJiraAction(
                 PendingJiraAction.ActionType.UPDATE_ISSUE, issueKey, params, desc.toString()));
 
         log.info("Queued update_jira_issue for {} confirmation", issueKey);
