@@ -1,6 +1,5 @@
 package com.tschanz.aigeny.web;
 
-import com.tschanz.aigeny.config.AigenyProperties;
 import com.tschanz.aigeny.db.SchemaLoader;
 import com.tschanz.aigeny.llm.model.Message;
 import com.tschanz.aigeny.orchestration.ChatResult;
@@ -22,11 +21,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * REST controller for the chat interface and status endpoints.
@@ -72,6 +69,7 @@ public class ChatController {
     private final TokenService tokenService;
     private final ChatSessionService sessionService;
     private final StatusAggregatorService statusAggregator;
+    private final ChatStreamingService streamingService;
 
     public ChatController(OrchestrationService orchestration,
                           SchemaLoader schemaLoader,
@@ -79,7 +77,8 @@ public class ChatController {
                           ObjectMapper objectMapper,
                           TokenService tokenService,
                           ChatSessionService sessionService,
-                          StatusAggregatorService statusAggregator) {
+                          StatusAggregatorService statusAggregator,
+                          ChatStreamingService streamingService) {
         this.orchestration     = orchestration;
         this.schemaLoader      = schemaLoader;
         this.jiraWriteExecutor = jiraWriteExecutor;
@@ -87,6 +86,7 @@ public class ChatController {
         this.tokenService      = tokenService;
         this.sessionService    = sessionService;
         this.statusAggregator  = statusAggregator;
+        this.streamingService  = streamingService;
     }
 
     // ── POST /api/chat ──────────────────────────────────────────────────────
@@ -176,114 +176,15 @@ public class ChatController {
             HttpSession session) {
 
         String message = body.getOrDefault(REQ_MESSAGE, "").trim();
-        SseEmitter emitter = new SseEmitter(300_000L); // 5-min timeout
-
-        if (message.isEmpty()) {
-            CompletableFuture.runAsync(() -> {
-                try {
-                    emitter.send(SseEmitter.event().data(
-                            objectMapper.writeValueAsString(Map.of("type", "error", "message", Messages.get(MSG_ERROR_EMPTY_MESSAGE)))));
-                    emitter.complete();
-                } catch (Exception ex) { emitter.completeWithError(ex); }
-            });
-            return emitter;
-        }
-
         List<Message> history = sessionService.getOrCreateHistory(session);
-        final String jiraToken = tokenService.getEffectiveJiraToken(session);
-        final boolean jiraWriteEnabled = sessionService.isJiraWriteModeEnabled(session);
-        final String bitbucketToken = tokenService.getEffectiveBitbucketToken(session);
 
-        // Per-request cancellation flag – stored in session so /api/chat/cancel can flip it
-        AtomicBoolean cancelFlag = sessionService.createCancelFlag(session);
-        emitter.onCompletion(() -> cancelFlag.set(true));
-        emitter.onTimeout(()   -> cancelFlag.set(true));
-        emitter.onError(t      -> cancelFlag.set(true));
+        String jiraToken = tokenService.getEffectiveJiraToken(session);
+        boolean jiraWriteEnabled = sessionService.isJiraWriteModeEnabled(session);
+        String bitbucketToken = tokenService.getEffectiveBitbucketToken(session);
 
-        CompletableFuture.runAsync(() -> {
-            JiraTokenContext.set(jiraToken);
-            JiraWriteContext.set(jiraWriteEnabled);
-            BitbucketTokenContext.set(bitbucketToken);
-            PendingJiraActionContext.clear();
-            try {
-                ChatResult result = orchestration.chat(history, message, (toolName, description) -> {
-                    try {
-                        emitter.send(SseEmitter.event().data(
-                                objectMapper.writeValueAsString(Map.of(
-                                        "type", "tool_call",
-                                        "toolName", toolName,
-                                        "description", description))));
-                    } catch (Exception e) {
-                        log.warn("SSE tool_call send failed: {}", e.getMessage());
-                    }
-                }, (intermediateText) -> {
-                    try {
-                        emitter.send(SseEmitter.event().data(
-                                objectMapper.writeValueAsString(Map.of(
-                                        "type", "intermediate",
-                                        "response", intermediateText))));
-                    } catch (Exception e) {
-                        log.warn("SSE intermediate send failed: {}", e.getMessage());
-                    }
-                }, cancelFlag::get);
-
-                if (result.hasExportData()) {
-                    sessionService.setLastQueryResult(session, result.lastToolResult().getQueryResult());
-                }
-
-                List<PendingJiraAction> pendingActions = PendingJiraActionContext.get();
-                Map<String, Object> payload = new HashMap<>();
-                payload.put("type", "done");
-                payload.put(KEY_RESPONSE, result.response());
-                payload.put(KEY_HAS_EXPORT, result.hasExportData());
-                if (pendingActions != null && !pendingActions.isEmpty()) {
-                    sessionService.setPendingJiraActions(session, pendingActions);
-                    // Build a combined description for the confirmation dialog
-                    StringBuilder combinedDesc = new StringBuilder();
-                    if (pendingActions.size() == 1) {
-                        combinedDesc.append(pendingActions.get(0).getHumanDescription());
-                    } else {
-                        combinedDesc.append("**").append(pendingActions.size())
-                                .append(" Aktionen werden ausgeführt:**\n\n");
-                        for (int i = 0; i < pendingActions.size(); i++) {
-                            combinedDesc.append("**").append(i + 1).append(".** ")
-                                    .append(pendingActions.get(i).getHumanDescription())
-                                    .append("\n\n");
-                        }
-                    }
-                    Map<String, Object> pendingPayload = new HashMap<>();
-                    pendingPayload.put(KEY_DESCRIPTION, combinedDesc.toString().trim());
-                    pendingPayload.put(KEY_ISSUE_KEY, "");
-                    payload.put(KEY_PENDING_ACTION, pendingPayload);
-                }
-                emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(payload)));
-                emitter.complete();
-
-            } catch (InterruptedException ie) {
-                log.info("Chat stream cancelled by user for session {}", session.getId());
-                try {
-                    emitter.send(SseEmitter.event().data(
-                            objectMapper.writeValueAsString(Map.of("type", "cancelled"))));
-                    emitter.complete();
-                } catch (Exception ex) { emitter.completeWithError(ex); }
-            } catch (Exception e) {
-                log.error("Chat stream error", e);
-                try {
-                    String errMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                    emitter.send(SseEmitter.event().data(
-                            objectMapper.writeValueAsString(Map.of("type", "error", "message", errMsg))));
-                    emitter.complete();
-                } catch (Exception ex) { emitter.completeWithError(ex); }
-            } finally {
-                sessionService.clearCancelFlag(session);
-                JiraTokenContext.clear();
-                JiraWriteContext.clear();
-                BitbucketTokenContext.clear();
-                PendingJiraActionContext.clear();
-            }
-        });
-
-        return emitter;
+        return streamingService.streamChat(
+                message, history, session, jiraToken, jiraWriteEnabled, bitbucketToken
+        );
     }
 
     // ── POST /api/jira/confirm ────────────────────────────────────────────────
