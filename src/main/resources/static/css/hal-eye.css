@@ -1,0 +1,45 @@
+/* ── HAL Eye Panel & Canvas ──────────────────────────────────────────────
+   Styles that are exclusively owned by the HAL 9000 eye component.
+   All other layout / theming lives in style.css.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Side-panel container */
+.hal-panel {
+  width: 310px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 16px;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  gap: 12px;
+  overflow-y: auto;
+}
+
+/* Main canvas element */
+#halEye { display: block; }
+
+/* "AIgeny" label below the eye */
+.hal-label {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--red);
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px var(--red-glow);
+}
+
+/* Status text ("Bereit, Towarischtsch.") */
+.hal-status {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  font-style: italic;
+  min-height: 32px;
+}
+
+/* Hide the panel on small screens */
+@media (max-width: 700px) {
+  .hal-panel { display: none; }
+}
+

@@ -1,10 +1,11 @@
 /* ─────────────────────────────────────────────────────────────────────────
    AIgeny - frontend JavaScript
-   - HAL 9000 eye animation (Canvas)
    - Chat send / receive
    - Export buttons
    - Status polling
    ───────────────────────────────────────────────────────────────────────── */
+
+import { HalEyeAnimator } from './hal-eye.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let isThinking = false;
@@ -15,93 +16,12 @@ const JIRA_WRITE_KEY = 'aigeny.jiraWriteEnabled';
 const BITBUCKET_TOKEN_KEY = 'aigeny.bitbucketToken';
 
 // ── HAL Eye ────────────────────────────────────────────────────────────────
-
-function drawHalEye(canvasId, size, thinking) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const cx = size / 2, cy = size / 2;
-  const outerR = size * 0.46;
-  const midR   = size * 0.34;
-  const innerR = size * 0.18;
-  const pupilR = size * 0.09;
-
-  ctx.clearRect(0, 0, size, size);
-
-  // Outer dark ring
-  ctx.beginPath();
-  ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
-  const outerGrad = ctx.createRadialGradient(cx, cy, midR, cx, cy, outerR);
-  outerGrad.addColorStop(0, '#1a0000');
-  outerGrad.addColorStop(1, '#050000');
-  ctx.fillStyle = outerGrad;
-  ctx.fill();
-  ctx.strokeStyle = '#2a0000';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Middle glowing red iris
-  const glowIntensity = thinking ? (0.6 + 0.4 * Math.sin(Date.now() / 180)) : 0.85;
-  ctx.beginPath();
-  ctx.arc(cx, cy, midR, 0, Math.PI * 2);
-  const irisGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, midR);
-  irisGrad.addColorStop(0, `rgba(255, 40, 0, ${glowIntensity})`);
-  irisGrad.addColorStop(0.4, `rgba(200, 0, 0, ${glowIntensity * 0.9})`);
-  irisGrad.addColorStop(0.8, `rgba(120, 0, 0, ${glowIntensity * 0.7})`);
-  irisGrad.addColorStop(1, `rgba(60, 0, 0, ${glowIntensity * 0.5})`);
-  ctx.fillStyle = irisGrad;
-  ctx.fill();
-
-  // Red glow around iris when thinking
-  if (thinking) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, midR + 4, 0, Math.PI * 2);
-    const glow = ctx.createRadialGradient(cx, cy, midR, cx, cy, midR + size * 0.12);
-    glow.addColorStop(0, `rgba(220, 0, 0, ${0.3 * glowIntensity})`);
-    glow.addColorStop(1, 'rgba(220, 0, 0, 0)');
-    ctx.fillStyle = glow;
-    ctx.fill();
-  }
-
-  // Inner lens ring
-  ctx.beginPath();
-  ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
-  const lensGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, innerR);
-  lensGrad.addColorStop(0, '#ff4422');
-  lensGrad.addColorStop(0.5, '#cc1100');
-  lensGrad.addColorStop(1, '#880000');
-  ctx.fillStyle = lensGrad;
-  ctx.fill();
-  ctx.strokeStyle = `rgba(255, 80, 50, ${glowIntensity * 0.6})`;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  // Pupil
-  ctx.beginPath();
-  ctx.arc(cx, cy, pupilR, 0, Math.PI * 2);
-  ctx.fillStyle = '#050000';
-  ctx.fill();
-
-  // Specular highlight
-  ctx.beginPath();
-  ctx.arc(cx - innerR * 0.3, cy - innerR * 0.3, pupilR * 0.35, 0, Math.PI * 2);
-  ctx.fillStyle = `rgba(255, 180, 150, ${0.4 * glowIntensity})`;
-  ctx.fill();
-}
-
-// Mini HAL eye in header (32x32)
-function drawHalEyeMini(thinking) {
-  drawHalEye('halEyeMini', 32, thinking);
-}
-
-// Main HAL eye (220x220)
-let halAnimFrame;
-function animateHalEye() {
-  drawHalEye('halEye', 220, isThinking);
-  drawHalEyeMini(isThinking);
-  halAnimFrame = requestAnimationFrame(animateHalEye);
-}
-animateHalEye();
+// Canvas elements are available because ES-module scripts are deferred by default.
+const _halAnimator = new HalEyeAnimator(
+  document.getElementById('halEye'),
+  document.getElementById('halEyeMini')
+);
+_halAnimator.start(() => isThinking);
 
 // ── Chat rendering ─────────────────────────────────────────────────────────
 
