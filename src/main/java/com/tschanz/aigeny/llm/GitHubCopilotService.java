@@ -1,284 +1,244 @@
 package com.tschanz.aigeny.llm;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.tschanz.aigeny.llm.github.CopilotApiClient;
+import com.tschanz.aigeny.llm.github.CopilotSessionManager;
+import com.tschanz.aigeny.llm.github.GitHubOAuthClient;
+import com.tschanz.aigeny.llm.github.GitHubTokenStore;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Connects AIgeny to GitHub using the OAuth 2.0 Device Authorization flow –
- * the same flow OpenCode / VS Code / GitHub CLI use to pair with GitHub Copilot.
- *
- * Once paired, the long-lived GitHub OAuth token (gho_xxx) is exchanged for a
- * short-lived Copilot session token (refresh ~25 min before expiry) which can
- * then be used to call the Copilot-hosted chat completions endpoint.
+ * Facade service for GitHub Copilot integration.
+ * <p>
+ * Orchestrates OAuth authentication, token management, and Copilot API access
+ * by delegating to specialized services:
+ * <ul>
+ *   <li>{@link GitHubOAuthClient} - OAuth Device Authorization Flow</li>
+ *   <li>{@link GitHubTokenStore} - Token persistence</li>
+ *   <li>{@link CopilotSessionManager} - Copilot session token refresh</li>
+ *   <li>{@link CopilotApiClient} - GitHub/Copilot API calls</li>
+ * </ul>
  */
 @Service
 public class GitHubCopilotService {
 
     private static final Logger log = LoggerFactory.getLogger(GitHubCopilotService.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
 
-    // Public GitHub Copilot OAuth client_id (the same one VS Code & OpenCode use).
-    // This is a device-flow-only public client – no client secret needed.
-    private static final String COPILOT_CLIENT_ID = "Iv1.b507a08c87ecfe98";
-    private static final String OAUTH_SCOPE       = "read:user";
-
-    private static final String DEVICE_CODE_URL  = "https://github.com/login/device/code";
-    private static final String ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
-    private static final String USER_URL         = "https://api.github.com/user";
-    private static final String COPILOT_TOKEN_URL = "https://api.github.com/copilot_internal/v2/token";
-
-    // Headers the Copilot backend expects (mirrors VS Code / OpenCode).
-    private static final String EDITOR_VERSION       = "vscode/1.95.0";
-    private static final String EDITOR_PLUGIN_VERSION = "copilot-chat/0.20.0";
-    private static final String USER_AGENT           = "GitHubCopilotChat/0.20.0";
-    private static final String COPILOT_INTEGRATION_ID = "vscode-chat";
-
-    private final Path tokenFile = Path.of(System.getProperty("user.home"), ".aigeny", "github-copilot.json");
-    private final HttpClient http = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(30))
-            .build();
+    private final GitHubOAuthClient oauthClient;
+    private final GitHubTokenStore tokenStore;
+    private final CopilotSessionManager sessionManager;
+    private final CopilotApiClient apiClient;
 
     /** Long-lived GitHub OAuth user token (gho_xxx). */
     private final AtomicReference<String> githubToken = new AtomicReference<>();
-    /** Short-lived Copilot session JWT, refreshed automatically. */
-    private volatile String copilotToken;
-    private volatile Instant copilotTokenExpiresAt = Instant.EPOCH;
-    /** API base reported by the Copilot token endpoint (e.g. https://api.githubcopilot.com). */
-    private volatile String copilotApiBase = "https://api.githubcopilot.com";
-    private volatile String githubLogin; // user login, for UI display
+    /** GitHub username for UI display. */
+    private volatile String githubLogin;
 
     // Active device-flow polling state (only one pairing at a time).
-    private volatile DeviceFlowState pendingFlow;
+    private volatile DeviceFlowPollingState pollingState;
 
-    public record DeviceFlowStart(String userCode, String verificationUri, int expiresIn) {}
-
-    private static final class DeviceFlowState {
-        final String deviceCode;
-        volatile int intervalSeconds;
-        final Instant expiresAt;
-        volatile Thread thread;
-        volatile String error;
-        volatile boolean done;
-        DeviceFlowState(String deviceCode, int intervalSeconds, int expiresIn) {
-            this.deviceCode = deviceCode;
-            this.intervalSeconds = Math.max(intervalSeconds, 5);
-            this.expiresAt = Instant.now().plusSeconds(expiresIn);
-        }
+    public GitHubCopilotService(GitHubOAuthClient oauthClient,
+                                GitHubTokenStore tokenStore,
+                                CopilotSessionManager sessionManager,
+                                CopilotApiClient apiClient) {
+        this.oauthClient = oauthClient;
+        this.tokenStore = tokenStore;
+        this.sessionManager = sessionManager;
+        this.apiClient = apiClient;
     }
+
+    /**
+     * Result of starting a device flow.
+     *
+     * @param userCode        the code to display to the user
+     * @param verificationUri the URL where the user enters the code
+     * @param expiresIn       validity duration in seconds
+     */
+    public record DeviceFlowStart(String userCode, String verificationUri, int expiresIn) {}
 
     @PostConstruct
     public void init() {
-        loadStoredToken();
-        if (githubToken.get() != null) {
+        tokenStore.load().ifPresent(token -> {
+            githubToken.set(token);
             log.info("GitHub Copilot: stored OAuth token found, verifying...");
             try {
-                fetchGithubLogin();
+                githubLogin = apiClient.fetchGithubLogin(token);
                 // Fire-and-forget: warm up the Copilot session + log the model list
                 new Thread(this::logAvailableModelsQuietly, "copilot-models-init").start();
             } catch (Exception e) {
                 log.warn("GitHub Copilot: stored token is invalid ({}). Disconnect required.", e.getMessage());
                 disconnect();
             }
-        }
+        });
     }
 
     // ── Public API ─────────────────────────────────────────────────────────
 
+    /**
+     * Starts the OAuth Device Authorization Flow.
+     *
+     * @return device flow start information for user display
+     * @throws Exception if starting the flow fails
+     */
     public synchronized DeviceFlowStart startDeviceFlow() throws Exception {
         // Cancel any previous attempt
         cancelPendingFlow();
 
-        String body = "client_id=" + URLEncoder.encode(COPILOT_CLIENT_ID, StandardCharsets.UTF_8)
-                + "&scope=" + URLEncoder.encode(OAUTH_SCOPE, StandardCharsets.UTF_8);
+        GitHubOAuthClient.DeviceFlowStart flowStart = oauthClient.startDeviceFlow();
 
-        HttpRequest req = HttpRequest.newBuilder(URI.create(DEVICE_CODE_URL))
-                .timeout(Duration.ofSeconds(30))
-                .header("Accept", "application/json")
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .header("User-Agent", USER_AGENT)
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() != 200) {
-            throw new RuntimeException("GitHub device flow init failed: HTTP "
-                    + resp.statusCode() + " – " + resp.body());
-        }
-
-        JsonNode node = JSON.readTree(resp.body());
-        String deviceCode      = node.path("device_code").asText();
-        String userCode        = node.path("user_code").asText();
-        String verificationUri = node.path("verification_uri").asText("https://github.com/login/device");
-        int interval           = node.path("interval").asInt(5);
-        int expiresIn          = node.path("expires_in").asInt(900);
-
-        log.info("GitHub device flow started – user_code={} verification_uri={} expires_in={}s",
-                userCode, verificationUri, expiresIn);
-
-        DeviceFlowState state = new DeviceFlowState(deviceCode, interval, expiresIn);
-        this.pendingFlow = state;
+        // Start background polling
+        DeviceFlowPollingState state = new DeviceFlowPollingState();
+        this.pollingState = state;
         state.thread = new Thread(() -> pollForToken(state), "github-copilot-poll");
         state.thread.setDaemon(true);
         state.thread.start();
 
-        return new DeviceFlowStart(userCode, verificationUri, expiresIn);
+        return new DeviceFlowStart(
+                flowStart.userCode(),
+                flowStart.verificationUri(),
+                flowStart.expiresIn()
+        );
     }
 
-    /** Status object for the front end. */
+    /**
+     * Returns the current connection status.
+     *
+     * @return status map for the frontend
+     */
     public Map<String, Object> getStatus() {
         boolean connected = githubToken.get() != null;
-        DeviceFlowState f = pendingFlow;
+        DeviceFlowPollingState state = pollingState;
         Map<String, Object> m = new java.util.LinkedHashMap<>();
         m.put("connected", connected);
         m.put("login", githubLogin);
-        if (f != null && !f.done && f.error == null) {
+
+        if (state != null && !state.done && state.error == null) {
             m.put("pairing", true);
-            m.put("expiresAt", f.expiresAt.toString());
+            Instant expiresAt = oauthClient.getFlowExpiresAt();
+            if (expiresAt != null) {
+                m.put("expiresAt", expiresAt.toString());
+            }
         } else {
             m.put("pairing", false);
         }
-        if (f != null && f.error != null) m.put("lastError", f.error);
+
+        if (state != null && state.error != null) {
+            m.put("lastError", state.error);
+        }
+
         return m;
     }
 
+    /**
+     * Disconnects from GitHub Copilot and clears all tokens.
+     */
     public synchronized void disconnect() {
         cancelPendingFlow();
         githubToken.set(null);
-        copilotToken = null;
-        copilotTokenExpiresAt = Instant.EPOCH;
+        sessionManager.clearToken();
         githubLogin = null;
-        try { Files.deleteIfExists(tokenFile); } catch (Exception ignored) {}
-        log.info("GitHub Copilot: disconnected.");
+        tokenStore.delete();
+        log.info("GitHub Copilot: disconnected");
     }
 
-    public boolean isConnected() { return githubToken.get() != null; }
+    /**
+     * Checks if GitHub is connected.
+     *
+     * @return true if a GitHub token is available
+     */
+    public boolean isConnected() {
+        return githubToken.get() != null;
+    }
 
     /**
      * Returns a valid Copilot session token, refreshing it if needed.
-     * Throws if the user is not connected.
+     *
+     * @return a valid Copilot session token
+     * @throws Exception if not connected or token refresh fails
      */
     public synchronized String getCopilotSessionToken() throws Exception {
-        if (githubToken.get() == null) {
+        String token = githubToken.get();
+        if (token == null) {
             throw new IllegalStateException("GitHub is not connected – open the Connect dialog first.");
         }
-        if (copilotToken != null && Instant.now().isBefore(copilotTokenExpiresAt.minusSeconds(60))) {
-            return copilotToken;
-        }
-        refreshCopilotToken();
-        return copilotToken;
+        return sessionManager.getCopilotToken(token);
     }
 
-    public String getCopilotApiBase() { return copilotApiBase; }
+    /**
+     * Returns the Copilot API base URL.
+     *
+     * @return the API base URL
+     */
+    public String getCopilotApiBase() {
+        return sessionManager.getCopilotApiBase();
+    }
 
+    /**
+     * Lists available Copilot models for the authenticated user.
+     *
+     * @return list of model IDs
+     * @throws Exception if listing fails
+     */
     public List<String> listModels() throws Exception {
         String token = getCopilotSessionToken();
-        HttpRequest req = HttpRequest.newBuilder(URI.create(copilotApiBase + "/models"))
-                .timeout(Duration.ofSeconds(30))
-                .header("Authorization", "Bearer " + token)
-                .header("Accept", "application/json")
-                .header("Editor-Version", EDITOR_VERSION)
-                .header("Editor-Plugin-Version", EDITOR_PLUGIN_VERSION)
-                .header("Copilot-Integration-Id", COPILOT_INTEGRATION_ID)
-                .header("User-Agent", USER_AGENT)
-                .GET()
-                .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() != 200) {
-            throw new RuntimeException("Listing Copilot models failed: HTTP " + resp.statusCode()
-                    + " – " + resp.body());
-        }
-        JsonNode root = JSON.readTree(resp.body());
-        JsonNode data = root.path("data");
-        List<String> ids = new ArrayList<>();
-        if (data.isArray()) {
-            for (JsonNode m : data) ids.add(m.path("id").asText());
-        }
-        return ids;
+        String apiBase = sessionManager.getCopilotApiBase();
+        return apiClient.listModels(apiBase, token);
     }
 
-    /** Common headers needed by all Copilot API calls (used by GitHubCopilotAdapter too). */
+    /**
+     * Returns common headers needed by all Copilot API calls.
+     *
+     * @return map of header names to values
+     */
     public Map<String, String> copilotHeaders() {
-        return Map.of(
-                "Editor-Version",       EDITOR_VERSION,
-                "Editor-Plugin-Version", EDITOR_PLUGIN_VERSION,
-                "Copilot-Integration-Id", COPILOT_INTEGRATION_ID,
-                "User-Agent",           USER_AGENT,
-                "OpenAI-Intent",        "conversation-panel"
-        );
+        return apiClient.getCopilotHeaders();
     }
 
     // ── Internals ──────────────────────────────────────────────────────────
 
     private void cancelPendingFlow() {
-        DeviceFlowState s = pendingFlow;
-        if (s != null && s.thread != null && s.thread.isAlive()) {
-            s.thread.interrupt();
+        DeviceFlowPollingState state = pollingState;
+        if (state != null && state.thread != null && state.thread.isAlive()) {
+            state.thread.interrupt();
         }
-        pendingFlow = null;
+        pollingState = null;
+        oauthClient.cancelPendingFlow();
     }
 
-    private void pollForToken(DeviceFlowState state) {
+    private void pollForToken(DeviceFlowPollingState state) {
+        int intervalSeconds = oauthClient.getPollingIntervalSeconds();
+        Instant expiresAt = oauthClient.getFlowExpiresAt();
+
         log.info("GitHub Copilot: polling for access token every {}s (timeout {}s)...",
-                state.intervalSeconds, Duration.between(Instant.now(), state.expiresAt).getSeconds());
+                intervalSeconds, Duration.between(Instant.now(), expiresAt).getSeconds());
+
         try {
             while (!Thread.currentThread().isInterrupted()) {
-                if (Instant.now().isAfter(state.expiresAt)) {
-                    state.error = "device code expired";
-                    log.warn("GitHub Copilot: device code expired before user authorised.");
-                    return;
-                }
-                Thread.sleep(state.intervalSeconds * 1000L);
+                Thread.sleep(intervalSeconds * 1000L);
 
-                String body = "client_id=" + URLEncoder.encode(COPILOT_CLIENT_ID, StandardCharsets.UTF_8)
-                        + "&device_code=" + URLEncoder.encode(state.deviceCode, StandardCharsets.UTF_8)
-                        + "&grant_type=" + URLEncoder.encode("urn:ietf:params:oauth:grant-type:device_code", StandardCharsets.UTF_8);
+                GitHubOAuthClient.PollResultWithToken result = oauthClient.pollForToken();
 
-                HttpRequest req = HttpRequest.newBuilder(URI.create(ACCESS_TOKEN_URL))
-                        .timeout(Duration.ofSeconds(30))
-                        .header("Accept", "application/json")
-                        .header("Content-Type", "application/x-www-form-urlencoded")
-                        .header("User-Agent", USER_AGENT)
-                        .POST(HttpRequest.BodyPublishers.ofString(body))
-                        .build();
-                HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-                JsonNode node = JSON.readTree(resp.body());
-
-                if (node.has("access_token")) {
-                    String token = node.path("access_token").asText();
-                    onPairingSuccess(token);
-                    state.done = true;
-                    return;
-                }
-                String error = node.path("error").asText("");
-                switch (error) {
-                    case "authorization_pending" -> { /* keep waiting */ }
-                    case "slow_down" -> state.intervalSeconds += 5;
-                    case "expired_token", "access_denied" -> {
-                        state.error = error;
-                        log.warn("GitHub Copilot: pairing failed ({})", error);
+                switch (result.result()) {
+                    case SUCCESS -> {
+                        onPairingSuccess(result.token());
+                        state.done = true;
                         return;
                     }
-                    default -> log.debug("GitHub Copilot poll: {}", resp.body());
+                    case PENDING -> { /* keep waiting */ }
+                    case SLOW_DOWN -> intervalSeconds = oauthClient.getPollingIntervalSeconds();
+                    case EXPIRED, DENIED, ERROR -> {
+                        state.error = result.result().name().toLowerCase();
+                        log.warn("GitHub Copilot: pairing failed ({})", state.error);
+                        return;
+                    }
                 }
             }
         } catch (InterruptedException ie) {
@@ -291,54 +251,16 @@ public class GitHubCopilotService {
 
     private void onPairingSuccess(String token) {
         githubToken.set(token);
-        persistToken(token);
-        log.info("GitHub Copilot: OAuth token received – pairing successful.");
+        tokenStore.save(token);
+        log.info("GitHub Copilot: OAuth token received – pairing successful");
+
         try {
-            fetchGithubLogin();
+            githubLogin = apiClient.fetchGithubLogin(token);
         } catch (Exception e) {
             log.warn("GitHub Copilot: could not fetch user info: {}", e.getMessage());
         }
+
         logAvailableModelsQuietly();
-    }
-
-    private void fetchGithubLogin() throws Exception {
-        HttpRequest req = HttpRequest.newBuilder(URI.create(USER_URL))
-                .timeout(Duration.ofSeconds(15))
-                .header("Authorization", "token " + githubToken.get())
-                .header("Accept", "application/vnd.github+json")
-                .header("User-Agent", USER_AGENT)
-                .GET().build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() != 200) {
-            throw new RuntimeException("HTTP " + resp.statusCode() + " – " + resp.body());
-        }
-        JsonNode node = JSON.readTree(resp.body());
-        githubLogin = node.path("login").asText(null);
-        log.info("GitHub Copilot: connected as user '{}'", githubLogin);
-    }
-
-    private synchronized void refreshCopilotToken() throws Exception {
-        HttpRequest req = HttpRequest.newBuilder(URI.create(COPILOT_TOKEN_URL))
-                .timeout(Duration.ofSeconds(30))
-                .header("Authorization", "token " + githubToken.get())
-                .header("Accept", "application/json")
-                .header("Editor-Version", EDITOR_VERSION)
-                .header("Editor-Plugin-Version", EDITOR_PLUGIN_VERSION)
-                .header("User-Agent", USER_AGENT)
-                .GET().build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() != 200) {
-            throw new RuntimeException("Copilot token exchange failed: HTTP " + resp.statusCode()
-                    + " – " + resp.body());
-        }
-        JsonNode node = JSON.readTree(resp.body());
-        copilotToken = node.path("token").asText();
-        long expiresAtEpoch = node.path("expires_at").asLong(Instant.now().plusSeconds(1500).getEpochSecond());
-        copilotTokenExpiresAt = Instant.ofEpochSecond(expiresAtEpoch);
-        String api = node.path("endpoints").path("api").asText(null);
-        if (api != null && !api.isBlank()) copilotApiBase = api.replaceAll("/$", "");
-        log.info("GitHub Copilot: session token refreshed (api={}, valid until {})",
-                copilotApiBase, copilotTokenExpiresAt);
     }
 
     private void logAvailableModelsQuietly() {
@@ -351,32 +273,13 @@ public class GitHubCopilotService {
         }
     }
 
-    private void persistToken(String token) {
-        try {
-            Files.createDirectories(tokenFile.getParent());
-            ObjectNode obj = JSON.createObjectNode();
-            obj.put("access_token", token);
-            obj.put("saved_at", Instant.now().toString());
-            Files.writeString(tokenFile, JSON.writerWithDefaultPrettyPrinter().writeValueAsString(obj));
-            // Best-effort: restrict to owner only on POSIX systems
-            try { tokenFile.toFile().setReadable(false, false); tokenFile.toFile().setReadable(true, true); }
-            catch (Exception ignored) {}
-            log.debug("GitHub Copilot: OAuth token persisted to {}", tokenFile);
-        } catch (Exception e) {
-            log.warn("GitHub Copilot: could not persist token to {}: {}", tokenFile, e.getMessage());
-        }
-    }
-
-    private void loadStoredToken() {
-        if (!Files.exists(tokenFile)) return;
-        try {
-            JsonNode n = JSON.readTree(Files.readString(tokenFile));
-            String t = n.path("access_token").asText(null);
-            if (t != null && !t.isBlank()) githubToken.set(t);
-        } catch (Exception e) {
-            log.warn("Could not read {}: {}", tokenFile, e.getMessage());
-        }
+    /**
+     * Internal state for device flow polling.
+     */
+    private static final class DeviceFlowPollingState {
+        volatile Thread thread;
+        volatile String error;
+        volatile boolean done;
     }
 }
-
 
