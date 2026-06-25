@@ -35,3 +35,4 @@ secrets/
 ### build / logs ###
 target/
 *.log
+/node_modules/
