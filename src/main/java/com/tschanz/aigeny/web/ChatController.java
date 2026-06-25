@@ -12,7 +12,6 @@ import com.tschanz.aigeny.llm_tool.jira.PendingJiraAction;
 import com.tschanz.aigeny.llm_tool.jira.PendingJiraActionContext;
 import com.tschanz.aigeny.llm_tool.bitbucket.BitbucketTokenContext;
 import com.tschanz.aigeny.llm_tool.QueryResult;
-import com.tschanz.aigeny.llm_tool.ToolResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;
 import jakarta.servlet.http.HttpSession;
@@ -42,11 +41,9 @@ public class ChatController {
     // ── Session attribute keys ───────────────────────────────────────────────
     private static final String SESSION_HISTORY        = "chatHistory";
     private static final String SESSION_RESULT         = "lastQueryResult";
-    private static final String SESSION_JIRA_TOKEN     = "jiraToken";
     private static final String SESSION_PENDING_ACTION = "pendingJiraAction";
     private static final String SESSION_JIRA_WRITE     = "jiraWriteEnabled";
     private static final String SESSION_CANCEL_FLAG    = "chatCancelFlag";
-    private static final String SESSION_BITBUCKET_TOKEN = "bitbucketToken";
 
     // ── JSON request body keys ───────────────────────────────────────────────
     private static final String REQ_MESSAGE       = "message";
@@ -91,17 +88,20 @@ public class ChatController {
     private final AigenyProperties props;
     private final JiraWriteExecutor jiraWriteExecutor;
     private final ObjectMapper objectMapper;
+    private final TokenService tokenService;
 
     public ChatController(OrchestrationService orchestration,
                           SchemaLoader schemaLoader,
                           AigenyProperties props,
                           JiraWriteExecutor jiraWriteExecutor,
-                          ObjectMapper objectMapper) {
+                          ObjectMapper objectMapper,
+                          TokenService tokenService) {
         this.orchestration     = orchestration;
         this.schemaLoader      = schemaLoader;
         this.props             = props;
         this.jiraWriteExecutor = jiraWriteExecutor;
         this.objectMapper      = objectMapper;
+        this.tokenService      = tokenService;
     }
 
     // ── POST /api/chat ──────────────────────────────────────────────────────
@@ -121,9 +121,9 @@ public class ChatController {
 
         // Read token in the HTTP thread (RequestContextHolder is available here)
         // then pass it into the async lambda via ThreadLocal
-        final String jiraToken = getEffectiveJiraToken(session, props);
+        final String jiraToken = tokenService.getEffectiveJiraToken(session);
         final boolean jiraWriteEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
-        final String bitbucketToken = getEffectiveBitbucketToken(session, props);
+        final String bitbucketToken = tokenService.getEffectiveBitbucketToken(session);
 
         return CompletableFuture.supplyAsync(() -> {
             JiraTokenContext.set(jiraToken);
@@ -205,9 +205,9 @@ public class ChatController {
         }
 
         List<Message> history = getOrCreateHistory(session);
-        final String jiraToken = getEffectiveJiraToken(session, props);
+        final String jiraToken = tokenService.getEffectiveJiraToken(session);
         final boolean jiraWriteEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
-        final String bitbucketToken = getEffectiveBitbucketToken(session, props);
+        final String bitbucketToken = tokenService.getEffectiveBitbucketToken(session);
 
         // Per-request cancellation flag – stored in session so /api/chat/cancel can flip it
         AtomicBoolean cancelFlag = new AtomicBoolean(false);
@@ -314,7 +314,7 @@ public class ChatController {
                     ResponseEntity.ok(Map.of(KEY_RESULT, Messages.get(MSG_JIRA_NO_PENDING))));
         }
         session.removeAttribute(SESSION_PENDING_ACTION);
-        final String token = getEffectiveJiraToken(session, props);
+        final String token = tokenService.getEffectiveJiraToken(session);
         if (token == null || token.isBlank()) {
             return CompletableFuture.completedFuture(
                     ResponseEntity.ok(Map.of(KEY_RESULT, Messages.get(MSG_JIRA_NO_TOKEN))));
@@ -393,15 +393,11 @@ public class ChatController {
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> status(HttpSession session) {
         QueryResult lastResult = (QueryResult) session.getAttribute(SESSION_RESULT);
-        String userJiraToken = (String) session.getAttribute(SESSION_JIRA_TOKEN);
-        boolean jiraTokenAvailable = (userJiraToken != null && !userJiraToken.isBlank())
-                || props.isJiraConfigured();
+        boolean jiraTokenAvailable = tokenService.hasJiraToken(session);
         boolean jiraBaseUrlConfigured = props.getJira().getBaseUrl() != null
                 && !props.getJira().getBaseUrl().isBlank();
         boolean jiraWriteEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
-        String userBitbucketToken = (String) session.getAttribute(SESSION_BITBUCKET_TOKEN);
-        boolean bitbucketTokenAvailable = (userBitbucketToken != null && !userBitbucketToken.isBlank())
-                || props.isBitbucketConfigured();
+        boolean bitbucketTokenAvailable = tokenService.hasBitbucketToken(session);
         boolean bitbucketBaseUrlConfigured = props.getBitbucket().getBaseUrl() != null
                 && !props.getBitbucket().getBaseUrl().isBlank();
         Map<String, Object> statusMap = new HashMap<>();
@@ -426,12 +422,10 @@ public class ChatController {
             @RequestBody Map<String, String> body,
             HttpSession session) {
         String token = body.getOrDefault(REQ_TOKEN, "").strip();
+        tokenService.setUserJiraToken(session, token);
         if (token.isEmpty()) {
-            session.removeAttribute(SESSION_JIRA_TOKEN);
             return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CLEARED)));
         }
-        session.setAttribute(SESSION_JIRA_TOKEN, token);
-        log.info("User Jira token set for session {}", session.getId());
         return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
     }
 
@@ -451,15 +445,8 @@ public class ChatController {
 
     @DeleteMapping("/jira/token")
     public ResponseEntity<Map<String, String>> clearJiraToken(HttpSession session) {
-        session.removeAttribute(SESSION_JIRA_TOKEN);
+        tokenService.clearUserJiraToken(session);
         return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CLEARED)));
-    }
-
-    /** Returns the effective Jira token for the current session (user override or config fallback). */
-    public static String getEffectiveJiraToken(HttpSession session, AigenyProperties props) {
-        String userToken = session != null ? (String) session.getAttribute(SESSION_JIRA_TOKEN) : null;
-        if (userToken != null && !userToken.isBlank()) return userToken;
-        return props.getJira().getToken();
     }
 
     // ── POST /api/bitbucket/token ────────────────────────────────────────────
@@ -469,21 +456,13 @@ public class ChatController {
             @RequestBody Map<String, String> body,
             HttpSession session) {
         String token = body.getOrDefault(REQ_TOKEN, "").strip();
+        tokenService.setUserBitbucketToken(session, token);
         if (token.isEmpty()) {
-            session.removeAttribute(SESSION_BITBUCKET_TOKEN);
             return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CLEARED)));
         }
-        session.setAttribute(SESSION_BITBUCKET_TOKEN, token);
-        log.info("User Bitbucket token set for session {}", session.getId());
         return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
     }
 
-    /** Returns the effective Bitbucket token for the current session (user override or config fallback). */
-    public static String getEffectiveBitbucketToken(HttpSession session, AigenyProperties props) {
-        String userToken = session != null ? (String) session.getAttribute(SESSION_BITBUCKET_TOKEN) : null;
-        if (userToken != null && !userToken.isBlank()) return userToken;
-        return props.getBitbucket().getToken();
-    }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
