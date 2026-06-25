@@ -1,12 +1,13 @@
 /**
- * chat.test.js – Unit tests for js/chat.js
+ * chat.test.js – Unit tests for the chat module
  *
- * Tests focus on the pure rendering functions (no real fetch calls):
- *   appendMessage, showTypingIndicator, updateTypingIndicator,
- *   finalizeTypingIndicator, removeTypingIndicator, showJiraConfirmation.
+ * The chat component is now split into three files:
+ *   chat-renderer.js  – DOM creation / mutation (appendMessage, typing indicator, Jira confirm)
+ *   chat-stream.js    – SSE fetch lifecycle      (sendMessage, stopGeneration)
+ *   chat.js           – coordinator              (initChat, clearChat, exportData)
  *
- * sendMessage / stopGeneration / clearChat are covered by smoke tests
- * with a mocked fetch to keep the suite fast and dependency-free.
+ * All symbols are re-exported from chat.js so existing import paths remain valid.
+ * Tests are grouped by the sub-module that owns the behaviour.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -52,9 +53,9 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 // ════════════════════════════════════════════════════════════════════════════
-// appendMessage
+// chat-renderer.js – appendMessage
 // ════════════════════════════════════════════════════════════════════════════
-describe('appendMessage', () => {
+describe('appendMessage (chat-renderer)', () => {
   it('adds a child to #chatMessages', () => {
     appendMessage('user', 'hello');
     expect(document.getElementById('chatMessages').children.length).toBe(1);
@@ -109,9 +110,9 @@ describe('appendMessage', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// showTypingIndicator
+// chat-renderer.js – showTypingIndicator
 // ════════════════════════════════════════════════════════════════════════════
-describe('showTypingIndicator', () => {
+describe('showTypingIndicator (chat-renderer)', () => {
   it('inserts an element with id="typingIndicator"', () => {
     showTypingIndicator();
     expect(document.getElementById('typingIndicator')).not.toBeNull();
@@ -137,9 +138,9 @@ describe('showTypingIndicator', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// updateTypingIndicator
+// chat-renderer.js – updateTypingIndicator
 // ════════════════════════════════════════════════════════════════════════════
-describe('updateTypingIndicator', () => {
+describe('updateTypingIndicator (chat-renderer)', () => {
   beforeEach(() => showTypingIndicator());
 
   it('adds one item to the tool-call list', () => {
@@ -170,9 +171,9 @@ describe('updateTypingIndicator', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// finalizeTypingIndicator
+// chat-renderer.js – finalizeTypingIndicator
 // ════════════════════════════════════════════════════════════════════════════
-describe('finalizeTypingIndicator', () => {
+describe('finalizeTypingIndicator (chat-renderer)', () => {
   beforeEach(() => showTypingIndicator());
 
   it('hides the dots element when list is empty', () => {
@@ -210,9 +211,9 @@ describe('finalizeTypingIndicator', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// removeTypingIndicator
+// chat-renderer.js – removeTypingIndicator
 // ════════════════════════════════════════════════════════════════════════════
-describe('removeTypingIndicator', () => {
+describe('removeTypingIndicator (chat-renderer)', () => {
   it('removes the indicator element from the DOM', () => {
     showTypingIndicator();
     removeTypingIndicator();
@@ -225,9 +226,9 @@ describe('removeTypingIndicator', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// showJiraConfirmation
+// chat-renderer.js – showJiraConfirmation
 // ════════════════════════════════════════════════════════════════════════════
-describe('showJiraConfirmation', () => {
+describe('showJiraConfirmation (chat-renderer)', () => {
   it('appends a confirmation block to #chatMessages', () => {
     showJiraConfirmation({ description: 'Create ticket XY-1' });
     expect(document.getElementById('jiraConfirmBlock')).not.toBeNull();
@@ -258,9 +259,9 @@ describe('showJiraConfirmation', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// initChat – event listener wiring
+// chat.js (coordinator) – initChat event listener wiring
 // ════════════════════════════════════════════════════════════════════════════
-describe('initChat – event listener wiring', () => {
+describe('initChat – event listener wiring (chat.js coordinator)', () => {
   it('send button click triggers sendMessage (no-op when input is empty)', () => {
     // input is empty → sendMessage returns early, no fetch needed
     expect(() => document.getElementById('sendBtn').click()).not.toThrow();
@@ -282,9 +283,9 @@ describe('initChat – event listener wiring', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// clearChat – smoke test with mocked fetch
+// chat.js (coordinator) – clearChat
 // ════════════════════════════════════════════════════════════════════════════
-describe('clearChat', () => {
+describe('clearChat (chat.js coordinator)', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
   });
@@ -313,3 +314,29 @@ describe('clearChat', () => {
   });
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// chat-stream.js – sendMessage smoke test (via chat.js re-export)
+// ════════════════════════════════════════════════════════════════════════════
+describe('sendMessage (chat-stream, via chat.js re-export)', () => {
+  it('is a no-op when input is empty', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    document.getElementById('userInput').value = '';
+    await sendMessage();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when already thinking', async () => {
+    // Re-init with isThinkingFn always returning true
+    initChat({
+      isThinkingFn:       () => true,
+      setThinkingFn:      vi.fn(),
+      setExportEnabledFn: vi.fn(),
+    });
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    document.getElementById('userInput').value = 'hello';
+    await sendMessage();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});

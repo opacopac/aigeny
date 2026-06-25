@@ -1,8 +1,21 @@
-/* ── Chat panel & message rendering ─────────────────────────────────────
-   Styles owned exclusively by the chat component.
+/* ── chat.css – Chat Panel & Message Rendering ───────────────────────────────
+   Owned by the chat component, which is now split into three JS modules:
+     chat-renderer.js  – DOM creation (appendMessage, typing indicator, Jira confirm)
+     chat-stream.js    – SSE fetch lifecycle (sendMessage, stopGeneration)
+     chat.js           – coordinator (initChat, clearChat, exportData)
+
+   CSS responsibility map:
+     .chat-panel / .chat-messages     → layout (chat-renderer.js)
+     .message / .message-bubble       → message bubbles (chat-renderer.js)
+     .typing-indicator / .tool-call-* → typing indicator (chat-renderer.js)
+     #userInput / .input-area         → input area (chat.js → initChat)
+     .btn-send / .btn-stop            → send/stop buttons (chat-stream.js)
+     .action-bar / .btn-export        → export bar (chat.js → initChat)
+     .jira-confirm-* / .btn-confirm / .btn-cancel → Jira confirm block (chat-renderer.js)
+
    Generic utilities (.btn-secondary, modals, sidebar) live in style.css.
    Markdown-content styles live in markdown.css.
-   ─────────────────────────────────────────────────────────────────────── */
+   ─────────────────────────────────────────────────────────────────────────── */
 
 /* ── Panel & message list ────────────────────────────────────────────── */
 .chat-panel {

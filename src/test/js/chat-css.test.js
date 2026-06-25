@@ -3,6 +3,12 @@
  *
  * Verifies the structural integrity of chat.css and the extraction contract
  * (style.css must not contain any of the moved rules).
+ *
+ * The chat JS module is now split into three files:
+ *   chat-renderer.js  – DOM creation
+ *   chat-stream.js    – SSE fetch lifecycle
+ *   chat.js           – coordinator
+ * chat.css documents this split in its file header (responsibility map).
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -101,6 +107,23 @@ describe('chat.css – responsive', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+// chat.css – documents the new three-module JS split
+// ════════════════════════════════════════════════════════════════════════════
+describe('chat.css – JS module split documentation', () => {
+  it('mentions chat-renderer.js in the file header', () => {
+    expect(chatCss).toContain('chat-renderer.js');
+  });
+
+  it('mentions chat-stream.js in the file header', () => {
+    expect(chatCss).toContain('chat-stream.js');
+  });
+
+  it('mentions chat.js (coordinator) in the file header', () => {
+    expect(chatCss).toContain('chat.js');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
 // Extraction contract – style.css must NOT contain moved rules
 // ════════════════════════════════════════════════════════════════════════════
 describe('extraction contract – style.css no longer owns chat rules', () => {
@@ -115,4 +138,3 @@ describe('extraction contract – style.css no longer owns chat rules', () => {
   it('style.css does not contain .btn-cancel',     () => expect(styleCss).not.toMatch(/\.btn-cancel\s*\{/));
   it('style.css does not contain .action-bar',     () => expect(styleCss).not.toMatch(/\.action-bar\s*\{/));
 });
-
