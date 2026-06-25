@@ -9,11 +9,11 @@ import { HalEyeAnimator } from './hal-eye.js';
 import { initChat, appendMessage } from './chat.js';
 import { GithubConnector } from './github-connect.js';
 import { TokenModal } from './token-modal.js';
+import { JiraWriteMode } from './jira-write-mode.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let isThinking = false;
 let hasExportData = false;
-const JIRA_WRITE_KEY = 'aigeny.jiraWriteEnabled';
 
 // ── HAL Eye ────────────────────────────────────────────────────────────────
 // Canvas elements are available because ES-module scripts are deferred by default.
@@ -26,42 +26,14 @@ _halAnimator.start(() => isThinking);
 
 // ── Jira Write Mode ────────────────────────────────────────────────────────
 
-async function toggleJiraWriteMode(enabled) {
-  try {
-    await fetch('/api/jira/write-mode', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled })
-    });
-    localStorage.setItem(JIRA_WRITE_KEY, enabled ? 'true' : 'false');
-    updateWriteToggleUI(enabled);
-  } catch (err) {
-    console.error('Failed to set Jira write mode:', err);
+const _jiraWriteMode = new JiraWriteMode(
+  'aigeny.jiraWriteEnabled',
+  '/api/jira/write-mode',
+  {
+    toggle: document.getElementById('jiraWriteToggle'),
+    label:  document.getElementById('jiraWriteLabel'),
   }
-}
-
-function updateWriteToggleUI(enabled) {
-  const toggle = document.getElementById('jiraWriteToggle');
-  if (toggle) toggle.checked = enabled;
-  const label = document.getElementById('jiraWriteLabel');
-  if (label) {
-    label.style.color = enabled ? 'var(--red)' : '';
-    label.textContent = '✏ Jira Schreiben (' + (enabled ? 'ein' : 'aus') + ')';
-  }
-}
-
-async function syncJiraWriteModeToSession() {
-  // Always start with write mode disabled on page load for safety
-  localStorage.setItem(JIRA_WRITE_KEY, 'false');
-  updateWriteToggleUI(false);
-  try {
-    await fetch('/api/jira/write-mode', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: false })
-    });
-  } catch (e) { /* ignore */ }
-}
+);
 
 // ── Token Modals ───────────────────────────────────────────────────────────
 
@@ -287,11 +259,11 @@ window.addEventListener('load', () => {
     startGithubConnect, copyGithubUserCode, disconnectGithub,
     openJiraTokenModal, closeJiraTokenModal, saveJiraToken, clearJiraToken,
     openBitbucketTokenModal, closeBitbucketTokenModal, saveBitbucketToken, clearBitbucketToken,
-    reloadSchema, toggleJiraWriteMode,
+    reloadSchema, toggleJiraWriteMode: (v) => _jiraWriteMode.toggle(v),
   });
 
   _jiraTokenModal.syncToSession()
-    .then(() => syncJiraWriteModeToSession())
+    .then(() => _jiraWriteMode.syncToSession())
     .then(() => _bitbucketTokenModal.syncToSession())
     .then(() => loadStatus());
   setInterval(loadStatus, 15000);
