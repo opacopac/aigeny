@@ -1,0 +1,470 @@
+package com.tschanz.aigeny.web;
+
+import com.tschanz.aigeny.llm.model.Message;
+import com.tschanz.aigeny.llm_tool.QueryResult;
+import com.tschanz.aigeny.llm_tool.jira.PendingJiraAction;
+import jakarta.servlet.http.HttpSession;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
+
+@ExtendWith(MockitoExtension.class)
+@DisplayName("ChatSessionService")
+class ChatSessionServiceTest {
+
+    @Mock
+    private HttpSession session;
+
+    private ChatSessionService sessionService;
+
+    @BeforeEach
+    void setUp() {
+        sessionService = new ChatSessionService();
+        lenient().when(session.getId()).thenReturn("test-session-123");
+    }
+
+    @Nested
+    @DisplayName("Chat History Management")
+    class ChatHistoryManagement {
+
+        @Test
+        @DisplayName("should create new history when none exists")
+        void shouldCreateNewHistoryWhenNoneExists() {
+            // Given
+            when(session.getAttribute("chatHistory")).thenReturn(null);
+
+            // When
+            List<Message> history = sessionService.getOrCreateHistory(session);
+
+            // Then
+            assertThat(history).isNotNull().isEmpty();
+            verify(session).setAttribute(eq("chatHistory"), any(ArrayList.class));
+        }
+
+        @Test
+        @DisplayName("should return existing history when present")
+        void shouldReturnExistingHistoryWhenPresent() {
+            // Given
+            List<Message> existingHistory = new ArrayList<>();
+            existingHistory.add(Message.user("Hello"));
+            existingHistory.add(Message.assistant("Hi there!"));
+            when(session.getAttribute("chatHistory")).thenReturn(existingHistory);
+
+            // When
+            List<Message> history = sessionService.getOrCreateHistory(session);
+
+            // Then
+            assertThat(history).isSameAs(existingHistory);
+            assertThat(history).hasSize(2);
+            verify(session, never()).setAttribute(anyString(), any());
+        }
+
+        @Test
+        @DisplayName("should return mutable list")
+        void shouldReturnMutableList() {
+            // Given
+            when(session.getAttribute("chatHistory")).thenReturn(null);
+
+            // When
+            List<Message> history = sessionService.getOrCreateHistory(session);
+            history.add(Message.user("Test"));
+
+            // Then
+            assertThat(history).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("should clear history from session")
+        void shouldClearHistoryFromSession() {
+            // When
+            sessionService.clearHistory(session);
+
+            // Then
+            verify(session).removeAttribute("chatHistory");
+        }
+    }
+
+    @Nested
+    @DisplayName("Query Result Management")
+    class QueryResultManagement {
+
+        @Test
+        @DisplayName("should store query result in session")
+        void shouldStoreQueryResultInSession() {
+            // Given
+            QueryResult result = new QueryResult("Test", List.of("COL1"),
+                    List.of(java.util.Map.of("COL1", "value")));
+
+            // When
+            sessionService.setLastQueryResult(session, result);
+
+            // Then
+            verify(session).setAttribute("lastQueryResult", result);
+        }
+
+        @Test
+        @DisplayName("should retrieve stored query result")
+        void shouldRetrieveStoredQueryResult() {
+            // Given
+            QueryResult result = new QueryResult("Test", List.of("COL1"),
+                    List.of(java.util.Map.of("COL1", "value")));
+            when(session.getAttribute("lastQueryResult")).thenReturn(result);
+
+            // When
+            QueryResult retrieved = sessionService.getLastQueryResult(session);
+
+            // Then
+            assertThat(retrieved).isSameAs(result);
+        }
+
+        @Test
+        @DisplayName("should return null when no query result exists")
+        void shouldReturnNullWhenNoQueryResultExists() {
+            // Given
+            when(session.getAttribute("lastQueryResult")).thenReturn(null);
+
+            // When
+            QueryResult retrieved = sessionService.getLastQueryResult(session);
+
+            // Then
+            assertThat(retrieved).isNull();
+        }
+
+        @Test
+        @DisplayName("should detect when query result exists")
+        void shouldDetectWhenQueryResultExists() {
+            // Given
+            QueryResult result = new QueryResult("Test", List.of("COL1"),
+                    List.of(java.util.Map.of("COL1", "value")));
+            when(session.getAttribute("lastQueryResult")).thenReturn(result);
+
+            // When
+            boolean hasResult = sessionService.hasQueryResult(session);
+
+            // Then
+            assertThat(hasResult).isTrue();
+        }
+
+        @Test
+        @DisplayName("should detect when query result does not exist")
+        void shouldDetectWhenQueryResultDoesNotExist() {
+            // Given
+            when(session.getAttribute("lastQueryResult")).thenReturn(null);
+
+            // When
+            boolean hasResult = sessionService.hasQueryResult(session);
+
+            // Then
+            assertThat(hasResult).isFalse();
+        }
+
+        @Test
+        @DisplayName("should detect when query result is empty")
+        void shouldDetectWhenQueryResultIsEmpty() {
+            // Given
+            QueryResult emptyResult = new QueryResult("Test", List.of("COL1"), List.of());
+            when(session.getAttribute("lastQueryResult")).thenReturn(emptyResult);
+
+            // When
+            boolean hasResult = sessionService.hasQueryResult(session);
+
+            // Then
+            assertThat(hasResult).isFalse();
+        }
+
+        @Test
+        @DisplayName("should clear query result from session")
+        void shouldClearQueryResultFromSession() {
+            // When
+            sessionService.clearLastQueryResult(session);
+
+            // Then
+            verify(session).removeAttribute("lastQueryResult");
+        }
+    }
+
+    @Nested
+    @DisplayName("Pending Jira Actions Management")
+    class PendingJiraActionsManagement {
+
+        @Test
+        @DisplayName("should store pending actions in session")
+        void shouldStorePendingActionsInSession() {
+            // Given
+            List<PendingJiraAction> actions = List.of(
+                    new PendingJiraAction(PendingJiraAction.ActionType.UPDATE_ISSUE,
+                            "PROJ-123", java.util.Map.of(), "Update issue")
+            );
+
+            // When
+            sessionService.setPendingJiraActions(session, actions);
+
+            // Then
+            verify(session).setAttribute("pendingJiraAction", actions);
+        }
+
+        @Test
+        @DisplayName("should retrieve pending actions from session")
+        void shouldRetrievePendingActionsFromSession() {
+            // Given
+            List<PendingJiraAction> actions = List.of(
+                    new PendingJiraAction(PendingJiraAction.ActionType.ADD_COMMENT,
+                            "PROJ-456", java.util.Map.of(), "Add comment")
+            );
+            when(session.getAttribute("pendingJiraAction")).thenReturn(actions);
+
+            // When
+            List<PendingJiraAction> retrieved = sessionService.getPendingJiraActions(session);
+
+            // Then
+            assertThat(retrieved).isSameAs(actions);
+        }
+
+        @Test
+        @DisplayName("should return null when no pending actions exist")
+        void shouldReturnNullWhenNoPendingActionsExist() {
+            // Given
+            when(session.getAttribute("pendingJiraAction")).thenReturn(null);
+
+            // When
+            List<PendingJiraAction> retrieved = sessionService.getPendingJiraActions(session);
+
+            // Then
+            assertThat(retrieved).isNull();
+        }
+
+        @Test
+        @DisplayName("should detect when pending actions exist")
+        void shouldDetectWhenPendingActionsExist() {
+            // Given
+            List<PendingJiraAction> actions = List.of(
+                    new PendingJiraAction(PendingJiraAction.ActionType.CREATE_ISSUE,
+                            null, java.util.Map.of(), "Create issue")
+            );
+            when(session.getAttribute("pendingJiraAction")).thenReturn(actions);
+
+            // When
+            boolean hasActions = sessionService.hasPendingJiraActions(session);
+
+            // Then
+            assertThat(hasActions).isTrue();
+        }
+
+        @Test
+        @DisplayName("should detect when no pending actions exist")
+        void shouldDetectWhenNoPendingActionsExist() {
+            // Given
+            when(session.getAttribute("pendingJiraAction")).thenReturn(null);
+
+            // When
+            boolean hasActions = sessionService.hasPendingJiraActions(session);
+
+            // Then
+            assertThat(hasActions).isFalse();
+        }
+
+        @Test
+        @DisplayName("should detect when pending actions list is empty")
+        void shouldDetectWhenPendingActionsListIsEmpty() {
+            // Given
+            when(session.getAttribute("pendingJiraAction")).thenReturn(List.of());
+
+            // When
+            boolean hasActions = sessionService.hasPendingJiraActions(session);
+
+            // Then
+            assertThat(hasActions).isFalse();
+        }
+
+        @Test
+        @DisplayName("should clear pending actions from session")
+        void shouldClearPendingActionsFromSession() {
+            // When
+            sessionService.clearPendingJiraActions(session);
+
+            // Then
+            verify(session).removeAttribute("pendingJiraAction");
+        }
+    }
+
+    @Nested
+    @DisplayName("Jira Write Mode Management")
+    class JiraWriteModeManagement {
+
+        @Test
+        @DisplayName("should enable Jira write mode")
+        void shouldEnableJiraWriteMode() {
+            // When
+            sessionService.setJiraWriteMode(session, true);
+
+            // Then
+            verify(session).setAttribute("jiraWriteEnabled", true);
+        }
+
+        @Test
+        @DisplayName("should disable Jira write mode")
+        void shouldDisableJiraWriteMode() {
+            // When
+            sessionService.setJiraWriteMode(session, false);
+
+            // Then
+            verify(session).setAttribute("jiraWriteEnabled", false);
+        }
+
+        @Test
+        @DisplayName("should detect when write mode is enabled")
+        void shouldDetectWhenWriteModeIsEnabled() {
+            // Given
+            when(session.getAttribute("jiraWriteEnabled")).thenReturn(true);
+
+            // When
+            boolean enabled = sessionService.isJiraWriteModeEnabled(session);
+
+            // Then
+            assertThat(enabled).isTrue();
+        }
+
+        @Test
+        @DisplayName("should detect when write mode is disabled")
+        void shouldDetectWhenWriteModeIsDisabled() {
+            // Given
+            when(session.getAttribute("jiraWriteEnabled")).thenReturn(false);
+
+            // When
+            boolean enabled = sessionService.isJiraWriteModeEnabled(session);
+
+            // Then
+            assertThat(enabled).isFalse();
+        }
+
+        @Test
+        @DisplayName("should detect when write mode is not set")
+        void shouldDetectWhenWriteModeIsNotSet() {
+            // Given
+            when(session.getAttribute("jiraWriteEnabled")).thenReturn(null);
+
+            // When
+            boolean enabled = sessionService.isJiraWriteModeEnabled(session);
+
+            // Then
+            assertThat(enabled).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("Cancel Flag Management")
+    class CancelFlagManagement {
+
+        @Test
+        @DisplayName("should create and store cancel flag")
+        void shouldCreateAndStoreCancelFlag() {
+            // When
+            AtomicBoolean flag = sessionService.createCancelFlag(session);
+
+            // Then
+            assertThat(flag).isNotNull();
+            assertThat(flag.get()).isFalse();
+            verify(session).setAttribute(eq("chatCancelFlag"), any(AtomicBoolean.class));
+        }
+
+        @Test
+        @DisplayName("should retrieve stored cancel flag")
+        void shouldRetrieveStoredCancelFlag() {
+            // Given
+            AtomicBoolean storedFlag = new AtomicBoolean(false);
+            when(session.getAttribute("chatCancelFlag")).thenReturn(storedFlag);
+
+            // When
+            AtomicBoolean retrieved = sessionService.getCancelFlag(session);
+
+            // Then
+            assertThat(retrieved).isSameAs(storedFlag);
+        }
+
+        @Test
+        @DisplayName("should return null when no cancel flag exists")
+        void shouldReturnNullWhenNoCancelFlagExists() {
+            // Given
+            when(session.getAttribute("chatCancelFlag")).thenReturn(null);
+
+            // When
+            AtomicBoolean retrieved = sessionService.getCancelFlag(session);
+
+            // Then
+            assertThat(retrieved).isNull();
+        }
+
+        @Test
+        @DisplayName("should trigger cancellation when flag exists")
+        void shouldTriggerCancellationWhenFlagExists() {
+            // Given
+            AtomicBoolean flag = new AtomicBoolean(false);
+            when(session.getAttribute("chatCancelFlag")).thenReturn(flag);
+
+            // When
+            boolean triggered = sessionService.triggerCancellation(session);
+
+            // Then
+            assertThat(triggered).isTrue();
+            assertThat(flag.get()).isTrue();
+        }
+
+        @Test
+        @DisplayName("should return false when trying to trigger without flag")
+        void shouldReturnFalseWhenTryingToTriggerWithoutFlag() {
+            // Given
+            when(session.getAttribute("chatCancelFlag")).thenReturn(null);
+
+            // When
+            boolean triggered = sessionService.triggerCancellation(session);
+
+            // Then
+            assertThat(triggered).isFalse();
+        }
+
+        @Test
+        @DisplayName("should clear cancel flag from session")
+        void shouldClearCancelFlagFromSession() {
+            // When
+            sessionService.clearCancelFlag(session);
+
+            // Then
+            verify(session).removeAttribute("chatCancelFlag");
+        }
+    }
+
+    @Nested
+    @DisplayName("Session Cleanup")
+    class SessionCleanup {
+
+        @Test
+        @DisplayName("should clear all chat data from session")
+        void shouldClearAllChatDataFromSession() {
+            // When
+            sessionService.clearAll(session);
+
+            // Then
+            verify(session).removeAttribute("chatHistory");
+            verify(session).removeAttribute("lastQueryResult");
+            verify(session).removeAttribute("pendingJiraAction");
+            verify(session).removeAttribute("chatCancelFlag");
+        }
+    }
+}
+
+
+

@@ -22,7 +22,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,13 +36,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class ChatController {
 
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
-
-    // ── Session attribute keys ───────────────────────────────────────────────
-    private static final String SESSION_HISTORY        = "chatHistory";
-    private static final String SESSION_RESULT         = "lastQueryResult";
-    private static final String SESSION_PENDING_ACTION = "pendingJiraAction";
-    private static final String SESSION_JIRA_WRITE     = "jiraWriteEnabled";
-    private static final String SESSION_CANCEL_FLAG    = "chatCancelFlag";
 
     // ── JSON request body keys ───────────────────────────────────────────────
     private static final String REQ_MESSAGE       = "message";
@@ -89,19 +81,22 @@ public class ChatController {
     private final JiraWriteExecutor jiraWriteExecutor;
     private final ObjectMapper objectMapper;
     private final TokenService tokenService;
+    private final ChatSessionService sessionService;
 
     public ChatController(OrchestrationService orchestration,
                           SchemaLoader schemaLoader,
                           AigenyProperties props,
                           JiraWriteExecutor jiraWriteExecutor,
                           ObjectMapper objectMapper,
-                          TokenService tokenService) {
+                          TokenService tokenService,
+                          ChatSessionService sessionService) {
         this.orchestration     = orchestration;
         this.schemaLoader      = schemaLoader;
         this.props             = props;
         this.jiraWriteExecutor = jiraWriteExecutor;
         this.objectMapper      = objectMapper;
         this.tokenService      = tokenService;
+        this.sessionService    = sessionService;
     }
 
     // ── POST /api/chat ──────────────────────────────────────────────────────
@@ -117,12 +112,12 @@ public class ChatController {
                     ResponseEntity.badRequest().body(Map.of(KEY_ERROR, Messages.get(MSG_ERROR_EMPTY_MESSAGE))));
         }
 
-        List<Message> history = getOrCreateHistory(session);
+        List<Message> history = sessionService.getOrCreateHistory(session);
 
         // Read token in the HTTP thread (RequestContextHolder is available here)
         // then pass it into the async lambda via ThreadLocal
         final String jiraToken = tokenService.getEffectiveJiraToken(session);
-        final boolean jiraWriteEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
+        final boolean jiraWriteEnabled = sessionService.isJiraWriteModeEnabled(session);
         final String bitbucketToken = tokenService.getEffectiveBitbucketToken(session);
 
         return CompletableFuture.supplyAsync(() -> {
@@ -135,13 +130,13 @@ public class ChatController {
 
                 // Persist last query result in session for export
                 if (result.hasExportData()) {
-                    session.setAttribute(SESSION_RESULT, result.lastToolResult().getQueryResult());
+                    sessionService.setLastQueryResult(session, result.lastToolResult().getQueryResult());
                 }
 
                 // Check for pending Jira write actions queued by tools
                 List<PendingJiraAction> pendingActions142 = PendingJiraActionContext.get();
                 if (pendingActions142 != null && !pendingActions142.isEmpty()) {
-                    session.setAttribute(SESSION_PENDING_ACTION, pendingActions142);
+                    sessionService.setPendingJiraActions(session, pendingActions142);
                     StringBuilder combinedDesc = new StringBuilder();
                     if (pendingActions142.size() == 1) {
                         combinedDesc.append(pendingActions142.get(0).getHumanDescription());
@@ -204,14 +199,13 @@ public class ChatController {
             return emitter;
         }
 
-        List<Message> history = getOrCreateHistory(session);
+        List<Message> history = sessionService.getOrCreateHistory(session);
         final String jiraToken = tokenService.getEffectiveJiraToken(session);
-        final boolean jiraWriteEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
+        final boolean jiraWriteEnabled = sessionService.isJiraWriteModeEnabled(session);
         final String bitbucketToken = tokenService.getEffectiveBitbucketToken(session);
 
         // Per-request cancellation flag – stored in session so /api/chat/cancel can flip it
-        AtomicBoolean cancelFlag = new AtomicBoolean(false);
-        session.setAttribute(SESSION_CANCEL_FLAG, cancelFlag);
+        AtomicBoolean cancelFlag = sessionService.createCancelFlag(session);
         emitter.onCompletion(() -> cancelFlag.set(true));
         emitter.onTimeout(()   -> cancelFlag.set(true));
         emitter.onError(t      -> cancelFlag.set(true));
@@ -244,7 +238,7 @@ public class ChatController {
                 }, cancelFlag::get);
 
                 if (result.hasExportData()) {
-                    session.setAttribute(SESSION_RESULT, result.lastToolResult().getQueryResult());
+                    sessionService.setLastQueryResult(session, result.lastToolResult().getQueryResult());
                 }
 
                 List<PendingJiraAction> pendingActions = PendingJiraActionContext.get();
@@ -253,7 +247,7 @@ public class ChatController {
                 payload.put(KEY_RESPONSE, result.response());
                 payload.put(KEY_HAS_EXPORT, result.hasExportData());
                 if (pendingActions != null && !pendingActions.isEmpty()) {
-                    session.setAttribute(SESSION_PENDING_ACTION, pendingActions);
+                    sessionService.setPendingJiraActions(session, pendingActions);
                     // Build a combined description for the confirmation dialog
                     StringBuilder combinedDesc = new StringBuilder();
                     if (pendingActions.size() == 1) {
@@ -291,7 +285,7 @@ public class ChatController {
                     emitter.complete();
                 } catch (Exception ex) { emitter.completeWithError(ex); }
             } finally {
-                session.removeAttribute(SESSION_CANCEL_FLAG);
+                sessionService.clearCancelFlag(session);
                 JiraTokenContext.clear();
                 JiraWriteContext.clear();
                 BitbucketTokenContext.clear();
@@ -306,20 +300,18 @@ public class ChatController {
 
     @PostMapping("/jira/confirm")
     public CompletableFuture<ResponseEntity<Map<String, Object>>> confirmJiraAction(HttpSession session) {
-        @SuppressWarnings("unchecked")
-        List<PendingJiraAction> pendingActions =
-                (List<PendingJiraAction>) session.getAttribute(SESSION_PENDING_ACTION);
+        List<PendingJiraAction> pendingActions = sessionService.getPendingJiraActions(session);
         if (pendingActions == null || pendingActions.isEmpty()) {
             return CompletableFuture.completedFuture(
                     ResponseEntity.ok(Map.of(KEY_RESULT, Messages.get(MSG_JIRA_NO_PENDING))));
         }
-        session.removeAttribute(SESSION_PENDING_ACTION);
+        sessionService.clearPendingJiraActions(session);
         final String token = tokenService.getEffectiveJiraToken(session);
         if (token == null || token.isBlank()) {
             return CompletableFuture.completedFuture(
                     ResponseEntity.ok(Map.of(KEY_RESULT, Messages.get(MSG_JIRA_NO_TOKEN))));
         }
-        final boolean writeEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
+        final boolean writeEnabled = sessionService.isJiraWriteModeEnabled(session);
         final List<PendingJiraAction> actions = pendingActions;
         return CompletableFuture.supplyAsync(() -> {
             JiraWriteContext.set(writeEnabled);
@@ -345,7 +337,7 @@ public class ChatController {
 
     @PostMapping("/jira/cancel")
     public ResponseEntity<Map<String, String>> cancelJiraAction(HttpSession session) {
-        session.removeAttribute(SESSION_PENDING_ACTION);
+        sessionService.clearPendingJiraActions(session);
         return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CANCELLED)));
     }
 
@@ -353,8 +345,8 @@ public class ChatController {
 
     @PostMapping("/chat/clear")
     public ResponseEntity<Map<String, String>> clear(HttpSession session) {
-        session.removeAttribute(SESSION_HISTORY);
-        session.removeAttribute(SESSION_RESULT);
+        sessionService.clearHistory(session);
+        sessionService.clearLastQueryResult(session);
         return ResponseEntity.ok(Map.of("status", Messages.get(MSG_STATUS_CLEARED)));
     }
 
@@ -362,11 +354,8 @@ public class ChatController {
 
     @PostMapping("/chat/cancel")
     public ResponseEntity<Map<String, String>> cancelChat(HttpSession session) {
-        AtomicBoolean flag = (AtomicBoolean) session.getAttribute(SESSION_CANCEL_FLAG);
-        if (flag != null) {
-            flag.set(true);
-            log.info("Chat cancelled via /api/chat/cancel for session {}", session.getId());
-        }
+        sessionService.triggerCancellation(session);
+        log.info("Chat cancelled via /api/chat/cancel for session {}", session.getId());
         return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
     }
 
@@ -392,11 +381,10 @@ public class ChatController {
 
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> status(HttpSession session) {
-        QueryResult lastResult = (QueryResult) session.getAttribute(SESSION_RESULT);
         boolean jiraTokenAvailable = tokenService.hasJiraToken(session);
         boolean jiraBaseUrlConfigured = props.getJira().getBaseUrl() != null
                 && !props.getJira().getBaseUrl().isBlank();
-        boolean jiraWriteEnabled = Boolean.TRUE.equals(session.getAttribute(SESSION_JIRA_WRITE));
+        boolean jiraWriteEnabled = sessionService.isJiraWriteModeEnabled(session);
         boolean bitbucketTokenAvailable = tokenService.hasBitbucketToken(session);
         boolean bitbucketBaseUrlConfigured = props.getBitbucket().getBaseUrl() != null
                 && !props.getBitbucket().getBaseUrl().isBlank();
@@ -411,7 +399,7 @@ public class ChatController {
         statusMap.put(KEY_BITBUCKET_CONFIGURED,        bitbucketTokenAvailable);
         statusMap.put(KEY_BITBUCKET_BASEURL_CONFIGURED, bitbucketBaseUrlConfigured);
         statusMap.put(KEY_SCHEMA_TABLES,               schemaLoader.getTableCount());
-        statusMap.put(KEY_HAS_EXPORT,                  lastResult != null && !lastResult.isEmpty());
+        statusMap.put(KEY_HAS_EXPORT,                  sessionService.hasQueryResult(session));
         return ResponseEntity.ok(statusMap);
     }
 
@@ -436,8 +424,7 @@ public class ChatController {
             @RequestBody Map<String, Object> body,
             HttpSession session) {
         boolean enabled = Boolean.parseBoolean(String.valueOf(body.getOrDefault("enabled", "false")));
-        session.setAttribute(SESSION_JIRA_WRITE, enabled);
-        log.info("Jira write mode {} for session {}", enabled ? "enabled" : "disabled", session.getId());
+        sessionService.setJiraWriteMode(session, enabled);
         return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
     }
 
@@ -466,19 +453,10 @@ public class ChatController {
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    @SuppressWarnings("unchecked")
-    private List<Message> getOrCreateHistory(HttpSession session) {
-        List<Message> history = (List<Message>) session.getAttribute(SESSION_HISTORY);
-        if (history == null) {
-            history = new ArrayList<>();
-            session.setAttribute(SESSION_HISTORY, history);
-        }
-        return history;
-    }
-
     /** Expose last query result to ExportController within the same session. */
     public static QueryResult getLastResult(HttpSession session) {
-        return (QueryResult) session.getAttribute(SESSION_RESULT);
+        ChatSessionService service = new ChatSessionService();
+        return service.getLastQueryResult(session);
     }
 }
 
