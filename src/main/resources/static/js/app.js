@@ -6,6 +6,7 @@
    ───────────────────────────────────────────────────────────────────────── */
 
 import { HalEyeAnimator } from './hal-eye.js';
+import { renderMarkdown } from './markdown.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let isThinking = false;
@@ -116,70 +117,6 @@ function removeTypingIndicator() {
   if (el) el.remove();
 }
 
-// Very lightweight Markdown renderer (no external deps)
-function renderMarkdown(text) {
-  if (!text) return '';
-  let html = escapeHtml(text);
-
-  // Code blocks (``` ... ```)
-  html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
-    `<pre><code>${code.trim()}</code></pre>`);
-
-  // Inline code
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-  // Bold **text**
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-  // Italic *text*
-  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-
-  // Headers
-  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-  html = html.replace(/^## (.+)$/gm,  '<h2>$1</h2>');
-  html = html.replace(/^# (.+)$/gm,   '<h1>$1</h1>');
-
-  // Markdown tables  | col | col |
-  html = html.replace(/((\|[^\n]+\|\n?)+)/g, convertTable);
-
-  // Unordered list
-  html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
-  html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-
-  // Paragraphs (double newline)
-  html = html.replace(/\n{2,}/g, '</p><p>');
-  html = '<p>' + html + '</p>';
-
-  // Single newlines → <br>
-  html = html.replace(/\n/g, '<br>');
-
-  // Clean up empty paragraphs
-  html = html.replace(/<p>\s*<\/p>/g, '');
-
-  return html;
-}
-
-function convertTable(match) {
-  const lines = match.trim().split('\n').filter(l => l.trim());
-  if (lines.length < 2) return match;
-
-  let table = '<table>';
-  lines.forEach((line, i) => {
-    if (line.replace(/[\s|:-]/g, '') === '') return; // separator row
-    const cells = line.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-    if (i === 0) {
-      table += '<tr>' + cells.map(c => `<th>${c.trim()}</th>`).join('') + '</tr>';
-    } else {
-      table += '<tr>' + cells.map(c => `<td>${c.trim()}</td>`).join('') + '</tr>';
-    }
-  });
-  table += '</table>';
-  return table;
-}
-
-function escapeHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
 
 // ── Jira Write Confirmation ────────────────────────────────────────────────
 

@@ -172,19 +172,7 @@ html, body {
   color: var(--text);
 }
 
-/* Markdown-style content in messages */
-.message-bubble strong { color: #ffcccc; }
-.message-bubble em     { color: var(--text-dim); }
-.message-bubble code   { background: #1e1e1e; color: var(--text-code); padding: 1px 5px; border-radius: 3px; font-family: var(--font-mono); font-size: 12px; }
-.message-bubble pre    { background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 4px; padding: 10px 12px; overflow-x: auto; margin: 8px 0; }
-.message-bubble pre code { background: none; padding: 0; color: #cc8888; }
-.message-bubble table  { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 12px; }
-.message-bubble th     { background: var(--red-dim); color: #fff; padding: 6px 10px; text-align: left; }
-.message-bubble td     { padding: 5px 10px; border-bottom: 1px solid #1e1e1e; }
-.message-bubble tr:nth-child(even) td { background: #0e0e0e; }
-.message-bubble h1,.message-bubble h2,.message-bubble h3 { color: var(--red); margin: 8px 0 4px; }
-.message-bubble ul,.message-bubble ol { margin-left: 20px; margin-top: 4px; }
-.message-bubble li { margin-bottom: 2px; }
+/* Markdown-style content → see markdown.css */
 
 /* Typing indicator */
 .typing-indicator {
