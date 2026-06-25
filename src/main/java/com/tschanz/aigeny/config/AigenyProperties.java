@@ -1,18 +1,19 @@
 package com.tschanz.aigeny.config;
 
 import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 /**
  * All AIgeny configuration, bound from application.yml (prefix: aigeny).
- *
+ * <p>
+ * This class is a pure configuration holder that only contains property bindings.
+ * Business logic has been extracted to separate services:
+ * <ul>
+ *   <li>{@link SecretFileResolver} - Handles Docker secret file resolution</li>
+ *   <li>{@link ConfigurationValidator} - Validates configuration completeness</li>
+ * </ul>
+ * <p>
  * External override file: ~/.aigeny/aigeny.yml
  * Environment variable pattern: AIGENY_LLM_BASE_URL, AIGENY_DB_PASSWORD, etc.
  * (Spring Boot maps aigeny.llm.base-url → AIGENY_LLM_BASE_URL automatically)
@@ -21,57 +22,26 @@ import java.nio.file.Path;
 @ConfigurationProperties(prefix = "aigeny")
 public class AigenyProperties {
 
-    private static final Logger log = LoggerFactory.getLogger(AigenyProperties.class);
+    private final SecretFileResolver secretFileResolver;
 
     private Llm llm = new Llm();
     private Db db = new Db();
     private Jira jira = new Jira();
     private Bitbucket bitbucket = new Bitbucket();
 
+    public AigenyProperties(SecretFileResolver secretFileResolver) {
+        this.secretFileResolver = secretFileResolver;
+    }
+
     /**
      * After Spring has bound all properties (YAML + env vars), resolve any
      * Docker secret files referenced by *_FILE environment variables.
-     *
-     * AIGENY_DB_PASSWORD_FILE  → db.password
-     * AIGENY_JIRA_TOKEN_FILE   → jira.token
-     * AIGENY_LLM_API_KEY_FILE  → llm.apiKey
+     * <p>
+     * Delegates to {@link SecretFileResolver} for actual file reading.
      */
     @PostConstruct
     public void resolveSecretFiles() {
-        db.password  = readSecretFile("AIGENY_DB_PASSWORD_FILE",  db.password);
-        jira.token   = readSecretFile("AIGENY_JIRA_TOKEN_FILE",   jira.token);
-        llm.apiKey   = readSecretFile("AIGENY_LLM_API_KEY_FILE",  llm.apiKey);
-        bitbucket.token = readSecretFile("AIGENY_BITBUCKET_TOKEN_FILE", bitbucket.token);
-    }
-
-    private static String readSecretFile(String envVar, String currentValue) {
-        String filePath = System.getenv(envVar);
-        if (filePath == null || filePath.isBlank()) return currentValue;
-        try {
-            String value = Files.readString(Path.of(filePath)).strip();
-            log.info("Loaded secret from {} ({})", filePath, envVar);
-            return value;
-        } catch (IOException e) {
-            log.warn("Could not read secret file '{}' for {}: {}", filePath, envVar, e.getMessage());
-            return currentValue;
-        }
-    }
-
-    // ── Computed helpers ────────────────────────────────────────────────────
-
-    public boolean isDbConfigured() {
-        return db.url != null && !db.url.isBlank()
-            && db.username != null && !db.username.isBlank();
-    }
-
-    public boolean isJiraConfigured() {
-        return jira.baseUrl != null && !jira.baseUrl.isBlank()
-            && jira.token != null && !jira.token.isBlank();
-    }
-
-    public boolean isBitbucketConfigured() {
-        return bitbucket.baseUrl != null && !bitbucket.baseUrl.isBlank()
-            && bitbucket.token != null && !bitbucket.token.isBlank();
+        secretFileResolver.resolveSecrets(this);
     }
 
     // ── Getters / Setters ───────────────────────────────────────────────────

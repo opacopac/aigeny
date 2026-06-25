@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.db;
 
 import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.ConfigurationValidator;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
@@ -25,19 +26,21 @@ public class SchemaLoader {
     private static final Logger log = LoggerFactory.getLogger(SchemaLoader.class);
 
     private final AigenyProperties props;
+    private final ConfigurationValidator configValidator;
     private final Environment env;
     private volatile int tableCount = 0;
     private boolean dbReachable = false;
 
-    public SchemaLoader(AigenyProperties props, Environment env) {
+    public SchemaLoader(AigenyProperties props, ConfigurationValidator configValidator, Environment env) {
         this.props = props;
+        this.configValidator = configValidator;
         this.env   = env;
     }
 
     /** Load table count automatically on startup if DB is configured. */
     @EventListener(ApplicationReadyEvent.class)
     public void loadOnStartup() {
-        if (props.isDbConfigured()) {
+        if (configValidator.isDbConfigured(props.getDb())) {
             try {
                 reload();
             } catch (Exception e) {
@@ -59,7 +62,7 @@ public class SchemaLoader {
 
     /** Reconnects and refreshes the table count. */
     public void reload() throws Exception {
-        if (!props.isDbConfigured()) {
+        if (!configValidator.isDbConfigured(props.getDb())) {
             tableCount = 0;
             dbReachable = false;
             return;

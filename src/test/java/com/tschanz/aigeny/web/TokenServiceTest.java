@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.web;
 
 import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.SecretFileResolver;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -24,6 +25,9 @@ class TokenServiceTest {
     private AigenyProperties.Bitbucket bitbucketConfig;
 
     @Mock
+    private SecretFileResolver secretFileResolver;
+
+    @Mock
     private HttpSession session;
 
     private TokenService tokenService;
@@ -31,7 +35,7 @@ class TokenServiceTest {
     @BeforeEach
     void setUp() {
         // Use real configuration objects (no need to mock POJOs)
-        props = new AigenyProperties();
+        props = new AigenyProperties(secretFileResolver);
         jiraConfig = new AigenyProperties.Jira();
         bitbucketConfig = new AigenyProperties.Bitbucket();
         props.setJira(jiraConfig);

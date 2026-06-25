@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.web;
 
 import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.ConfigurationValidator;
 import com.tschanz.aigeny.db.SchemaLoader;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Service;
@@ -29,15 +30,18 @@ public class StatusAggregatorService {
     private static final String KEY_HAS_EXPORT                  = "hasExport";
 
     private final AigenyProperties props;
+    private final ConfigurationValidator configValidator;
     private final TokenService tokenService;
     private final ChatSessionService sessionService;
     private final SchemaLoader schemaLoader;
 
     public StatusAggregatorService(AigenyProperties props,
+                                   ConfigurationValidator configValidator,
                                    TokenService tokenService,
                                    ChatSessionService sessionService,
                                    SchemaLoader schemaLoader) {
         this.props = props;
+        this.configValidator = configValidator;
         this.tokenService = tokenService;
         this.sessionService = sessionService;
         this.schemaLoader = schemaLoader;
@@ -58,7 +62,7 @@ public class StatusAggregatorService {
         status.put(KEY_LLM_MODEL, props.getLlm().getModel());
 
         // Database configuration
-        status.put(KEY_DB_CONFIGURED, props.isDbConfigured());
+        status.put(KEY_DB_CONFIGURED, configValidator.isDbConfigured(props.getDb()));
         status.put(KEY_DB_USERNAME, props.getDb().getUsername());
         status.put(KEY_SCHEMA_TABLES, schemaLoader.getTableCount());
 

@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.web;
 
 import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.ConfigurationValidator;
 import com.tschanz.aigeny.db.SchemaLoader;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +28,9 @@ class StatusAggregatorServiceTest {
     private AigenyProperties.Bitbucket bitbucketConfig;
 
     @Mock
+    private ConfigurationValidator configValidator;
+
+    @Mock
     private TokenService tokenService;
 
     @Mock
@@ -42,23 +46,21 @@ class StatusAggregatorServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Use real configuration objects
-        AigenyProperties realProps = new AigenyProperties();
+        // Use real configuration objects (no need to spy anymore)
+        props = mock(AigenyProperties.class);
         llmConfig = new AigenyProperties.Llm();
         dbConfig = new AigenyProperties.Db();
         jiraConfig = new AigenyProperties.Jira();
         bitbucketConfig = new AigenyProperties.Bitbucket();
 
-        realProps.setLlm(llmConfig);
-        realProps.setDb(dbConfig);
-        realProps.setJira(jiraConfig);
-        realProps.setBitbucket(bitbucketConfig);
-
-        // Create spy so we can mock isDbConfigured()
-        props = spy(realProps);
+        lenient().when(props.getLlm()).thenReturn(llmConfig);
+        lenient().when(props.getDb()).thenReturn(dbConfig);
+        lenient().when(props.getJira()).thenReturn(jiraConfig);
+        lenient().when(props.getBitbucket()).thenReturn(bitbucketConfig);
 
         statusAggregator = new StatusAggregatorService(
             props,
+            configValidator,
             tokenService,
             sessionService,
             schemaLoader
@@ -84,7 +86,7 @@ class StatusAggregatorServiceTest {
             when(sessionService.isJiraWriteModeEnabled(session)).thenReturn(true);
             when(sessionService.hasQueryResult(session)).thenReturn(true);
             when(schemaLoader.getTableCount()).thenReturn(42);
-            when(props.isDbConfigured()).thenReturn(true);
+            when(configValidator.isDbConfigured(dbConfig)).thenReturn(true);
 
             // When
             Map<String, Object> status = statusAggregator.aggregateStatus(session);
@@ -119,7 +121,7 @@ class StatusAggregatorServiceTest {
             when(sessionService.isJiraWriteModeEnabled(session)).thenReturn(false);
             when(sessionService.hasQueryResult(session)).thenReturn(false);
             when(schemaLoader.getTableCount()).thenReturn(0);
-            when(props.isDbConfigured()).thenReturn(false);
+            when(configValidator.isDbConfigured(dbConfig)).thenReturn(false);
 
             // When
             Map<String, Object> status = statusAggregator.aggregateStatus(session);
@@ -155,7 +157,7 @@ class StatusAggregatorServiceTest {
             verify(sessionService).isJiraWriteModeEnabled(session);
             verify(sessionService).hasQueryResult(session);
             verify(schemaLoader).getTableCount();
-            verify(props, atLeastOnce()).isDbConfigured();
+            verify(configValidator, atLeastOnce()).isDbConfigured(dbConfig);
         }
 
         @Test

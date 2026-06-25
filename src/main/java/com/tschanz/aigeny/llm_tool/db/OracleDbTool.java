@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.llm_tool.db;
 
 import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.ConfigurationValidator;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.llm_tool.QueryResult;
 import com.tschanz.aigeny.llm_tool.Tool;
@@ -43,14 +44,16 @@ public class OracleDbTool implements Tool {
             Pattern.CASE_INSENSITIVE);
 
     private final AigenyProperties props;
+    private final ConfigurationValidator configValidator;
     private HikariDataSource pool;
 
-    public OracleDbTool(AigenyProperties props) {
+    public OracleDbTool(AigenyProperties props, ConfigurationValidator configValidator) {
         this.props = props;
+        this.configValidator = configValidator;
     }
 
     private synchronized HikariDataSource getPool() {
-        if (pool == null && props.isDbConfigured()) {
+        if (pool == null && configValidator.isDbConfigured(props.getDb())) {
             try {
                 AigenyProperties.Db db = props.getDb();
                 HikariConfig hc = new HikariConfig();
@@ -100,7 +103,7 @@ public class OracleDbTool implements Tool {
 
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
-        if (!props.isDbConfigured()) {
+        if (!configValidator.isDbConfigured(props.getDb())) {
             return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
         }
 
