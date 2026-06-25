@@ -77,6 +77,15 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
 
+            <!-- Surefire: Configure test execution with Java 25 compatibility -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-Dnet.bytebuddy.experimental=true</argLine>
+                </configuration>
+            </plugin>
+
             <!-- Launch4j: wraps the Spring Boot JAR into a Windows EXE -->
             <plugin>
                 <groupId>com.akathist.maven.plugins.launch4j</groupId>

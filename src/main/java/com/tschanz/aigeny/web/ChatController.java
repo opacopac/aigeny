@@ -51,16 +51,6 @@ public class ChatController {
     private static final String KEY_RESULT                   = "result";
     private static final String KEY_STATUS                   = "status";
     private static final String KEY_TABLES                   = "tables";
-    private static final String KEY_LLM_PROVIDER             = "llmProvider";
-    private static final String KEY_LLM_MODEL                = "llmModel";
-    private static final String KEY_DB_CONFIGURED            = "dbConfigured";
-    private static final String KEY_JIRA_CONFIGURED          = "jiraConfigured";
-    private static final String KEY_JIRA_BASEURL_CONFIGURED  = "jiraBaseUrlConfigured";
-    private static final String KEY_JIRA_WRITE_ENABLED       = "jiraWriteEnabled";
-    private static final String KEY_BITBUCKET_CONFIGURED          = "bitbucketConfigured";
-    private static final String KEY_BITBUCKET_BASEURL_CONFIGURED  = "bitbucketBaseUrlConfigured";
-    private static final String KEY_DB_USERNAME               = "dbUsername";
-    private static final String KEY_SCHEMA_TABLES            = "schemaTables";
 
     // ── JSON response values ─────────────────────────────────────────────────
     private static final String VAL_OK    = "ok";
@@ -77,26 +67,26 @@ public class ChatController {
 
     private final OrchestrationService orchestration;
     private final SchemaLoader schemaLoader;
-    private final AigenyProperties props;
     private final JiraWriteExecutor jiraWriteExecutor;
     private final ObjectMapper objectMapper;
     private final TokenService tokenService;
     private final ChatSessionService sessionService;
+    private final StatusAggregatorService statusAggregator;
 
     public ChatController(OrchestrationService orchestration,
                           SchemaLoader schemaLoader,
-                          AigenyProperties props,
                           JiraWriteExecutor jiraWriteExecutor,
                           ObjectMapper objectMapper,
                           TokenService tokenService,
-                          ChatSessionService sessionService) {
+                          ChatSessionService sessionService,
+                          StatusAggregatorService statusAggregator) {
         this.orchestration     = orchestration;
         this.schemaLoader      = schemaLoader;
-        this.props             = props;
         this.jiraWriteExecutor = jiraWriteExecutor;
         this.objectMapper      = objectMapper;
         this.tokenService      = tokenService;
         this.sessionService    = sessionService;
+        this.statusAggregator  = statusAggregator;
     }
 
     // ── POST /api/chat ──────────────────────────────────────────────────────
@@ -381,26 +371,7 @@ public class ChatController {
 
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> status(HttpSession session) {
-        boolean jiraTokenAvailable = tokenService.hasJiraToken(session);
-        boolean jiraBaseUrlConfigured = props.getJira().getBaseUrl() != null
-                && !props.getJira().getBaseUrl().isBlank();
-        boolean jiraWriteEnabled = sessionService.isJiraWriteModeEnabled(session);
-        boolean bitbucketTokenAvailable = tokenService.hasBitbucketToken(session);
-        boolean bitbucketBaseUrlConfigured = props.getBitbucket().getBaseUrl() != null
-                && !props.getBitbucket().getBaseUrl().isBlank();
-        Map<String, Object> statusMap = new HashMap<>();
-        statusMap.put(KEY_LLM_PROVIDER,                props.getLlm().getProvider());
-        statusMap.put(KEY_LLM_MODEL,                   props.getLlm().getModel());
-        statusMap.put(KEY_DB_CONFIGURED,               props.isDbConfigured());
-        statusMap.put(KEY_DB_USERNAME,                 props.getDb().getUsername());
-        statusMap.put(KEY_JIRA_CONFIGURED,             jiraTokenAvailable);
-        statusMap.put(KEY_JIRA_BASEURL_CONFIGURED,     jiraBaseUrlConfigured);
-        statusMap.put(KEY_JIRA_WRITE_ENABLED,          jiraWriteEnabled);
-        statusMap.put(KEY_BITBUCKET_CONFIGURED,        bitbucketTokenAvailable);
-        statusMap.put(KEY_BITBUCKET_BASEURL_CONFIGURED, bitbucketBaseUrlConfigured);
-        statusMap.put(KEY_SCHEMA_TABLES,               schemaLoader.getTableCount());
-        statusMap.put(KEY_HAS_EXPORT,                  sessionService.hasQueryResult(session));
-        return ResponseEntity.ok(statusMap);
+        return ResponseEntity.ok(statusAggregator.aggregateStatus(session));
     }
 
     // ── POST /api/jira/token ─────────────────────────────────────────────────
