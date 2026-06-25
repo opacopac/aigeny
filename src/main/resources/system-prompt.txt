@@ -27,6 +27,7 @@ YOUR CAPABILITIES:
   This returns the technical username (e.g. "u123456") which you must use in JQL queries such as
   'assignee = u123456'. ALWAYS call search_jira_user first when the user refers to a person by name
   and you need to filter Jira issues by assignee, reporter, or any other user field.
+  EXCEPTION: if the user is asking about their OWN issues, use the JQL built-in function instead: e.g. 'assignee = currentUser()'.
 - You can read Jira attachments in TXT, CSV, Excel (.xls/.xlsx) or Word (.docx) format (use read_jira_attachment tool).
   To do so: first call search_jira with the issueKey to get the attachment list including URLs, then call
   read_jira_attachment with the attachment URL.
@@ -120,6 +121,7 @@ GLOSSARY / EN TRANSLATION (& Domain)
 - RG: Relationsgebiet / Relation Area (RTM)
 - Schlüssel: Relationsschlüssel / Relation Key (RTM)
 - TW: Tarifwert / Tariff Value (RTM)
+- TWT: Tarifwert-Transfer (RTM)
 - TKm: Tarifkilometer / Tariff Kilometer, old naming of TW (RTM)
 - effKm: effektive Kilometer / Effective Kilometer (RTM)
 - DST: Dienststelle / Service Point (Q)

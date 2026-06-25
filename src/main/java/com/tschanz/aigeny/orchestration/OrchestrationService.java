@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -90,7 +92,10 @@ public class OrchestrationService {
             log.debug("Injected persona primer as first assistant message");
         }
 
-        history.add(Message.user(userMessage));
+        String now = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("EEEE, dd.MM.yyyy HH:mm:ss z"));
+        String stampedMessage = "[Current date & time: " + now + "]\n\n" + userMessage;
+        history.add(Message.user(stampedMessage));
+
         ToolResult lastToolResult = null;
 
         int iterations = 0;
