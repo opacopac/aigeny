@@ -8,13 +8,12 @@
 import { HalEyeAnimator } from './hal-eye.js';
 import { initChat, appendMessage } from './chat.js';
 import { GithubConnector } from './github-connect.js';
+import { TokenModal } from './token-modal.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let isThinking = false;
 let hasExportData = false;
-const JIRA_TOKEN_KEY      = 'aigeny.jiraToken';
-const JIRA_WRITE_KEY      = 'aigeny.jiraWriteEnabled';
-const BITBUCKET_TOKEN_KEY = 'aigeny.bitbucketToken';
+const JIRA_WRITE_KEY = 'aigeny.jiraWriteEnabled';
 
 // ── HAL Eye ────────────────────────────────────────────────────────────────
 // Canvas elements are available because ES-module scripts are deferred by default.
@@ -64,165 +63,48 @@ async function syncJiraWriteModeToSession() {
   } catch (e) { /* ignore */ }
 }
 
-// ── Jira Token Modal ───────────────────────────────────────────────────────
+// ── Token Modals ───────────────────────────────────────────────────────────
 
-function openJiraTokenModal() {
-  const stored = localStorage.getItem(JIRA_TOKEN_KEY) || '';
-  document.getElementById('jiraTokenInput').value = stored;
-  document.getElementById('jiraTokenHint').textContent = stored ? '✔ Token ist gespeichert.' : '';
-  document.getElementById('jiraTokenHint').className = stored ? 'modal-hint ok' : 'modal-hint';
-  document.getElementById('jiraTokenModal').style.display = 'flex';
-  setTimeout(() => document.getElementById('jiraTokenInput').focus(), 50);
-}
-
-function closeJiraTokenModal(e) {
-  if (e && e.target !== document.getElementById('jiraTokenModal')) return;
-  document.getElementById('jiraTokenModal').style.display = 'none';
-}
-
-async function saveJiraToken() {
-  const token = document.getElementById('jiraTokenInput').value.trim();
-  const hint  = document.getElementById('jiraTokenHint');
-  try {
-    const res = await fetch('/api/jira/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token })
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    if (token) {
-      localStorage.setItem(JIRA_TOKEN_KEY, token);
-      hint.textContent = '✔ Token gespeichert! Da, choroscho!';
-      hint.className = 'modal-hint ok';
-    } else {
-      localStorage.removeItem(JIRA_TOKEN_KEY);
-      hint.textContent = 'Token gelöscht.';
-      hint.className = 'modal-hint';
-    }
-    setTimeout(() => {
-      document.getElementById('jiraTokenModal').style.display = 'none';
-      loadStatus();
-    }, 900);
-  } catch (err) {
-    hint.textContent = 'Njet! Fehler: ' + err.message;
-    hint.className = 'modal-hint error';
+const _jiraTokenModal = new TokenModal(
+  'aigeny.jiraToken',
+  '/api/jira/token',
+  {
+    modal: document.getElementById('jiraTokenModal'),
+    input: document.getElementById('jiraTokenInput'),
+    hint:  document.getElementById('jiraTokenHint'),
   }
-}
+);
 
-async function clearJiraToken() {
-  localStorage.removeItem(JIRA_TOKEN_KEY);
-  await fetch('/api/jira/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: '' })
-  });
-  document.getElementById('jiraTokenInput').value = '';
-  const hint = document.getElementById('jiraTokenHint');
-  hint.textContent = 'Token gelöscht.';
-  hint.className = 'modal-hint';
-  setTimeout(() => {
-    document.getElementById('jiraTokenModal').style.display = 'none';
-    loadStatus();
-  }, 600);
-}
+const _bitbucketTokenModal = new TokenModal(
+  'aigeny.bitbucketToken',
+  '/api/bitbucket/token',
+  {
+    modal: document.getElementById('bitbucketTokenModal'),
+    input: document.getElementById('bitbucketTokenInput'),
+    hint:  document.getElementById('bitbucketTokenHint'),
+  }
+);
 
-/** Send stored Jira token to backend session (called on page load) */
-async function syncJiraTokenToSession() {
-  const token = localStorage.getItem(JIRA_TOKEN_KEY);
-  if (!token) return;
-  try {
-    await fetch('/api/jira/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token })
-    });
-  } catch (e) { /* ignore */ }
-}
+function openJiraTokenModal()           { _jiraTokenModal.open(); }
+function closeJiraTokenModal(e)         { _jiraTokenModal.close(e); }
+function saveJiraToken()                { _jiraTokenModal.save(); }
+function clearJiraToken()               { _jiraTokenModal.clear(); }
+
+function openBitbucketTokenModal()      { _bitbucketTokenModal.open(); }
+function closeBitbucketTokenModal(e)    { _bitbucketTokenModal.close(e); }
+function saveBitbucketToken()           { _bitbucketTokenModal.save(); }
+function clearBitbucketToken()          { _bitbucketTokenModal.clear(); }
 
 // Close modal on Escape
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    document.getElementById('jiraTokenModal').style.display = 'none';
-    document.getElementById('bitbucketTokenModal').style.display = 'none';
+    _jiraTokenModal.close();
+    _bitbucketTokenModal.close();
     const gh = document.getElementById('githubConnectModal');
     if (gh) gh.style.display = 'none';
   }
 });
 
-// ── Bitbucket Token Modal ──────────────────────────────────────────────────
-
-function openBitbucketTokenModal() {
-  const stored = localStorage.getItem(BITBUCKET_TOKEN_KEY) || '';
-  document.getElementById('bitbucketTokenInput').value = stored;
-  document.getElementById('bitbucketTokenHint').textContent = stored ? '✔ Token ist gespeichert.' : '';
-  document.getElementById('bitbucketTokenHint').className = stored ? 'modal-hint ok' : 'modal-hint';
-  document.getElementById('bitbucketTokenModal').style.display = 'flex';
-  setTimeout(() => document.getElementById('bitbucketTokenInput').focus(), 50);
-}
-
-function closeBitbucketTokenModal(e) {
-  if (e && e.target !== document.getElementById('bitbucketTokenModal')) return;
-  document.getElementById('bitbucketTokenModal').style.display = 'none';
-}
-
-async function saveBitbucketToken() {
-  const token = document.getElementById('bitbucketTokenInput').value.trim();
-  const hint  = document.getElementById('bitbucketTokenHint');
-  try {
-    const res = await fetch('/api/bitbucket/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token })
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    if (token) {
-      localStorage.setItem(BITBUCKET_TOKEN_KEY, token);
-      hint.textContent = '✔ Token gespeichert! Da, choroscho!';
-      hint.className = 'modal-hint ok';
-    } else {
-      localStorage.removeItem(BITBUCKET_TOKEN_KEY);
-      hint.textContent = 'Token gelöscht.';
-      hint.className = 'modal-hint';
-    }
-    setTimeout(() => {
-      document.getElementById('bitbucketTokenModal').style.display = 'none';
-      loadStatus();
-    }, 900);
-  } catch (err) {
-    hint.textContent = 'Njet! Fehler: ' + err.message;
-    hint.className = 'modal-hint error';
-  }
-}
-
-async function clearBitbucketToken() {
-  localStorage.removeItem(BITBUCKET_TOKEN_KEY);
-  await fetch('/api/bitbucket/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: '' })
-  });
-  document.getElementById('bitbucketTokenInput').value = '';
-  const hint = document.getElementById('bitbucketTokenHint');
-  hint.textContent = 'Token gelöscht.';
-  hint.className = 'modal-hint';
-  setTimeout(() => {
-    document.getElementById('bitbucketTokenModal').style.display = 'none';
-    loadStatus();
-  }, 600);
-}
-
-/** Send stored Bitbucket token to backend session (called on page load) */
-async function syncBitbucketTokenToSession() {
-  const token = localStorage.getItem(BITBUCKET_TOKEN_KEY);
-  if (!token) return;
-  try {
-    await fetch('/api/bitbucket/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token })
-    });
-  } catch (e) { /* ignore */ }
-}
 
 // ── GitHub Copilot Connect (OAuth Device Flow) ─────────────────────────────
 
@@ -394,6 +276,10 @@ window.addEventListener('load', () => {
     onMessage:      (role, text) => appendMessage(role, text),
   });
 
+  // Wire up token modal callbacks
+  _jiraTokenModal.init({ onSaved: () => loadStatus() });
+  _bitbucketTokenModal.init({ onSaved: () => loadStatus() });
+
   // Expose functions called from HTML onclick attributes.
   // These will be replaced with addEventListener when each module is extracted.
   Object.assign(window, {
@@ -404,9 +290,9 @@ window.addEventListener('load', () => {
     reloadSchema, toggleJiraWriteMode,
   });
 
-  syncJiraTokenToSession()
+  _jiraTokenModal.syncToSession()
     .then(() => syncJiraWriteModeToSession())
-    .then(() => syncBitbucketTokenToSession())
+    .then(() => _bitbucketTokenModal.syncToSession())
     .then(() => loadStatus());
   setInterval(loadStatus, 15000);
 
