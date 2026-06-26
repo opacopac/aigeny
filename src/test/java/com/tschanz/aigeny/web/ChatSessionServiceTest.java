@@ -37,11 +37,14 @@ class ChatSessionServiceTest {
     @Mock
     private CancellationManager cancellationManager;
 
+    @Mock
+    private HistoryManager historyManager;
+
     private ChatSessionService sessionService;
 
     @BeforeEach
     void setUp() {
-        sessionService = new ChatSessionService(confirmationFutureManager, cancellationManager);
+        sessionService = new ChatSessionService(confirmationFutureManager, cancellationManager, historyManager);
         lenient().when(session.getId()).thenReturn("test-session-123");
     }
 
@@ -50,59 +53,29 @@ class ChatSessionServiceTest {
     class ChatHistoryManagement {
 
         @Test
-        @DisplayName("should create new history when none exists")
-        void shouldCreateNewHistoryWhenNoneExists() {
+        @DisplayName("should delegate getOrCreateHistory to HistoryManager")
+        void shouldDelegateGetOrCreateHistoryToHistoryManager() {
             // Given
-            when(session.getAttribute("chatHistory")).thenReturn(null);
+            List<Message> expectedHistory = new ArrayList<>();
+            expectedHistory.add(Message.user("Test"));
+            when(historyManager.getOrCreateHistory(session)).thenReturn(expectedHistory);
 
             // When
             List<Message> history = sessionService.getOrCreateHistory(session);
 
             // Then
-            assertThat(history).isNotNull().isEmpty();
-            verify(session).setAttribute(eq("chatHistory"), any(ArrayList.class));
+            assertThat(history).isSameAs(expectedHistory);
+            verify(historyManager).getOrCreateHistory(session);
         }
 
         @Test
-        @DisplayName("should return existing history when present")
-        void shouldReturnExistingHistoryWhenPresent() {
-            // Given
-            List<Message> existingHistory = new ArrayList<>();
-            existingHistory.add(Message.user("Hello"));
-            existingHistory.add(Message.assistant("Hi there!"));
-            when(session.getAttribute("chatHistory")).thenReturn(existingHistory);
-
-            // When
-            List<Message> history = sessionService.getOrCreateHistory(session);
-
-            // Then
-            assertThat(history).isSameAs(existingHistory);
-            assertThat(history).hasSize(2);
-            verify(session, never()).setAttribute(anyString(), any());
-        }
-
-        @Test
-        @DisplayName("should return mutable list")
-        void shouldReturnMutableList() {
-            // Given
-            when(session.getAttribute("chatHistory")).thenReturn(null);
-
-            // When
-            List<Message> history = sessionService.getOrCreateHistory(session);
-            history.add(Message.user("Test"));
-
-            // Then
-            assertThat(history).hasSize(1);
-        }
-
-        @Test
-        @DisplayName("should clear history from session")
-        void shouldClearHistoryFromSession() {
+        @DisplayName("should delegate clearHistory to HistoryManager")
+        void shouldDelegateClearHistoryToHistoryManager() {
             // When
             sessionService.clearHistory(session);
 
             // Then
-            verify(session).removeAttribute("chatHistory");
+            verify(historyManager).clearHistory(session);
         }
     }
 
@@ -457,7 +430,7 @@ class ChatSessionServiceTest {
             sessionService.clearAll(session);
 
             // Then
-            verify(session).removeAttribute("chatHistory");
+            verify(historyManager).clearHistory(session);
             verify(session).removeAttribute("lastQueryResult");
             verify(session).removeAttribute("pendingJiraAction");
             verify(cancellationManager).clearCancelFlag(session);

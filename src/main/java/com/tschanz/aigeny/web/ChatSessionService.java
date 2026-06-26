@@ -25,17 +25,19 @@ public class ChatSessionService {
 
     private final ConfirmationFutureManager confirmationFutureManager;
     private final CancellationManager cancellationManager;
+    private final HistoryManager historyManager;
 
     // Session attribute keys
-    private static final String SESSION_HISTORY              = "chatHistory";
     private static final String SESSION_RESULT               = "lastQueryResult";
     private static final String SESSION_PENDING_ACTION       = "pendingJiraAction";
     private static final String SESSION_JIRA_WRITE           = "jiraWriteEnabled";
 
     public ChatSessionService(ConfirmationFutureManager confirmationFutureManager,
-                              CancellationManager cancellationManager) {
+                              CancellationManager cancellationManager,
+                              HistoryManager historyManager) {
         this.confirmationFutureManager = confirmationFutureManager;
         this.cancellationManager = cancellationManager;
+        this.historyManager = historyManager;
     }
 
     // ── Chat History Management ──────────────────────────────────────────────
@@ -46,15 +48,8 @@ public class ChatSessionService {
      * @param session HTTP session
      * @return mutable list of messages
      */
-    @SuppressWarnings("unchecked")
     public List<Message> getOrCreateHistory(HttpSession session) {
-        List<Message> history = (List<Message>) session.getAttribute(SESSION_HISTORY);
-        if (history == null) {
-            history = new ArrayList<>();
-            session.setAttribute(SESSION_HISTORY, history);
-            log.debug("Created new chat history for session {}", session.getId());
-        }
-        return history;
+        return historyManager.getOrCreateHistory(session);
     }
 
     /**
@@ -63,8 +58,7 @@ public class ChatSessionService {
      * @param session HTTP session
      */
     public void clearHistory(HttpSession session) {
-        session.removeAttribute(SESSION_HISTORY);
-        log.info("Chat history cleared for session {}", session.getId());
+        historyManager.clearHistory(session);
     }
 
     // ── Query Result Management ──────────────────────────────────────────────
