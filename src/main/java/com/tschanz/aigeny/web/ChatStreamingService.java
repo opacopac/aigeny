@@ -1,20 +1,14 @@
 package com.tschanz.aigeny.web;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;
 import com.tschanz.aigeny.llm.model.Message;
-import com.tschanz.aigeny.llm_tool.ToolResult;
 import com.tschanz.aigeny.orchestration.ChatResult;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
 import jakarta.servlet.http.HttpSession;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -30,41 +24,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Service
 public class ChatStreamingService {
 
-    private static final Logger log = LoggerFactory.getLogger(ChatStreamingService.class);
-
-    private static final long SSE_TIMEOUT_MS = 300_000L; // 5 minutes
-
-    // SSE event types
-    private static final String EVENT_TYPE_ERROR        = "error";
-    private static final String EVENT_TYPE_TOOL_CALL    = "tool_call";
-    private static final String EVENT_TYPE_INTERMEDIATE = "intermediate";
-    private static final String EVENT_TYPE_DONE         = "done";
-    private static final String EVENT_TYPE_CANCELLED    = "cancelled";
-
-    // JSON keys
-    private static final String KEY_TYPE       = "type";
-    private static final String KEY_MESSAGE    = "message";
-    private static final String KEY_TOOL_NAME  = "toolName";
-    private static final String KEY_DESCRIPTION = "description";
-    private static final String KEY_RESPONSE   = "response";
-    private static final String KEY_HAS_EXPORT = "hasExport";
-
     private final OrchestrationService orchestration;
     private final ChatSessionService sessionService;
     private final ConfirmationOrchestrator confirmationOrchestrator;
     private final ExecutionContextManager contextManager;
-    private final ObjectMapper objectMapper;
+    private final SseStreamManager sseManager;
 
     public ChatStreamingService(OrchestrationService orchestration,
                                 ChatSessionService sessionService,
                                 ConfirmationOrchestrator confirmationOrchestrator,
                                 ExecutionContextManager contextManager,
-                                ObjectMapper objectMapper) {
+                                SseStreamManager sseManager) {
         this.orchestration            = orchestration;
         this.sessionService           = sessionService;
         this.confirmationOrchestrator = confirmationOrchestrator;
         this.contextManager           = contextManager;
-        this.objectMapper             = objectMapper;
+        this.sseManager               = sseManager;
     }
 
     /**
@@ -77,10 +52,10 @@ public class ChatStreamingService {
                                   boolean jiraWriteEnabled,
                                   String bitbucketToken) {
 
-        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+        SseEmitter emitter = sseManager.createEmitter();
 
         if (message == null || message.trim().isEmpty()) {
-            sendErrorAndComplete(emitter, Messages.get("chat.error.empty_message"));
+            sseManager.sendErrorAndComplete(emitter, Messages.get("chat.error.empty_message"));
             return emitter;
         }
 
@@ -139,8 +114,8 @@ public class ChatStreamingService {
             ChatResult result = orchestration.chat(
                     history,
                     message,
-                    (toolName, description) -> sendToolCall(emitter, toolName, description),
-                    (intermediateText) -> sendIntermediateMessage(emitter, intermediateText),
+                    (toolName, description) -> sseManager.sendToolCall(emitter, toolName, description),
+                    (intermediateText) -> sseManager.sendIntermediateMessage(emitter, intermediateText),
                     cancelFlag::get
             );
 
@@ -148,90 +123,13 @@ public class ChatStreamingService {
                 sessionService.setLastQueryResult(session, result.lastToolResult().getQueryResult());
             }
 
-            Map<String, Object> payload = new HashMap<>();
-            payload.put(KEY_TYPE, EVENT_TYPE_DONE);
-            payload.put(KEY_RESPONSE, result.response());
-            payload.put(KEY_HAS_EXPORT, result.hasExportData());
-            sendJson(emitter, payload);
-            emitter.complete();
+            sseManager.sendCompletionAndClose(emitter, result);
 
         } catch (InterruptedException ie) {
-            handleCancellation(emitter, session);
+            sseManager.handleCancellation(emitter, session);
         } catch (Exception e) {
-            handleError(emitter, e);
+            sseManager.handleError(emitter, e);
         }
-    }
-
-    // ── SSE helpers ───────────────────────────────────────────────────────────
-
-    private void sendToolCall(SseEmitter emitter, String toolName, String description) {
-        try {
-            Map<String, Object> event = Map.of(
-                    KEY_TYPE, EVENT_TYPE_TOOL_CALL,
-                    KEY_TOOL_NAME, toolName,
-                    KEY_DESCRIPTION, description
-            );
-            sendJson(emitter, event);
-        } catch (Exception e) {
-            log.warn("SSE tool_call send failed: {}", e.getMessage());
-        }
-    }
-
-    private void sendIntermediateMessage(SseEmitter emitter, String intermediateText) {
-        try {
-            Map<String, Object> event = Map.of(
-                    KEY_TYPE, EVENT_TYPE_INTERMEDIATE,
-                    KEY_RESPONSE, intermediateText
-            );
-            sendJson(emitter, event);
-        } catch (Exception e) {
-            log.warn("SSE intermediate send failed: {}", e.getMessage());
-        }
-    }
-
-    private void handleCancellation(SseEmitter emitter, HttpSession session) {
-        log.info("Chat stream cancelled by user for session {}", session.getId());
-        try {
-            sendJson(emitter, Map.of(KEY_TYPE, EVENT_TYPE_CANCELLED));
-            emitter.complete();
-        } catch (Exception ex) {
-            emitter.completeWithError(ex);
-        }
-    }
-
-    private void handleError(SseEmitter emitter, Exception e) {
-        log.error("Chat stream error", e);
-        String errMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-        try {
-            Map<String, Object> errorEvent = Map.of(
-                    KEY_TYPE, EVENT_TYPE_ERROR,
-                    KEY_MESSAGE, errMsg
-            );
-            sendJson(emitter, errorEvent);
-            emitter.complete();
-        } catch (Exception ex) {
-            emitter.completeWithError(ex);
-        }
-    }
-
-    private void sendErrorAndComplete(SseEmitter emitter, String errorMessage) {
-        CompletableFuture.runAsync(() -> {
-            try {
-                Map<String, Object> errorEvent = Map.of(
-                        KEY_TYPE, EVENT_TYPE_ERROR,
-                        KEY_MESSAGE, errorMessage
-                );
-                sendJson(emitter, errorEvent);
-                emitter.complete();
-            } catch (Exception ex) {
-                emitter.completeWithError(ex);
-            }
-        });
-    }
-
-    private void sendJson(SseEmitter emitter, Map<String, Object> payload) throws Exception {
-        String json = objectMapper.writeValueAsString(payload);
-        emitter.send(SseEmitter.event().data(json));
     }
 
     private void cleanup(HttpSession session) {

@@ -1,6 +1,5 @@
 package com.tschanz.aigeny.web;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.llm.model.Message;
 import com.tschanz.aigeny.llm_tool.QueryResult;
 import com.tschanz.aigeny.llm_tool.ToolResult;
@@ -36,15 +35,17 @@ class ChatStreamingServiceTest {
     @Mock private ChatSessionService sessionService;
     @Mock private ConfirmationOrchestrator confirmationOrchestrator;
     @Mock private ExecutionContextManager contextManager;
+    @Mock private SseStreamManager sseManager;
     @Mock private HttpSession session;
 
-    private ObjectMapper objectMapper;
     private ChatStreamingService streamingService;
 
     @BeforeEach
     void setUp() {
-        objectMapper    = new ObjectMapper();
-        streamingService = new ChatStreamingService(orchestration, sessionService, confirmationOrchestrator, contextManager, objectMapper);
+        streamingService = new ChatStreamingService(orchestration, sessionService, confirmationOrchestrator, contextManager, sseManager);
+        
+        // Default: sseManager creates a new emitter
+        when(sseManager.createEmitter()).thenReturn(new SseEmitter(300_000L));
     }
 
     @Nested
@@ -52,8 +53,8 @@ class ChatStreamingServiceTest {
     class SseEmitterCreation {
 
         @Test
-        @DisplayName("should create emitter with 5-minute timeout")
-        void shouldCreateEmitterWithTimeout() {
+        @DisplayName("should create emitter via SseStreamManager")
+        void shouldCreateEmitterViaSseStreamManager() {
             List<Message> history  = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
             when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
@@ -62,7 +63,7 @@ class ChatStreamingServiceTest {
                     "test message", history, session, "token", false, "bb-token");
 
             assertThat(emitter).isNotNull();
-            assertThat(emitter.getTimeout()).isEqualTo(300_000L);
+            verify(sseManager).createEmitter();
         }
 
         @Test
@@ -78,22 +79,24 @@ class ChatStreamingServiceTest {
         }
 
         @Test
-        @DisplayName("should handle empty message with error event")
+        @DisplayName("should handle empty message with error event via SseStreamManager")
         void shouldHandleEmptyMessageWithErrorEvent() {
             SseEmitter emitter = streamingService.streamChat(
                     "", new ArrayList<>(), session, "token", false, "bb-token");
 
             assertThat(emitter).isNotNull();
+            verify(sseManager).sendErrorAndComplete(any(SseEmitter.class), anyString());
             verify(sessionService, never()).createCancelFlag(any());
         }
 
         @Test
-        @DisplayName("should handle null message with error event")
+        @DisplayName("should handle null message with error event via SseStreamManager")
         void shouldHandleNullMessageWithErrorEvent() {
             SseEmitter emitter = streamingService.streamChat(
                     null, new ArrayList<>(), session, "token", false, "bb-token");
 
             assertThat(emitter).isNotNull();
+            verify(sseManager).sendErrorAndComplete(any(SseEmitter.class), anyString());
             verify(sessionService, never()).createCancelFlag(any());
         }
     }
@@ -121,6 +124,7 @@ class ChatStreamingServiceTest {
             Thread.sleep(100);
 
             verify(sessionService).setLastQueryResult(session, queryResult);
+            verify(sseManager).sendCompletionAndClose(any(SseEmitter.class), eq(chatResult));
         }
 
         @Test
@@ -129,14 +133,15 @@ class ChatStreamingServiceTest {
             List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
+            ChatResult chatResult = new ChatResult("response", null);
             when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
-            when(orchestration.chat(any(), anyString(), any(), any(), any()))
-                    .thenReturn(new ChatResult("response", null));
+            when(orchestration.chat(any(), anyString(), any(), any(), any())).thenReturn(chatResult);
 
             streamingService.streamChat("hello", history, session, "token", false, "bb-token");
             Thread.sleep(100);
 
             verify(sessionService, never()).setLastQueryResult(any(), any());
+            verify(sseManager).sendCompletionAndClose(any(SseEmitter.class), eq(chatResult));
         }
     }
 
@@ -189,7 +194,7 @@ class ChatStreamingServiceTest {
     class CancellationHandling {
 
         @Test
-        @DisplayName("should handle InterruptedException as cancellation")
+        @DisplayName("should handle InterruptedException via SseStreamManager")
         void shouldHandleInterruptedExceptionAsCancellation() throws Exception {
             List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
@@ -197,11 +202,11 @@ class ChatStreamingServiceTest {
             when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
             when(orchestration.chat(any(), anyString(), any(), any(), any()))
                     .thenThrow(new InterruptedException("Cancelled"));
-            when(session.getId()).thenReturn("session-123");
 
             streamingService.streamChat("test", history, session, "token", false, "bb-token");
             Thread.sleep(100);
 
+            verify(sseManager).handleCancellation(any(SseEmitter.class), eq(session));
             verify(sessionService).clearCancelFlag(session);
         }
     }
@@ -262,7 +267,7 @@ class ChatStreamingServiceTest {
     class ErrorHandlingTests {
 
         @Test
-        @DisplayName("should handle generic exceptions gracefully")
+        @DisplayName("should handle generic exceptions via SseStreamManager")
         void shouldHandleGenericExceptionsGracefully() throws Exception {
             List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
@@ -276,6 +281,7 @@ class ChatStreamingServiceTest {
             Thread.sleep(100);
 
             assertThat(emitter).isNotNull();
+            verify(sseManager).handleError(any(SseEmitter.class), any(RuntimeException.class));
             verify(sessionService).clearCancelFlag(session);
         }
 
