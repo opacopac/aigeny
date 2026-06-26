@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.llm.model.Message;
 import com.tschanz.aigeny.llm_tool.QueryResult;
 import com.tschanz.aigeny.llm_tool.ToolResult;
-import com.tschanz.aigeny.llm_tool.jira.JiraWriteExecutor;
 import com.tschanz.aigeny.orchestration.ChatResult;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
 import jakarta.servlet.http.HttpSession;
@@ -35,7 +34,7 @@ class ChatStreamingServiceTest {
 
     @Mock private OrchestrationService orchestration;
     @Mock private ChatSessionService sessionService;
-    @Mock private JiraWriteExecutor jiraWriteExecutor;
+    @Mock private ConfirmationOrchestrator confirmationOrchestrator;
     @Mock private HttpSession session;
 
     private ObjectMapper objectMapper;
@@ -44,7 +43,7 @@ class ChatStreamingServiceTest {
     @BeforeEach
     void setUp() {
         objectMapper    = new ObjectMapper();
-        streamingService = new ChatStreamingService(orchestration, sessionService, jiraWriteExecutor, objectMapper);
+        streamingService = new ChatStreamingService(orchestration, sessionService, confirmationOrchestrator, objectMapper);
     }
 
     @Nested

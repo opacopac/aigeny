@@ -8,14 +8,11 @@ import com.tschanz.aigeny.llm_tool.bitbucket.BitbucketTokenContext;
 import com.tschanz.aigeny.llm_tool.jira.ConfirmationContext;
 import com.tschanz.aigeny.llm_tool.jira.JiraTokenContext;
 import com.tschanz.aigeny.llm_tool.jira.JiraWriteContext;
-import com.tschanz.aigeny.llm_tool.jira.JiraWriteExecutor;
-import com.tschanz.aigeny.llm_tool.jira.PendingJiraAction;
 import com.tschanz.aigeny.llm_tool.jira.PendingJiraActionContext;
 import com.tschanz.aigeny.orchestration.BatchConfirmationContext;
 import com.tschanz.aigeny.orchestration.ChatResult;
 import com.tschanz.aigeny.orchestration.CurrentToolCallContext;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
-import com.tschanz.aigeny.orchestration.WriteToolCallInfo;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,9 +23,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -45,45 +39,36 @@ public class ChatStreamingService {
 
     private static final Logger log = LoggerFactory.getLogger(ChatStreamingService.class);
 
-    private static final long SSE_TIMEOUT_MS          = 300_000L; // 5 minutes
-    private static final long CONFIRMATION_TIMEOUT_MIN = 5L;
+    private static final long SSE_TIMEOUT_MS = 300_000L; // 5 minutes
 
     // SSE event types
-    private static final String EVENT_TYPE_ERROR                 = "error";
-    private static final String EVENT_TYPE_TOOL_CALL             = "tool_call";
-    private static final String EVENT_TYPE_INTERMEDIATE          = "intermediate";
-    private static final String EVENT_TYPE_DONE                  = "done";
-    private static final String EVENT_TYPE_CANCELLED             = "cancelled";
-    private static final String EVENT_TYPE_CONFIRMATION_REQUIRED = "confirmation_required";
-    private static final String EVENT_TYPE_BATCH_CONFIRMATION    = "batch_confirmation_required";
+    private static final String EVENT_TYPE_ERROR        = "error";
+    private static final String EVENT_TYPE_TOOL_CALL    = "tool_call";
+    private static final String EVENT_TYPE_INTERMEDIATE = "intermediate";
+    private static final String EVENT_TYPE_DONE         = "done";
+    private static final String EVENT_TYPE_CANCELLED    = "cancelled";
 
     // JSON keys
-    private static final String KEY_TYPE        = "type";
-    private static final String KEY_MESSAGE     = "message";
-    private static final String KEY_TOOL_NAME   = "toolName";
+    private static final String KEY_TYPE       = "type";
+    private static final String KEY_MESSAGE    = "message";
+    private static final String KEY_TOOL_NAME  = "toolName";
     private static final String KEY_DESCRIPTION = "description";
-    private static final String KEY_RESPONSE    = "response";
-    private static final String KEY_HAS_EXPORT  = "hasExport";
-    private static final String KEY_ACTIONS     = "actions";
-
-    // Message keys
-    private static final String MSG_JIRA_WRITE_ERROR       = "chat.jira.write_error";
-    private static final String MSG_CONFIRMATION_DECLINED  = "jira.confirmation.declined";
-    private static final String MSG_CONFIRMATION_TIMEOUT   = "jira.confirmation.timeout";
+    private static final String KEY_RESPONSE   = "response";
+    private static final String KEY_HAS_EXPORT = "hasExport";
 
     private final OrchestrationService orchestration;
     private final ChatSessionService sessionService;
-    private final JiraWriteExecutor jiraWriteExecutor;
+    private final ConfirmationOrchestrator confirmationOrchestrator;
     private final ObjectMapper objectMapper;
 
     public ChatStreamingService(OrchestrationService orchestration,
                                 ChatSessionService sessionService,
-                                JiraWriteExecutor jiraWriteExecutor,
+                                ConfirmationOrchestrator confirmationOrchestrator,
                                 ObjectMapper objectMapper) {
-        this.orchestration     = orchestration;
-        this.sessionService    = sessionService;
-        this.jiraWriteExecutor = jiraWriteExecutor;
-        this.objectMapper      = objectMapper;
+        this.orchestration            = orchestration;
+        this.sessionService           = sessionService;
+        this.confirmationOrchestrator = confirmationOrchestrator;
+        this.objectMapper             = objectMapper;
     }
 
     /**
@@ -134,12 +119,13 @@ public class ChatStreamingService {
 
         // Set up synchronous confirmation handler for write tools
         ConfirmationContext.set((humanDescription, action) ->
-                handleConfirmation(emitter, session, jiraToken, jiraWriteEnabled, humanDescription, action));
+                confirmationOrchestrator.handleSingleConfirmation(
+                        emitter, session, jiraToken, jiraWriteEnabled, humanDescription, action));
 
         // Set up batch confirmation handler: when 2+ write tools appear in one LLM response,
         // show a single combined dialog instead of one per write tool.
         BatchConfirmationContext.set(writeToolInfos ->
-                handleBatchConfirmation(emitter, session, writeToolInfos));
+                confirmationOrchestrator.handleBatchConfirmation(emitter, session, writeToolInfos));
 
         try {
             runOrchestrationAndComplete(emitter, message, history, session, cancelFlag);
@@ -148,109 +134,6 @@ public class ChatStreamingService {
         }
     }
 
-    /**
-     * Synchronous confirmation handler called by write tools that need user approval.
-     *
-     * <p>If a batch confirmation was already shown for this LLM response, the decision for
-     * this tool call is pre-stored and returned immediately without blocking.
-     *
-     * <ol>
-     *   <li>Sends a {@code confirmation_required} SSE event with the action description.</li>
-     *   <li>Stores a {@link CompletableFuture} in the session and blocks until resolved.</li>
-     *   <li>If confirmed: executes the Jira action and returns the result as a ToolResult
-     *       (also sends an {@code intermediate} SSE event so the result appears in chat).</li>
-     *   <li>If declined: returns a "declined" ToolResult without executing.</li>
-     * </ol>
-     */
-    private ToolResult handleConfirmation(SseEmitter emitter,
-                                          HttpSession session,
-                                          String jiraToken,
-                                          boolean jiraWriteEnabled,
-                                          String humanDescription,
-                                          PendingJiraAction action) {
-        // Check if this write tool's decision was pre-approved via a batch dialog
-        String currentToolCallId = CurrentToolCallContext.get();
-        if (currentToolCallId != null && ConfirmationContext.hasPreApproved(currentToolCallId)) {
-            boolean confirmed = ConfirmationContext.getPreApproved(currentToolCallId);
-            log.info("Using pre-approved decision ({}) for tool call {}", confirmed ? "confirmed" : "declined", currentToolCallId);
-            return executeOrDecline(confirmed, emitter, jiraToken, jiraWriteEnabled, action);
-        }
-
-        // No pre-approval: show individual confirmation dialog (existing single-action flow)
-        sendConfirmationRequired(emitter, humanDescription);
-
-        CompletableFuture<Boolean> future = sessionService.createConfirmationFuture(session);
-        try {
-            boolean confirmed = future.get(CONFIRMATION_TIMEOUT_MIN, TimeUnit.MINUTES);
-            return executeOrDecline(confirmed, emitter, jiraToken, jiraWriteEnabled, action);
-        } catch (TimeoutException e) {
-            log.warn("Confirmation timed out for session {}", session.getId());
-            return new ToolResult(Messages.get(MSG_CONFIRMATION_TIMEOUT));
-        } catch (InterruptedException | ExecutionException e) {
-            Thread.currentThread().interrupt();
-            return new ToolResult("Confirmation error: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Executes the Jira action if confirmed, or returns a declined message.
-     * Shared by individual and batch confirmation paths.
-     */
-    private ToolResult executeOrDecline(boolean confirmed,
-                                         SseEmitter emitter,
-                                         String jiraToken,
-                                         boolean jiraWriteEnabled,
-                                         PendingJiraAction action) {
-        if (confirmed) {
-            JiraWriteContext.set(jiraWriteEnabled);
-            try {
-                String result = jiraWriteExecutor.execute(action, jiraToken);
-                sendIntermediateMessage(emitter, result);
-                return new ToolResult(result);
-            } catch (Exception e) {
-                log.error("Jira action execution failed after confirmation", e);
-                String errMsg = Messages.get(MSG_JIRA_WRITE_ERROR, e.getMessage());
-                return new ToolResult(errMsg);
-            }
-        } else {
-            return new ToolResult(Messages.get(MSG_CONFIRMATION_DECLINED));
-        }
-    }
-
-    /**
-     * Batch confirmation handler called when 2+ write tool calls appear in one LLM response.
-     * Sends a single {@code batch_confirmation_required} SSE event listing all pending actions,
-     * blocks until the user submits all decisions, and returns a map of toolCallId → confirmed.
-     */
-    private Map<String, Boolean> handleBatchConfirmation(SseEmitter emitter,
-                                                          HttpSession session,
-                                                          List<WriteToolCallInfo> writeToolInfos) {
-        sendBatchConfirmationRequired(emitter, writeToolInfos);
-
-        CompletableFuture<Map<String, Boolean>> future = sessionService.createBatchConfirmationFuture(session);
-        try {
-            Map<String, Boolean> result = future.get(CONFIRMATION_TIMEOUT_MIN, TimeUnit.MINUTES);
-            // Handle "confirmAll" shortcut: expand to per-ID decisions
-            if (result.containsKey("__confirmAll__")) {
-                boolean confirmAll = Boolean.TRUE.equals(result.get("__confirmAll__"));
-                Map<String, Boolean> expanded = new HashMap<>();
-                writeToolInfos.forEach(info -> expanded.put(info.toolCallId(), confirmAll));
-                return expanded;
-            }
-            return result;
-        } catch (TimeoutException e) {
-            log.warn("Batch confirmation timed out for session {}", session.getId());
-            // All declined on timeout
-            Map<String, Boolean> declined = new HashMap<>();
-            writeToolInfos.forEach(info -> declined.put(info.toolCallId(), false));
-            return declined;
-        } catch (InterruptedException | ExecutionException e) {
-            Thread.currentThread().interrupt();
-            Map<String, Boolean> declined = new HashMap<>();
-            writeToolInfos.forEach(info -> declined.put(info.toolCallId(), false));
-            return declined;
-        }
-    }
 
     /**
      * Shared core: runs LLM orchestration and sends the final SSE done event.
@@ -289,37 +172,6 @@ public class ChatStreamingService {
     }
 
     // ── SSE helpers ───────────────────────────────────────────────────────────
-
-    private void sendConfirmationRequired(SseEmitter emitter, String description) {
-        try {
-            Map<String, Object> event = Map.of(
-                    KEY_TYPE, EVENT_TYPE_CONFIRMATION_REQUIRED,
-                    KEY_DESCRIPTION, description
-            );
-            sendJson(emitter, event);
-        } catch (Exception e) {
-            log.warn("SSE confirmation_required send failed: {}", e.getMessage());
-        }
-    }
-
-    private void sendBatchConfirmationRequired(SseEmitter emitter, List<WriteToolCallInfo> writeToolInfos) {
-        try {
-            List<Map<String, String>> actions = writeToolInfos.stream()
-                    .map(info -> Map.of(
-                            "toolCallId",       info.toolCallId(),
-                            KEY_TOOL_NAME,      info.toolName(),
-                            KEY_DESCRIPTION,    info.callDescription()
-                    ))
-                    .toList();
-            Map<String, Object> event = Map.of(
-                    KEY_TYPE,    EVENT_TYPE_BATCH_CONFIRMATION,
-                    KEY_ACTIONS, actions
-            );
-            sendJson(emitter, event);
-        } catch (Exception e) {
-            log.warn("SSE batch_confirmation_required send failed: {}", e.getMessage());
-        }
-    }
 
     private void sendToolCall(SseEmitter emitter, String toolName, String description) {
         try {
