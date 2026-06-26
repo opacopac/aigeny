@@ -19,6 +19,7 @@ import {
   finalizeTypingIndicator,
   removeTypingIndicator,
   showJiraConfirmation,
+  showJiraBatchConfirmation,
   hasPendingJiraConfirmation,
   executeJiraAction,
   handleJiraConfirmAndResume,
@@ -250,7 +251,7 @@ describe('showJiraConfirmation (chat-renderer)', () => {
   });
 
   it('renders the description inside the bubble', () => {
-    showJiraConfirmation({ description: 'Create ticket XY-1' });
+    showJiraConfirmation('Create ticket XY-1');
     expect(document.querySelector('.message-bubble').innerHTML)
       .toContain('Create ticket XY-1');
   });
@@ -417,7 +418,7 @@ describe('executeJiraAction (chat-renderer – confirm-and-resume delegation)', 
     });
     // Override with a spy by re-wiring via initChat (which calls setConfirmHandler internally)
     // We test the behaviour by calling executeJiraAction on a block and verifying
-    // the /api/jira/confirm-stream fetch is attempted (the default wired handler).
+    // the /api/jira/confirm-decision fetch is attempted (the default wired handler).
     showJiraConfirmation({ description: 'Some action' });
     const block = document.querySelector('.jira-confirm-msg');
 
@@ -433,8 +434,8 @@ describe('executeJiraAction (chat-renderer – confirm-and-resume delegation)', 
 
     await executeJiraAction(block);
 
-    // The confirm-stream endpoint must be called
-    expect(fetchSpy).toHaveBeenCalledWith('/api/jira/confirm-stream', expect.objectContaining({ method: 'POST' }));
+    // The confirm-decision endpoint must be called
+    expect(fetchSpy).toHaveBeenCalledWith('/api/jira/confirm-decision', expect.objectContaining({ method: 'POST' }));
   });
 
   it('disables all buttons in the confirmation block before executing', async () => {
@@ -470,7 +471,7 @@ describe('handleJiraConfirmAndResume (chat-stream, via chat.js re-export)', () =
     expect(document.querySelector('.jira-confirm-msg')).toBeNull();
   });
 
-  it('calls /api/jira/confirm-stream', async () => {
+  it('calls /api/jira/confirm-decision', async () => {
     showJiraConfirmation({ description: 'Some action' });
     const block = document.querySelector('.jira-confirm-msg');
 
@@ -482,7 +483,7 @@ describe('handleJiraConfirmAndResume (chat-stream, via chat.js re-export)', () =
     await handleJiraConfirmAndResume(block);
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      '/api/jira/confirm-stream',
+      '/api/jira/confirm-decision',
       expect.objectContaining({ method: 'POST' })
     );
   });
@@ -499,6 +500,162 @@ describe('handleJiraConfirmAndResume (chat-stream, via chat.js re-export)', () =
     handleJiraConfirmAndResume(block);
 
     expect(document.getElementById('typingIndicator')).not.toBeNull();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// chat-renderer.js – showJiraBatchConfirmation
+// ════════════════════════════════════════════════════════════════════════════
+describe('showJiraBatchConfirmation (chat-renderer)', () => {
+  const twoActions = [
+    { toolCallId: 'call-1', toolName: 'create_jira_issue', description: 'Ticket erstellen in NOVA: Foo' },
+    { toolCallId: 'call-2', toolName: 'add_jira_comment',  description: 'Kommentar zu NOVA-42' },
+  ];
+
+  it('appends a block with .jira-batch-confirm-msg to #chatMessages', () => {
+    showJiraBatchConfirmation(twoActions);
+    expect(document.querySelector('.jira-batch-confirm-msg')).not.toBeNull();
+  });
+
+  it('also has .jira-confirm-msg class (so hasPendingJiraConfirmation works)', () => {
+    showJiraBatchConfirmation(twoActions);
+    expect(document.querySelector('.jira-confirm-msg')).not.toBeNull();
+  });
+
+  it('hasPendingJiraConfirmation returns true after batch dialog is shown', () => {
+    showJiraBatchConfirmation(twoActions);
+    expect(hasPendingJiraConfirmation()).toBe(true);
+  });
+
+  it('renders one checkbox row per action', () => {
+    showJiraBatchConfirmation(twoActions);
+    const rows = document.querySelectorAll('.jira-batch-action-row');
+    expect(rows.length).toBe(2);
+  });
+
+  it('all checkboxes start checked', () => {
+    showJiraBatchConfirmation(twoActions);
+    const checkboxes = document.querySelectorAll('.jira-batch-action-row input[type="checkbox"]');
+    checkboxes.forEach(cb => expect(cb.checked).toBe(true));
+  });
+
+  it('contains a "Confirm All" button', () => {
+    showJiraBatchConfirmation(twoActions);
+    const btns = [...document.querySelectorAll('.jira-confirm-buttons button')];
+    expect(btns.some(b => b.textContent.includes('Alle ausführen'))).toBe(true);
+  });
+
+  it('contains a "Decline All" button', () => {
+    showJiraBatchConfirmation(twoActions);
+    const btns = [...document.querySelectorAll('.jira-confirm-buttons button')];
+    expect(btns.some(b => b.textContent.includes('Alle abbrechen'))).toBe(true);
+  });
+
+  it('contains a "Auswahl ausführen" button', () => {
+    showJiraBatchConfirmation(twoActions);
+    const btns = [...document.querySelectorAll('.jira-confirm-buttons button')];
+    expect(btns.some(b => b.textContent.includes('Auswahl'))).toBe(true);
+  });
+
+  it('renders action descriptions inside the dialog', () => {
+    showJiraBatchConfirmation(twoActions);
+    const html = document.querySelector('.jira-batch-confirm-msg').innerHTML;
+    expect(html).toContain('NOVA-42');
+    expect(html).toContain('NOVA: Foo');
+  });
+
+  it('clicking "Confirm All" posts confirmAll:true to batch endpoint', async () => {
+    showJiraBatchConfirmation(twoActions);
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const confirmAllBtn = [...document.querySelectorAll('.jira-confirm-buttons button')]
+      .find(b => b.textContent.includes('Alle ausführen'));
+    await confirmAllBtn.onclick();
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/jira/batch-confirm-decision',
+      expect.objectContaining({ method: 'POST' })
+    );
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    expect(body.confirmAll).toBe(true);
+  });
+
+  it('clicking "Decline All" posts confirmAll:false to batch endpoint', async () => {
+    showJiraBatchConfirmation(twoActions);
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const declineAllBtn = [...document.querySelectorAll('.jira-confirm-buttons button')]
+      .find(b => b.textContent.includes('Alle abbrechen'));
+    await declineAllBtn.onclick();
+
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    expect(body.confirmAll).toBe(false);
+  });
+
+  it('clicking "Auswahl" posts per-item decisions to batch endpoint', async () => {
+    showJiraBatchConfirmation(twoActions);
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    // Uncheck the second action
+    const checkboxes = document.querySelectorAll('.jira-batch-action-row input[type="checkbox"]');
+    checkboxes[1].checked = false;
+    checkboxes[1].onchange();
+
+    const auswählBtn = [...document.querySelectorAll('.jira-confirm-buttons button')]
+      .find(b => b.textContent.includes('Auswahl'));
+    await auswählBtn.onclick();
+
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    expect(body.decisions['call-1']).toBe(true);
+    expect(body.decisions['call-2']).toBe(false);
+  });
+
+  it('removes the dialog after clicking any button', async () => {
+    showJiraBatchConfirmation(twoActions);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+
+    const confirmAllBtn = [...document.querySelectorAll('.jira-confirm-buttons button')]
+      .find(b => b.textContent.includes('Alle ausführen'));
+    await confirmAllBtn.onclick();
+
+    expect(document.querySelector('.jira-batch-confirm-msg')).toBeNull();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// chat-stream.js – batch_confirmation_required SSE handling
+// ════════════════════════════════════════════════════════════════════════════
+describe('batch_confirmation_required SSE event handling (chat-stream)', () => {
+  it('sendMessage is blocked when a batch confirmation dialog is visible', async () => {
+    // Show a batch confirmation dialog
+    showJiraBatchConfirmation([
+      { toolCallId: 'call-1', toolName: 'create_jira_issue', description: 'action 1' },
+    ]);
+
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    document.getElementById('userInput').value = 'hello';
+
+    await sendMessage();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('sendMessage appends a warning when blocked by batch confirmation', async () => {
+    showJiraBatchConfirmation([
+      { toolCallId: 'call-1', toolName: 'create_jira_issue', description: 'action 1' },
+    ]);
+
+    vi.stubGlobal('fetch', vi.fn());
+    document.getElementById('userInput').value = 'hello';
+
+    await sendMessage();
+
+    const allMessages = [...document.querySelectorAll('.message.aigeny')].map(el => el.textContent);
+    expect(allMessages.join(' ')).toContain('ausstehende Jira-Aktion');
   });
 });
 

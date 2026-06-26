@@ -73,6 +73,12 @@ async function processStream(responseBody) {
         // user's decision via POST /api/jira/confirm-decision.
         _renderer.finalizeTypingIndicator();
         _renderer.showJiraConfirmation(data.description);
+      } else if (data.type === 'batch_confirmation_required') {
+        // Multiple write actions in one LLM response: show one combined dialog.
+        // The SSE stream stays open – the orchestration thread is blocked waiting for the
+        // user's decisions via POST /api/jira/batch-confirm-decision.
+        _renderer.finalizeTypingIndicator();
+        _renderer.showJiraBatchConfirmation(data.actions);
       } else if (data.type === 'done') {
         _renderer.finalizeTypingIndicator();
         if (data.response)  _renderer.appendMessage('aigeny', data.response);
@@ -90,6 +96,14 @@ async function processStream(responseBody) {
 
 export async function sendMessage() {
   if (_isThinkingFn()) return;
+
+  // Block new messages while a Jira confirmation (single or batch) is pending
+  if (_renderer.hasPendingJiraConfirmation?.()) {
+    _renderer.appendMessage('aigeny',
+      '_Es gibt eine ausstehende Jira-Aktion, Towarischtsch. ' +
+      'Bitte erst bestätigen oder ablehnen!_');
+    return;
+  }
 
   const input   = document.getElementById('userInput');
   const message = input.value.trim();

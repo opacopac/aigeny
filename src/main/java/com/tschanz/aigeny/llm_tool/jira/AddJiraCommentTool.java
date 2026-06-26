@@ -43,6 +43,7 @@ public class AddJiraCommentTool implements Tool {
     }
 
     @Override public String getName() { return TOOL_NAME; }
+    @Override public boolean requiresConfirmation() { return true; }
 
     @Override
     public String getCallDescription(String argumentsJson) {

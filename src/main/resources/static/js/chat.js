@@ -12,9 +12,11 @@
  *   finalizeTypingIndicator()– hide dots, keep tool-call list, or remove entirely
  *   removeTypingIndicator()  – force-remove the indicator
  *   showJiraConfirmation()   – render a Jira confirm/cancel block
+ *   showJiraBatchConfirmation() – render a batch confirm dialog for multiple actions
  *   hasPendingJiraConfirmation() – true when a confirmation block is visible
  *   executeJiraAction()      – POST /api/jira/confirm-decision {"confirmed":true}
  *   cancelJiraAction()       – POST /api/jira/confirm-decision {"confirmed":false}
+ *   handleJiraConfirmAndResume() – alias for executeJiraAction (deprecated)
  *   sendMessage()            – POST chat message, consume SSE stream
  *   stopGeneration()         – POST /api/chat/cancel
  *   clearChat()              – POST /api/chat/clear, reset UI
@@ -34,9 +36,12 @@ export const updateTypingIndicator      = Renderer.updateTypingIndicator;
 export const finalizeTypingIndicator    = Renderer.finalizeTypingIndicator;
 export const removeTypingIndicator      = Renderer.removeTypingIndicator;
 export const showJiraConfirmation       = Renderer.showJiraConfirmation;
+export const showJiraBatchConfirmation  = Renderer.showJiraBatchConfirmation;
 export const hasPendingJiraConfirmation = Renderer.hasPendingJiraConfirmation;
 export const executeJiraAction          = Renderer.executeJiraAction;
 export const cancelJiraAction           = Renderer.cancelJiraAction;
+/** @deprecated alias for executeJiraAction, kept for backwards compatibility */
+export const handleJiraConfirmAndResume = Renderer.executeJiraAction;
 export { sendMessage, stopGeneration };
 
 // ── Module-level state ────────────────────────────────────────────────────────
@@ -58,12 +63,14 @@ export function initChat({ isThinkingFn, setThinkingFn, setExportEnabledFn }) {
     setThinkingFn,
     setExportEnabledFn,
     renderer: {
-      appendMessage:           Renderer.appendMessage,
-      showTypingIndicator:     Renderer.showTypingIndicator,
-      updateTypingIndicator:   Renderer.updateTypingIndicator,
-      finalizeTypingIndicator: Renderer.finalizeTypingIndicator,
-      removeTypingIndicator:   Renderer.removeTypingIndicator,
-      showJiraConfirmation:    Renderer.showJiraConfirmation,
+      appendMessage:              Renderer.appendMessage,
+      showTypingIndicator:        Renderer.showTypingIndicator,
+      updateTypingIndicator:      Renderer.updateTypingIndicator,
+      finalizeTypingIndicator:    Renderer.finalizeTypingIndicator,
+      removeTypingIndicator:      Renderer.removeTypingIndicator,
+      showJiraConfirmation:       Renderer.showJiraConfirmation,
+      showJiraBatchConfirmation:  Renderer.showJiraBatchConfirmation,
+      hasPendingJiraConfirmation: Renderer.hasPendingJiraConfirmation,
     },
   });
 

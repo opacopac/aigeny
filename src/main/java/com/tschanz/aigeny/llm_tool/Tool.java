@@ -21,6 +21,14 @@ public interface Tool {
     ToolDefinition getDefinition();
 
     /**
+     * Returns true if this tool requires user confirmation before executing.
+     * Write tools that modify external state should override this to return true.
+     */
+    default boolean requiresConfirmation() {
+        return false;
+    }
+
+    /**
      * Execute the tool with the given JSON arguments string.
      * @return result as a string (may be text, JSON, or QueryResult.toText())
      */

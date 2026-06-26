@@ -11,6 +11,7 @@
  *   finalizeTypingIndicator()       – hide dots, keep/remove tool-call list
  *   removeTypingIndicator()         – force-remove the indicator
  *   showJiraConfirmation(desc)      – render a Jira confirm/cancel block
+ *   showJiraBatchConfirmation(actions) – render a batch confirm dialog for multiple actions
  *   hasPendingJiraConfirmation()    – true when a confirmation block is visible
  */
 
@@ -203,5 +204,107 @@ export async function cancelJiraAction(confirmBlock) {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ confirmed: false }),
+  }).catch(() => {});
+}
+
+// ── Jira batch confirmation block ─────────────────────────────────────────────
+
+/**
+ * Render a batch confirm dialog for multiple pending Jira write actions.
+ * Called when the SSE stream delivers a {@code batch_confirmation_required} event.
+ *
+ * @param {Array<{toolCallId: string, toolName: string, description: string}>} actions
+ */
+export function showJiraBatchConfirmation(actions) {
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'message aigeny jira-confirm-msg jira-batch-confirm-msg';
+
+  const header = document.createElement('div');
+  header.className = 'message-header';
+  const dot  = document.createElement('span'); dot.className = 'dot';
+  const name = document.createElement('span'); name.textContent = 'AIgeny';
+  header.append(dot, name);
+
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble';
+
+  const titleEl = document.createElement('div');
+  titleEl.innerHTML = renderMarkdown(
+    `⚠️ **${actions.length} Jira Schreibaktionen – Bestätigung erforderlich!**\n\n` +
+    `Soll ich die folgenden Aktionen wirklich ausführen, Towarischtsch?`
+  );
+  bubble.appendChild(titleEl);
+
+  // Per-action toggle list
+  const list = document.createElement('div');
+  list.className = 'jira-batch-action-list';
+  const decisions = {};
+  actions.forEach(action => {
+    decisions[action.toolCallId] = true; // default: confirmed
+
+    const row = document.createElement('div');
+    row.className = 'jira-batch-action-row';
+
+    const toggle = document.createElement('input');
+    toggle.type    = 'checkbox';
+    toggle.id      = 'batch-toggle-' + action.toolCallId;
+    toggle.checked = true;
+    toggle.onchange = () => { decisions[action.toolCallId] = toggle.checked; };
+
+    const label = document.createElement('label');
+    label.htmlFor = toggle.id;
+    label.innerHTML = renderMarkdown(action.description);
+
+    row.append(toggle, label);
+    list.appendChild(row);
+  });
+  bubble.appendChild(list);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'jira-confirm-buttons';
+
+  const confirmAllBtn = document.createElement('button');
+  confirmAllBtn.className = 'btn btn-confirm';
+  confirmAllBtn.textContent = '✔ Da! Alle ausführen';
+  confirmAllBtn.onclick = () => submitBatchDecision(div, decisions, true);
+
+  const confirmSelectedBtn = document.createElement('button');
+  confirmSelectedBtn.className = 'btn btn-confirm-secondary';
+  confirmSelectedBtn.textContent = '✔ Auswahl ausführen';
+  confirmSelectedBtn.onclick = () => submitBatchDecision(div, decisions, null);
+
+  const cancelAllBtn = document.createElement('button');
+  cancelAllBtn.className = 'btn btn-cancel';
+  cancelAllBtn.textContent = '✗ Njet! Alle abbrechen';
+  cancelAllBtn.onclick = () => submitBatchDecision(div, decisions, false);
+
+  btnRow.append(confirmAllBtn, confirmSelectedBtn, cancelAllBtn);
+  bubble.appendChild(btnRow);
+
+  div.append(header, bubble);
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+/**
+ * Submit batch decisions to the backend.
+ * @param {HTMLElement}  confirmBlock  – the dialog element to remove
+ * @param {Object}       decisions     – map of toolCallId → boolean (per-toggle state)
+ * @param {boolean|null} overrideAll   – if true/false, override all decisions; null = use per-toggle
+ */
+async function submitBatchDecision(confirmBlock, decisions, overrideAll) {
+  confirmBlock.querySelectorAll('button').forEach(b => b.disabled = true);
+  confirmBlock.remove();
+  showTypingIndicator();
+
+  const body = overrideAll !== null
+    ? { confirmAll: overrideAll }
+    : { decisions };
+
+  await fetch('/api/jira/batch-confirm-decision', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
   }).catch(() => {});
 }

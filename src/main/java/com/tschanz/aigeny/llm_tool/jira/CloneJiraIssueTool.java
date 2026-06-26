@@ -58,6 +58,7 @@ public class CloneJiraIssueTool implements Tool {
     }
 
     @Override public String getName() { return "clone_jira_issue"; }
+    @Override public boolean requiresConfirmation() { return true; }
 
     @Override
     public String getCallDescription(String argumentsJson) {

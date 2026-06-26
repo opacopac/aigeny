@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -23,12 +24,13 @@ public class ChatSessionService {
     private static final Logger log = LoggerFactory.getLogger(ChatSessionService.class);
 
     // Session attribute keys
-    private static final String SESSION_HISTORY             = "chatHistory";
-    private static final String SESSION_RESULT              = "lastQueryResult";
-    private static final String SESSION_PENDING_ACTION      = "pendingJiraAction";
-    private static final String SESSION_JIRA_WRITE          = "jiraWriteEnabled";
-    private static final String SESSION_CANCEL_FLAG         = "chatCancelFlag";
-    private static final String SESSION_CONFIRMATION_FUTURE = "jiraConfirmationFuture";
+    private static final String SESSION_HISTORY              = "chatHistory";
+    private static final String SESSION_RESULT               = "lastQueryResult";
+    private static final String SESSION_PENDING_ACTION       = "pendingJiraAction";
+    private static final String SESSION_JIRA_WRITE           = "jiraWriteEnabled";
+    private static final String SESSION_CANCEL_FLAG          = "chatCancelFlag";
+    private static final String SESSION_CONFIRMATION_FUTURE  = "jiraConfirmationFuture";
+    private static final String SESSION_BATCH_CONFIRM_FUTURE = "jiraBatchConfirmFuture";
 
     // ── Chat History Management ──────────────────────────────────────────────
 
@@ -260,6 +262,45 @@ public class ChatSessionService {
             return true;
         }
         log.warn("resolveConfirmation called but no pending future for session {}", session.getId());
+        return false;
+    }
+
+    // ── Batch Confirmation Future Management ─────────────────────────────────
+
+    /**
+     * Creates a new CompletableFuture for a batch Jira confirmation dialog.
+     * The future resolves with a map of {@code toolCallId → confirmed}.
+     * Stored in the session so the /api/jira/batch-confirm-decision endpoint can resolve it.
+     *
+     * @param session HTTP session
+     * @return the future that will be completed when the user submits all decisions
+     */
+    public CompletableFuture<Map<String, Boolean>> createBatchConfirmationFuture(HttpSession session) {
+        CompletableFuture<Map<String, Boolean>> future = new CompletableFuture<>();
+        session.setAttribute(SESSION_BATCH_CONFIRM_FUTURE, future);
+        log.debug("Created batch confirmation future for session {}", session.getId());
+        return future;
+    }
+
+    /**
+     * Resolves the pending batch confirmation future with the user's decisions.
+     * Removes it from the session after resolving.
+     *
+     * @param session   HTTP session
+     * @param decisions map of toolCallId → confirmed
+     * @return true if a pending future was found and resolved, false otherwise
+     */
+    @SuppressWarnings("unchecked")
+    public boolean resolveBatchConfirmation(HttpSession session, Map<String, Boolean> decisions) {
+        CompletableFuture<Map<String, Boolean>> future =
+                (CompletableFuture<Map<String, Boolean>>) session.getAttribute(SESSION_BATCH_CONFIRM_FUTURE);
+        if (future != null) {
+            session.removeAttribute(SESSION_BATCH_CONFIRM_FUTURE);
+            future.complete(decisions);
+            log.debug("Batch confirmation resolved ({} decisions) for session {}", decisions.size(), session.getId());
+            return true;
+        }
+        log.warn("resolveBatchConfirmation called but no pending future for session {}", session.getId());
         return false;
     }
 

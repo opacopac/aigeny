@@ -14,6 +14,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -462,6 +464,56 @@ class ChatSessionServiceTest {
             verify(session).removeAttribute("lastQueryResult");
             verify(session).removeAttribute("pendingJiraAction");
             verify(session).removeAttribute("chatCancelFlag");
+        }
+    }
+
+    @Nested
+    @DisplayName("Batch Confirmation Future Management")
+    class BatchConfirmationFutureManagement {
+
+        @Test
+        @DisplayName("should create batch confirmation future and store it in session")
+        void shouldCreateBatchConfirmationFutureAndStoreInSession() {
+            // When
+            CompletableFuture<Map<String, Boolean>> future =
+                    sessionService.createBatchConfirmationFuture(session);
+
+            // Then
+            assertThat(future).isNotNull();
+            assertThat(future.isDone()).isFalse();
+            verify(session).setAttribute(eq("jiraBatchConfirmFuture"), any(CompletableFuture.class));
+        }
+
+        @Test
+        @DisplayName("should resolve batch confirmation future with decisions")
+        void shouldResolveBatchConfirmationFutureWithDecisions() throws Exception {
+            // Given
+            CompletableFuture<Map<String, Boolean>> future = new CompletableFuture<>();
+            when(session.getAttribute("jiraBatchConfirmFuture")).thenReturn(future);
+
+            Map<String, Boolean> decisions = Map.of("call-1", true, "call-2", false);
+
+            // When
+            boolean resolved = sessionService.resolveBatchConfirmation(session, decisions);
+
+            // Then
+            assertThat(resolved).isTrue();
+            assertThat(future.isDone()).isTrue();
+            assertThat(future.get()).isEqualTo(decisions);
+            verify(session).removeAttribute("jiraBatchConfirmFuture");
+        }
+
+        @Test
+        @DisplayName("should return false when no batch future is pending")
+        void shouldReturnFalseWhenNoBatchFuturePending() {
+            // Given
+            when(session.getAttribute("jiraBatchConfirmFuture")).thenReturn(null);
+
+            // When
+            boolean resolved = sessionService.resolveBatchConfirmation(session, Map.of());
+
+            // Then
+            assertThat(resolved).isFalse();
         }
     }
 }

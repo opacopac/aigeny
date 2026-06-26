@@ -219,6 +219,55 @@
 .btn-cancel:hover:not(:disabled) { background: #4a1515; border-color: #aa4444; }
 .btn-cancel:disabled              { opacity: 0.45; cursor: not-allowed; }
 
+.btn-confirm-secondary {
+  background: #1a3a2a;
+  color: #88ddaa;
+  border: 1px solid #336644;
+  padding: 7px 18px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.2s, border-color 0.2s;
+}
+.btn-confirm-secondary:hover:not(:disabled) { background: #1e4a32; border-color: #44886a; }
+.btn-confirm-secondary:disabled             { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Jira batch confirmation ─────────────────────────────────────────── */
+.jira-batch-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 8px;
+}
+
+.jira-batch-action-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid #333;
+  border-radius: var(--radius);
+  background: #111;
+}
+
+.jira-batch-action-row input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+  accent-color: #44aa44;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.jira-batch-action-row label {
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.jira-batch-action-row label p { margin: 0; }
+
 /* ── Responsive ──────────────────────────────────────────────────────── */
 @media (max-width: 700px) {
   .message { max-width: 95%; }

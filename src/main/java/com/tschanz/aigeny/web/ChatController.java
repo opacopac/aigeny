@@ -171,6 +171,45 @@ public class ChatController {
         return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
     }
 
+    // ── POST /api/jira/batch-confirm-decision ─────────────────────────────────
+
+    /**
+     * Resolves a pending batch Jira confirmation for multiple write tool calls.
+     * Called by the frontend when the user confirms or declines multiple actions at once.
+     * The SSE stream remains open; the orchestration thread unblocks and continues.
+     *
+     * @param body JSON with {@code {"decisions": {"toolCallId1": true, "toolCallId2": false}}}
+     *             or {@code {"confirmAll": true}} / {@code {"confirmAll": false}} as a shortcut
+     */
+    @SuppressWarnings("unchecked")
+    @PostMapping("/jira/batch-confirm-decision")
+    public ResponseEntity<Map<String, String>> jiraBatchConfirmDecision(
+            @RequestBody Map<String, Object> body,
+            HttpSession session) {
+        Map<String, Boolean> decisions;
+        if (body.containsKey("decisions")) {
+            decisions = (Map<String, Boolean>) body.get("decisions");
+        } else {
+            // Shortcut: confirmAll true/false applies to all pending actions
+            boolean confirmAll = Boolean.parseBoolean(String.valueOf(body.getOrDefault("confirmAll", "false")));
+            // The batch future will be resolved with whatever is provided; an empty map means all declined
+            // For confirmAll we pass a sentinel handled by the session service, but since we don't know
+            // the tool call IDs here we resolve with a special entry. The batch handler in
+            // ChatStreamingService already stores the IDs, so we re-use resolveBatchConfirmation
+            // with a single-entry map that ChatStreamingService interprets as "apply to all".
+            // For simplicity, we require the frontend to send per-ID decisions or use confirmAll
+            // with the tool call IDs embedded.
+            decisions = Map.of("__confirmAll__", confirmAll);
+        }
+        boolean resolved = sessionService.resolveBatchConfirmation(session, decisions);
+        if (!resolved) {
+            log.warn("batch-confirm-decision called but no pending batch future for session {}", session.getId());
+            return ResponseEntity.ok(Map.of(KEY_STATUS, "no_pending"));
+        }
+        log.info("Batch Jira confirmation resolved ({} decisions) for session {}", decisions.size(), session.getId());
+        return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
+    }
+
     // ── POST /api/chat/cancel ────────────────────────────────────────────────
 
     @PostMapping("/chat/cancel")

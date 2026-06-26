@@ -37,6 +37,7 @@ public class CreateJiraIssueTool implements Tool {
     }
 
     @Override public String getName() { return "create_jira_issue"; }
+    @Override public boolean requiresConfirmation() { return true; }
 
     @Override
     public String getCallDescription(String argumentsJson) {

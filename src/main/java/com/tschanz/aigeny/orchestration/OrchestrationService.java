@@ -5,6 +5,7 @@ import com.tschanz.aigeny.llm.LlmClient;
 import com.tschanz.aigeny.llm.model.*;
 import com.tschanz.aigeny.llm_tool.Tool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
+import com.tschanz.aigeny.llm_tool.jira.ConfirmationContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -13,6 +14,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BiConsumer;
 
 /**
@@ -126,6 +128,10 @@ public class OrchestrationService {
             Message assistantMsg = Message.assistantWithToolCalls(response.getToolCalls());
             history.add(assistantMsg);
 
+            // Pre-scan for multiple write tool calls in this response: if found,
+            // request one batch confirmation dialog instead of one per write tool.
+            preScanAndBatchConfirm(response.getToolCalls());
+
             for (ToolCall tc : response.getToolCalls()) {
                 ToolResult result = toolExecutor.executeToolCall(tc, onToolCall);
                 if (result.hasQueryResult()) lastToolResult = result;
@@ -138,5 +144,33 @@ public class OrchestrationService {
 
     private String buildSystemPrompt() {
         return promptBuilder.buildSystemPrompt();
+    }
+
+    /**
+     * Pre-scans tool calls from a single LLM response for write actions.
+     * If two or more write tool calls are found and a batch confirmation handler is registered,
+     * requests one combined confirmation dialog and stores the decisions so individual write
+     * tools skip their own blocking confirmation flow.
+     */
+    private void preScanAndBatchConfirm(List<ToolCall> toolCalls) {
+        if (!BatchConfirmationContext.isAvailable()) return;
+
+        List<WriteToolCallInfo> writeCalls = toolCalls.stream()
+                .filter(tc -> toolExecutor.findTool(tc.getFunction().getName())
+                        .map(Tool::requiresConfirmation)
+                        .orElse(false))
+                .map(tc -> {
+                    String desc = toolExecutor.findTool(tc.getFunction().getName())
+                            .map(t -> t.getCallDescription(tc.getFunction().getArguments()))
+                            .orElse(tc.getFunction().getName());
+                    return new WriteToolCallInfo(tc.getId(), tc.getFunction().getName(), desc);
+                })
+                .toList();
+
+        if (writeCalls.size() <= 1) return;
+
+        log.info("Batch confirmation: {} write tool calls detected, requesting combined dialog", writeCalls.size());
+        Map<String, Boolean> decisions = BatchConfirmationContext.get().apply(writeCalls);
+        ConfirmationContext.setPreApprovedDecisions(decisions);
     }
 }

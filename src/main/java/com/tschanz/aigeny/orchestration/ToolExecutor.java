@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.orchestration;
 
 import com.tschanz.aigeny.Messages;
+import com.tschanz.aigeny.orchestration.CurrentToolCallContext;
 import com.tschanz.aigeny.llm.model.ToolCall;
 import com.tschanz.aigeny.llm_tool.Tool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
@@ -77,12 +78,15 @@ public class ToolExecutor {
         }
 
         try {
+            CurrentToolCallContext.set(toolCall.getId());
             ToolResult result = tool.execute(toolArgs);
             log.debug("Tool {} executed successfully", toolName);
             return result;
         } catch (Exception e) {
             log.error("Tool execution failed: {}", e.getMessage(), e);
             return new ToolResult(Messages.get(MSG_TOOL_EXEC_FAILED, toolName, e.getMessage()));
+        } finally {
+            CurrentToolCallContext.clear();
         }
     }
 

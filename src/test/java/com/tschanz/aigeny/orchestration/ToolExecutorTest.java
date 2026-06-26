@@ -288,6 +288,59 @@ class ToolExecutorTest {
             assertThat(count).isZero();
         }
     }
+
+    @Nested
+    class CurrentToolCallContextManagement {
+
+        @Test
+        void shouldSetCurrentToolCallContextDuringExecution() throws Exception {
+            // Given
+            ToolExecutor executor = new ToolExecutor(tools);
+            ToolCall toolCall = new ToolCall("call-ctx-test", new ToolCall.FunctionCall("tool1", "{}"));
+            AtomicReference<String> capturedId = new AtomicReference<>();
+            when(mockTool1.getCallDescription(anyString())).thenReturn("desc");
+            when(mockTool1.execute(anyString())).thenAnswer(inv -> {
+                capturedId.set(CurrentToolCallContext.get());
+                return new ToolResult("ok");
+            });
+
+            // When
+            executor.executeToolCall(toolCall, null);
+
+            // Then
+            assertThat(capturedId.get()).isEqualTo("call-ctx-test");
+        }
+
+        @Test
+        void shouldClearCurrentToolCallContextAfterExecution() throws Exception {
+            // Given
+            ToolExecutor executor = new ToolExecutor(tools);
+            ToolCall toolCall = new ToolCall("call-1", new ToolCall.FunctionCall("tool1", "{}"));
+            when(mockTool1.getCallDescription(anyString())).thenReturn("desc");
+            when(mockTool1.execute(anyString())).thenReturn(new ToolResult("ok"));
+
+            // When
+            executor.executeToolCall(toolCall, null);
+
+            // Then: context must be cleared after execution
+            assertThat(CurrentToolCallContext.get()).isNull();
+        }
+
+        @Test
+        void shouldClearCurrentToolCallContextEvenAfterException() throws Exception {
+            // Given
+            ToolExecutor executor = new ToolExecutor(tools);
+            ToolCall toolCall = new ToolCall("call-err", new ToolCall.FunctionCall("tool1", "{}"));
+            when(mockTool1.getCallDescription(anyString())).thenReturn("desc");
+            when(mockTool1.execute(anyString())).thenThrow(new RuntimeException("boom"));
+
+            // When
+            executor.executeToolCall(toolCall, null); // error is swallowed, returns ToolResult
+
+            // Then: context must still be cleared
+            assertThat(CurrentToolCallContext.get()).isNull();
+        }
+    }
 }
 
 
