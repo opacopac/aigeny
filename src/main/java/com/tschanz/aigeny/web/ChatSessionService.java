@@ -24,16 +24,18 @@ public class ChatSessionService {
     private static final Logger log = LoggerFactory.getLogger(ChatSessionService.class);
 
     private final ConfirmationFutureManager confirmationFutureManager;
+    private final CancellationManager cancellationManager;
 
     // Session attribute keys
     private static final String SESSION_HISTORY              = "chatHistory";
     private static final String SESSION_RESULT               = "lastQueryResult";
     private static final String SESSION_PENDING_ACTION       = "pendingJiraAction";
     private static final String SESSION_JIRA_WRITE           = "jiraWriteEnabled";
-    private static final String SESSION_CANCEL_FLAG          = "chatCancelFlag";
 
-    public ChatSessionService(ConfirmationFutureManager confirmationFutureManager) {
+    public ChatSessionService(ConfirmationFutureManager confirmationFutureManager,
+                              CancellationManager cancellationManager) {
         this.confirmationFutureManager = confirmationFutureManager;
+        this.cancellationManager = cancellationManager;
     }
 
     // ── Chat History Management ──────────────────────────────────────────────
@@ -184,51 +186,45 @@ public class ChatSessionService {
 
     /**
      * Creates and stores a new cancel flag for the current chat operation.
+     * Delegates to {@link CancellationManager}.
      *
      * @param session HTTP session
      * @return the created cancel flag
      */
     public AtomicBoolean createCancelFlag(HttpSession session) {
-        AtomicBoolean cancelFlag = new AtomicBoolean(false);
-        session.setAttribute(SESSION_CANCEL_FLAG, cancelFlag);
-        log.debug("Created cancel flag for session {}", session.getId());
-        return cancelFlag;
+        return cancellationManager.createCancelFlag(session);
     }
 
     /**
      * Retrieves the cancel flag for the current chat operation.
+     * Delegates to {@link CancellationManager}.
      *
      * @param session HTTP session
      * @return cancel flag or null if none exists
      */
     public AtomicBoolean getCancelFlag(HttpSession session) {
-        return (AtomicBoolean) session.getAttribute(SESSION_CANCEL_FLAG);
+        return cancellationManager.getCancelFlag(session);
     }
 
     /**
      * Triggers cancellation by setting the cancel flag to true.
+     * Delegates to {@link CancellationManager}.
      *
      * @param session HTTP session
      * @return true if a cancel flag was found and triggered, false otherwise
      */
     public boolean triggerCancellation(HttpSession session) {
-        AtomicBoolean flag = getCancelFlag(session);
-        if (flag != null) {
-            flag.set(true);
-            log.info("Chat cancellation triggered for session {}", session.getId());
-            return true;
-        }
-        return false;
+        return cancellationManager.triggerCancellation(session);
     }
 
     /**
      * Removes the cancel flag from the session.
+     * Delegates to {@link CancellationManager}.
      *
      * @param session HTTP session
      */
     public void clearCancelFlag(HttpSession session) {
-        session.removeAttribute(SESSION_CANCEL_FLAG);
-        log.debug("Cleared cancel flag for session {}", session.getId());
+        cancellationManager.clearCancelFlag(session);
     }
 
     // ── Confirmation Future Management ───────────────────────────────────────

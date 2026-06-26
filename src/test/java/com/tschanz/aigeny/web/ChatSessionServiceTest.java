@@ -34,11 +34,14 @@ class ChatSessionServiceTest {
     @Mock
     private ConfirmationFutureManager confirmationFutureManager;
 
+    @Mock
+    private CancellationManager cancellationManager;
+
     private ChatSessionService sessionService;
 
     @BeforeEach
     void setUp() {
-        sessionService = new ChatSessionService(confirmationFutureManager);
+        sessionService = new ChatSessionService(confirmationFutureManager, cancellationManager);
         lenient().when(session.getId()).thenReturn("test-session-123");
     }
 
@@ -375,80 +378,71 @@ class ChatSessionServiceTest {
     class CancelFlagManagement {
 
         @Test
-        @DisplayName("should create and store cancel flag")
-        void shouldCreateAndStoreCancelFlag() {
+        @DisplayName("should delegate cancel flag creation to CancellationManager")
+        void shouldDelegateCancelFlagCreation() {
+            // Given
+            AtomicBoolean expectedFlag = new AtomicBoolean(false);
+            when(cancellationManager.createCancelFlag(session)).thenReturn(expectedFlag);
+
             // When
             AtomicBoolean flag = sessionService.createCancelFlag(session);
 
             // Then
-            assertThat(flag).isNotNull();
-            assertThat(flag.get()).isFalse();
-            verify(session).setAttribute(eq("chatCancelFlag"), any(AtomicBoolean.class));
+            assertThat(flag).isSameAs(expectedFlag);
+            verify(cancellationManager).createCancelFlag(session);
         }
 
         @Test
-        @DisplayName("should retrieve stored cancel flag")
-        void shouldRetrieveStoredCancelFlag() {
+        @DisplayName("should delegate cancel flag retrieval to CancellationManager")
+        void shouldDelegateCancelFlagRetrieval() {
             // Given
             AtomicBoolean storedFlag = new AtomicBoolean(false);
-            when(session.getAttribute("chatCancelFlag")).thenReturn(storedFlag);
+            when(cancellationManager.getCancelFlag(session)).thenReturn(storedFlag);
 
             // When
             AtomicBoolean retrieved = sessionService.getCancelFlag(session);
 
             // Then
             assertThat(retrieved).isSameAs(storedFlag);
+            verify(cancellationManager).getCancelFlag(session);
         }
 
         @Test
-        @DisplayName("should return null when no cancel flag exists")
-        void shouldReturnNullWhenNoCancelFlagExists() {
+        @DisplayName("should delegate cancellation triggering to CancellationManager")
+        void shouldDelegateCancellationTriggering() {
             // Given
-            when(session.getAttribute("chatCancelFlag")).thenReturn(null);
-
-            // When
-            AtomicBoolean retrieved = sessionService.getCancelFlag(session);
-
-            // Then
-            assertThat(retrieved).isNull();
-        }
-
-        @Test
-        @DisplayName("should trigger cancellation when flag exists")
-        void shouldTriggerCancellationWhenFlagExists() {
-            // Given
-            AtomicBoolean flag = new AtomicBoolean(false);
-            when(session.getAttribute("chatCancelFlag")).thenReturn(flag);
+            when(cancellationManager.triggerCancellation(session)).thenReturn(true);
 
             // When
             boolean triggered = sessionService.triggerCancellation(session);
 
             // Then
             assertThat(triggered).isTrue();
-            assertThat(flag.get()).isTrue();
+            verify(cancellationManager).triggerCancellation(session);
         }
 
         @Test
-        @DisplayName("should return false when trying to trigger without flag")
-        void shouldReturnFalseWhenTryingToTriggerWithoutFlag() {
+        @DisplayName("should return false when triggering without flag via CancellationManager")
+        void shouldReturnFalseWhenTriggeringWithoutFlag() {
             // Given
-            when(session.getAttribute("chatCancelFlag")).thenReturn(null);
+            when(cancellationManager.triggerCancellation(session)).thenReturn(false);
 
             // When
             boolean triggered = sessionService.triggerCancellation(session);
 
             // Then
             assertThat(triggered).isFalse();
+            verify(cancellationManager).triggerCancellation(session);
         }
 
         @Test
-        @DisplayName("should clear cancel flag from session")
-        void shouldClearCancelFlagFromSession() {
+        @DisplayName("should delegate cancel flag clearing to CancellationManager")
+        void shouldDelegateCancelFlagClearing() {
             // When
             sessionService.clearCancelFlag(session);
 
             // Then
-            verify(session).removeAttribute("chatCancelFlag");
+            verify(cancellationManager).clearCancelFlag(session);
         }
     }
 
@@ -466,7 +460,7 @@ class ChatSessionServiceTest {
             verify(session).removeAttribute("chatHistory");
             verify(session).removeAttribute("lastQueryResult");
             verify(session).removeAttribute("pendingJiraAction");
-            verify(session).removeAttribute("chatCancelFlag");
+            verify(cancellationManager).clearCancelFlag(session);
         }
     }
 
