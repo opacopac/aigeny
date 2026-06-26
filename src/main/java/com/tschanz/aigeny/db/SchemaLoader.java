@@ -1,7 +1,7 @@
 package com.tschanz.aigeny.db;
 
-import com.tschanz.aigeny.config.AigenyProperties;
 import com.tschanz.aigeny.config.ConfigurationValidator;
+import com.tschanz.aigeny.config.DbConfiguration;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
@@ -25,14 +25,14 @@ public class SchemaLoader {
 
     private static final Logger log = LoggerFactory.getLogger(SchemaLoader.class);
 
-    private final AigenyProperties props;
+    private final DbConfiguration dbConfig;
     private final ConfigurationValidator configValidator;
     private final Environment env;
     private volatile int tableCount = 0;
     private boolean dbReachable = false;
 
-    public SchemaLoader(AigenyProperties props, ConfigurationValidator configValidator, Environment env) {
-        this.props = props;
+    public SchemaLoader(DbConfiguration dbConfig, ConfigurationValidator configValidator, Environment env) {
+        this.dbConfig = dbConfig;
         this.configValidator = configValidator;
         this.env   = env;
     }
@@ -40,7 +40,7 @@ public class SchemaLoader {
     /** Load table count automatically on startup if DB is configured. */
     @EventListener(ApplicationReadyEvent.class)
     public void loadOnStartup() {
-        if (configValidator.isDbConfigured(props.getDb())) {
+        if (configValidator.isDbConfigured(dbConfig)) {
             try {
                 reload();
             } catch (Exception e) {
@@ -62,24 +62,23 @@ public class SchemaLoader {
 
     /** Reconnects and refreshes the table count. */
     public void reload() throws Exception {
-        if (!configValidator.isDbConfigured(props.getDb())) {
+        if (!configValidator.isDbConfigured(dbConfig)) {
             tableCount = 0;
             dbReachable = false;
             return;
         }
-        AigenyProperties.Db db = props.getDb();
         HikariConfig hc = new HikariConfig();
-        hc.setJdbcUrl(db.getUrl());
-        hc.setUsername(db.getUsername());
-        hc.setPassword(db.getPassword());
+        hc.setJdbcUrl(dbConfig.getUrl());
+        hc.setUsername(dbConfig.getUsername());
+        hc.setPassword(dbConfig.getPassword());
         hc.setMaximumPoolSize(1);
         hc.setConnectionTimeout(10_000);
         hc.setReadOnly(true);
         hc.setPoolName("AIgeny-Schema");
         // If a dedicated schema is configured (different from the login user),
         // switch the Oracle session schema for accurate table counting.
-        String effectiveSchema = db.getEffectiveSchema();
-        if (!effectiveSchema.isBlank() && !effectiveSchema.equalsIgnoreCase(db.getUsername())) {
+        String effectiveSchema = dbConfig.getEffectiveSchema();
+        if (!effectiveSchema.isBlank() && !effectiveSchema.equalsIgnoreCase(dbConfig.getUsername())) {
             hc.setConnectionInitSql("ALTER SESSION SET CURRENT_SCHEMA = " + effectiveSchema);
             log.info("SchemaLoader: CURRENT_SCHEMA will be set to {}", effectiveSchema);
         }

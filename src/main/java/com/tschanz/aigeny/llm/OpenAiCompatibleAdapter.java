@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.llm;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.LlmConfiguration;
 import com.tschanz.aigeny.llm.model.*;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,11 +28,11 @@ public class OpenAiCompatibleAdapter implements LlmClient {
     private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleAdapter.class);
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    private final AigenyProperties props;
+    private final LlmConfiguration config;
     private final HttpClient http;
 
-    public OpenAiCompatibleAdapter(AigenyProperties props) {
-        this.props = props;
+    public OpenAiCompatibleAdapter(LlmConfiguration config) {
+        this.config = config;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
@@ -40,7 +40,7 @@ public class OpenAiCompatibleAdapter implements LlmClient {
 
     @Override
     public ChatResponse chat(List<Message> messages, List<ToolDefinition> tools) throws Exception {
-        AigenyProperties.Llm llm = props.getLlm();
+        LlmConfiguration llm = config;
 
         ObjectNode body = JSON.createObjectNode();
         body.put("model", llm.getModel());

@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.llm_tool.jira;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.llm_tool.Tool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
@@ -39,11 +39,11 @@ public class SearchJiraUserTool implements Tool {
     private static final String MSG_NO_USERS        = "jira.user.no_users_found";
     private static final String MSG_USERS_FOUND     = "jira.user.users_found";
 
-    private final AigenyProperties props;
+    private final JiraConfiguration jiraConfig;
     private final HttpClient http;
 
-    public SearchJiraUserTool(AigenyProperties props) {
-        this.props = props;
+    public SearchJiraUserTool(JiraConfiguration jiraConfig) {
+        this.jiraConfig = jiraConfig;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
@@ -84,8 +84,7 @@ public class SearchJiraUserTool implements Tool {
 
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
-        AigenyProperties.Jira jira = props.getJira();
-        String baseUrl = jira.getBaseUrl() == null ? "" : jira.getBaseUrl().replaceAll("/$", "");
+                String baseUrl = jiraConfig.getBaseUrl() == null ? "" : jiraConfig.getBaseUrl().replaceAll("/$", "");
 
         if (baseUrl.isBlank()) {
             return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
@@ -94,7 +93,7 @@ public class SearchJiraUserTool implements Tool {
         // Resolve effective token: ThreadLocal (set by ChatController) takes priority over server config
         String effectiveToken = JiraTokenContext.get();
         if (effectiveToken == null || effectiveToken.isBlank()) {
-            effectiveToken = props.getJira().getToken();
+            effectiveToken = jiraConfig.getToken();
         }
 
         if (effectiveToken == null || effectiveToken.isBlank()) {
@@ -168,4 +167,3 @@ public class SearchJiraUserTool implements Tool {
         return new ToolResult(sb.toString());
     }
 }
-

@@ -60,7 +60,7 @@ public class AigenyProperties {
 
     // ── Nested classes ──────────────────────────────────────────────────────
 
-    public static class Llm {
+    public static class Llm implements LlmConfiguration {
         /** Provider name: ollama | groq | openai | azure */
         private String provider = "ollama";
         /** API key - use "ollama" as placeholder for local Ollama */
@@ -80,7 +80,7 @@ public class AigenyProperties {
         public void setModel(String model) { this.model = model; }
     }
 
-    public static class Db {
+    public static class Db implements DbConfiguration {
         /** JDBC URL, e.g. jdbc:oracle:thin:@hostname:1521/SERVICENAME */
         private String url = "";
         private String username = "";
@@ -112,7 +112,7 @@ public class AigenyProperties {
         }
     }
 
-    public static class Jira {
+    public static class Jira implements JiraConfiguration {
         /** Jira base URL, e.g. https://flow.sbb.ch */
         private String baseUrl = "";
         /** API token (Personal Access Token) – entered per-user via the UI */
@@ -124,7 +124,7 @@ public class AigenyProperties {
         public void setToken(String token) { this.token = token; }
     }
 
-    public static class Bitbucket {
+    public static class Bitbucket implements BitbucketConfiguration {
         /** Bitbucket Server base URL, e.g. https://code.example.com */
         private String baseUrl = "";
         /** Personal Access Token – entered per-user via the UI */

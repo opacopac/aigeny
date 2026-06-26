@@ -2,7 +2,7 @@ package com.tschanz.aigeny.llm_tool.jira;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.llm_tool.Tool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
@@ -49,11 +49,11 @@ public class ReadJiraAttachmentTool implements Tool {
     private static final String MSG_HTTP_ERROR      = "jira.error.http_en";
     private static final String MSG_TOO_LARGE       = "jira.attachment.text_truncated";
 
-    private final AigenyProperties props;
+    private final JiraConfiguration jiraConfig;
     private final HttpClient http;
 
-    public ReadJiraAttachmentTool(AigenyProperties props) {
-        this.props = props;
+    public ReadJiraAttachmentTool(JiraConfiguration jiraConfig) {
+        this.jiraConfig = jiraConfig;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
                 .followRedirects(HttpClient.Redirect.NORMAL)
@@ -101,8 +101,7 @@ public class ReadJiraAttachmentTool implements Tool {
 
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
-        AigenyProperties.Jira jira = props.getJira();
-        String baseUrl = jira.getBaseUrl() == null ? "" : jira.getBaseUrl().replaceAll("/$", "");
+                String baseUrl = jiraConfig.getBaseUrl() == null ? "" : jiraConfig.getBaseUrl().replaceAll("/$", "");
 
         if (baseUrl.isBlank()) {
             return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
@@ -111,7 +110,7 @@ public class ReadJiraAttachmentTool implements Tool {
         // Resolve effective token
         String effectiveToken = JiraTokenContext.get();
         if (effectiveToken == null || effectiveToken.isBlank()) {
-            effectiveToken = props.getJira().getToken();
+            effectiveToken = jiraConfig.getToken();
         }
         if (effectiveToken == null || effectiveToken.isBlank()) {
             return new ToolResult(Messages.get(MSG_NO_TOKEN));
@@ -350,4 +349,3 @@ public class ReadJiraAttachmentTool implements Tool {
         return new ToolResult(sb.toString());
     }
 }
-

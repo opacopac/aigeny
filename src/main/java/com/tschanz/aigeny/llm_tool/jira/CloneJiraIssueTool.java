@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.llm_tool.jira;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.llm_tool.Tool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
@@ -47,11 +47,11 @@ public class CloneJiraIssueTool implements Tool {
     private static final String MSG_WRITE_DISABLED   = "jira.write.mode_disabled";
     private static final String MSG_NO_STREAMING     = "jira.error.no_streaming_context";
 
-    private final AigenyProperties props;
+    private final JiraConfiguration jiraConfig;
     private final HttpClient http;
 
-    public CloneJiraIssueTool(AigenyProperties props) {
-        this.props = props;
+    public CloneJiraIssueTool(JiraConfiguration jiraConfig) {
+        this.jiraConfig = jiraConfig;
         this.http  = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
@@ -103,14 +103,13 @@ public class CloneJiraIssueTool implements Tool {
             return new ToolResult(Messages.get(MSG_WRITE_DISABLED));
         }
 
-        AigenyProperties.Jira jira = props.getJira();
-        String baseUrl = jira.getBaseUrl() == null ? "" : jira.getBaseUrl().replaceAll("/$", "");
+                String baseUrl = jiraConfig.getBaseUrl() == null ? "" : jiraConfig.getBaseUrl().replaceAll("/$", "");
         if (baseUrl.isBlank()) {
             return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
         }
 
         String token = JiraTokenContext.get();
-        if (token == null || token.isBlank()) token = jira.getToken();
+        if (token == null || token.isBlank()) token = jiraConfig.getToken();
         if (token == null || token.isBlank()) {
             return new ToolResult(Messages.get(MSG_NO_TOKEN));
         }
@@ -243,4 +242,3 @@ public class CloneJiraIssueTool implements Tool {
         }
     }
 }
-

@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.llm;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.LlmConfiguration;
 import com.tschanz.aigeny.llm.model.*;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,19 +31,19 @@ public class GitHubCopilotAdapter implements LlmClient {
     private static final Logger log = LoggerFactory.getLogger(GitHubCopilotAdapter.class);
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    private final AigenyProperties props;
+    private final LlmConfiguration config;
     private final GitHubCopilotService github;
     private final HttpClient http;
 
-    public GitHubCopilotAdapter(AigenyProperties props, GitHubCopilotService github) {
-        this.props = props;
+    public GitHubCopilotAdapter(LlmConfiguration config, GitHubCopilotService github) {
+        this.config = config;
         this.github = github;
         this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build();
     }
 
     @Override
     public ChatResponse chat(List<Message> messages, List<ToolDefinition> tools) throws Exception {
-        AigenyProperties.Llm llm = props.getLlm();
+        LlmConfiguration llm = config;
 
         ObjectNode body = JSON.createObjectNode();
         body.put("model", llm.getModel());

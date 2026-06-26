@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.llm.factory;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.LlmConfiguration;
 import com.tschanz.aigeny.llm.GitHubCopilotAdapter;
 import com.tschanz.aigeny.llm.GitHubCopilotService;
 import com.tschanz.aigeny.llm.LlmClient;
@@ -18,8 +18,8 @@ public class GitHubCopilotAdapterFactory implements LlmAdapterFactory {
     }
 
     @Override
-    public LlmClient createAdapter(AigenyProperties props, GitHubCopilotService githubService) {
-        return new GitHubCopilotAdapter(props, githubService);
+    public LlmClient createAdapter(LlmConfiguration config, GitHubCopilotService githubService) {
+        return new GitHubCopilotAdapter(config, githubService);
     }
 }
 

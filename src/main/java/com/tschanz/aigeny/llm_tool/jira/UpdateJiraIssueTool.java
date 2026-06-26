@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.llm_tool.jira;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.llm_tool.Tool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
@@ -47,10 +47,10 @@ public class UpdateJiraIssueTool implements Tool {
     private static final String MSG_WRITE_DISABLED  = "jira.write.mode_disabled";
     private static final String MSG_NO_STREAMING    = "jira.error.no_streaming_context";
 
-    private final AigenyProperties props;
+    private final JiraConfiguration jiraConfig;
 
-    public UpdateJiraIssueTool(AigenyProperties props) {
-        this.props = props;
+    public UpdateJiraIssueTool(JiraConfiguration jiraConfig) {
+        this.jiraConfig = jiraConfig;
     }
 
     @Override public String getName() { return TOOL_NAME; }
@@ -95,8 +95,7 @@ public class UpdateJiraIssueTool implements Tool {
         if (!JiraWriteContext.isEnabled()) {
             return new ToolResult(Messages.get(MSG_WRITE_DISABLED));
         }
-        AigenyProperties.Jira jira = props.getJira();
-        String baseUrl = jira.getBaseUrl() == null ? "" : jira.getBaseUrl().replaceAll("/$", "");
+                String baseUrl = jiraConfig.getBaseUrl() == null ? "" : jiraConfig.getBaseUrl().replaceAll("/$", "");
         if (baseUrl.isBlank()) {
             return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
         }
@@ -131,4 +130,3 @@ public class UpdateJiraIssueTool implements Tool {
                 new PendingJiraAction(PendingJiraAction.ActionType.UPDATE_ISSUE, issueKey, params, desc.toString()));
     }
 }
-

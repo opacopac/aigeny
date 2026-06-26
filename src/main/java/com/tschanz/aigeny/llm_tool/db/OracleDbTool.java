@@ -1,7 +1,7 @@
 package com.tschanz.aigeny.llm_tool.db;
 
-import com.tschanz.aigeny.config.AigenyProperties;
 import com.tschanz.aigeny.config.ConfigurationValidator;
+import com.tschanz.aigeny.config.DbConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.llm_tool.QueryResult;
 import com.tschanz.aigeny.llm_tool.Tool;
@@ -43,31 +43,30 @@ public class OracleDbTool implements Tool {
             "\\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|MERGE|EXEC|EXECUTE|GRANT|REVOKE)\\b",
             Pattern.CASE_INSENSITIVE);
 
-    private final AigenyProperties props;
+    private final DbConfiguration dbConfig;
     private final ConfigurationValidator configValidator;
     private HikariDataSource pool;
 
-    public OracleDbTool(AigenyProperties props, ConfigurationValidator configValidator) {
-        this.props = props;
+    public OracleDbTool(DbConfiguration dbConfig, ConfigurationValidator configValidator) {
+        this.dbConfig = dbConfig;
         this.configValidator = configValidator;
     }
 
     private synchronized HikariDataSource getPool() {
-        if (pool == null && configValidator.isDbConfigured(props.getDb())) {
+        if (pool == null && configValidator.isDbConfigured(dbConfig)) {
             try {
-                AigenyProperties.Db db = props.getDb();
                 HikariConfig hc = new HikariConfig();
-                hc.setJdbcUrl(db.getUrl());
-                hc.setUsername(db.getUsername());
-                hc.setPassword(db.getPassword());
+                hc.setJdbcUrl(dbConfig.getUrl());
+                hc.setUsername(dbConfig.getUsername());
+                hc.setPassword(dbConfig.getPassword());
                 hc.setMaximumPoolSize(3);
                 hc.setConnectionTimeout(15_000);
                 hc.setReadOnly(true);
                 hc.setPoolName("AIgeny-Oracle");
                 // If a dedicated schema is configured (different from the login user),
                 // switch the Oracle session schema so unqualified table references work.
-                String effectiveSchema = db.getEffectiveSchema();
-                if (!effectiveSchema.isBlank() && !effectiveSchema.equalsIgnoreCase(db.getUsername())) {
+                String effectiveSchema = dbConfig.getEffectiveSchema();
+                if (!effectiveSchema.isBlank() && !effectiveSchema.equalsIgnoreCase(dbConfig.getUsername())) {
                     hc.setConnectionInitSql("ALTER SESSION SET CURRENT_SCHEMA = " + effectiveSchema);
                     log.info("Oracle pool: CURRENT_SCHEMA will be set to {}", effectiveSchema);
                 }
@@ -103,7 +102,7 @@ public class OracleDbTool implements Tool {
 
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
-        if (!configValidator.isDbConfigured(props.getDb())) {
+        if (!configValidator.isDbConfigured(dbConfig)) {
             return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
         }
 

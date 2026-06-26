@@ -1,7 +1,7 @@
 package com.tschanz.aigeny.llm_tool.jira;
 
 import com.tschanz.aigeny.Messages;
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm_tool.jira.operation.AddCommentOperation;
 import com.tschanz.aigeny.llm_tool.jira.operation.CreateIssueOperation;
 import com.tschanz.aigeny.llm_tool.jira.operation.JiraOperation;
@@ -23,14 +23,14 @@ public class JiraWriteExecutor {
     private static final Logger log = LoggerFactory.getLogger(JiraWriteExecutor.class);
     private static final String MSG_WRITE_DISABLED = "jira.write.mode_disabled";
 
-    private final AigenyProperties props;
+    private final JiraConfiguration jiraConfig;
     private final Map<PendingJiraAction.ActionType, JiraOperation> operations;
 
-    public JiraWriteExecutor(AigenyProperties props,
+    public JiraWriteExecutor(JiraConfiguration jiraConfig,
                              UpdateIssueOperation updateOperation,
                              AddCommentOperation commentOperation,
                              CreateIssueOperation createOperation) {
-        this.props = props;
+        this.jiraConfig = jiraConfig;
         this.operations = new EnumMap<>(PendingJiraAction.ActionType.class);
         this.operations.put(PendingJiraAction.ActionType.UPDATE_ISSUE, updateOperation);
         this.operations.put(PendingJiraAction.ActionType.ADD_COMMENT, commentOperation);
@@ -46,7 +46,7 @@ public class JiraWriteExecutor {
             return Messages.get(MSG_WRITE_DISABLED);
         }
 
-        String baseUrl = props.getJira().getBaseUrl().replaceAll("/$", "");
+        String baseUrl = jiraConfig.getBaseUrl().replaceAll("/$", "");
         JiraOperation operation = operations.get(action.getActionType());
 
         if (operation == null) {
@@ -59,5 +59,3 @@ public class JiraWriteExecutor {
         return operation.execute(action, baseUrl, token);
     }
 }
-
-

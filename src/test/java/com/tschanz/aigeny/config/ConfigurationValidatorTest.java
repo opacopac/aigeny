@@ -430,5 +430,54 @@ class ConfigurationValidatorTest {
             assertThat(result).isFalse();
         }
     }
+
+    @Nested
+    @DisplayName("DIP – interface-based validation (not tied to AigenyProperties)")
+    class InterfaceBasedValidation {
+
+        @Test
+        @DisplayName("isDbConfigured accepts arbitrary DbConfiguration implementations")
+        void isDbConfiguredAcceptsArbitraryImplementation() {
+            DbConfiguration config = new DbConfiguration() {
+                public String getUrl()             { return "jdbc:oracle:thin:@host:1521/XE"; }
+                public String getUsername()        { return "user"; }
+                public String getPassword()        { return "pass"; }
+                public String getEffectiveSchema() { return "user"; }
+            };
+            assertThat(validator.isDbConfigured(config)).isTrue();
+        }
+
+        @Test
+        @DisplayName("isJiraConfigured accepts arbitrary JiraConfiguration implementations")
+        void isJiraConfiguredAcceptsArbitraryImplementation() {
+            JiraConfiguration config = new JiraConfiguration() {
+                public String getBaseUrl() { return "https://jira.example.com"; }
+                public String getToken()   { return "token123"; }
+            };
+            assertThat(validator.isJiraConfigured(config)).isTrue();
+        }
+
+        @Test
+        @DisplayName("isBitbucketConfigured accepts arbitrary BitbucketConfiguration implementations")
+        void isBitbucketConfiguredAcceptsArbitraryImplementation() {
+            BitbucketConfiguration config = new BitbucketConfiguration() {
+                public String getBaseUrl() { return "https://bb.example.com"; }
+                public String getToken()   { return "bb-token"; }
+            };
+            assertThat(validator.isBitbucketConfigured(config)).isTrue();
+        }
+
+        @Test
+        @DisplayName("isLlmConfigured accepts arbitrary LlmConfiguration implementations")
+        void isLlmConfiguredAcceptsArbitraryImplementation() {
+            LlmConfiguration config = new LlmConfiguration() {
+                public String getProvider() { return "claude"; }
+                public String getApiKey()   { return "sk-test"; }
+                public String getBaseUrl()  { return "https://api.anthropic.com/v1"; }
+                public String getModel()    { return "claude-opus-4-5"; }
+            };
+            assertThat(validator.isLlmConfigured(config)).isTrue();
+        }
+    }
 }
 

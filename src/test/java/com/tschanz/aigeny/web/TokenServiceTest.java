@@ -1,7 +1,6 @@
 package com.tschanz.aigeny.web;
 
 import com.tschanz.aigeny.config.AigenyProperties;
-import com.tschanz.aigeny.config.SecretFileResolver;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -13,19 +12,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("TokenService")
 class TokenServiceTest {
 
-    private AigenyProperties props;
     private AigenyProperties.Jira jiraConfig;
     private AigenyProperties.Bitbucket bitbucketConfig;
-
-    @Mock
-    private SecretFileResolver secretFileResolver;
 
     @Mock
     private HttpSession session;
@@ -34,13 +28,9 @@ class TokenServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Use real configuration objects (no need to mock POJOs)
-        props = new AigenyProperties(secretFileResolver);
         jiraConfig = new AigenyProperties.Jira();
         bitbucketConfig = new AigenyProperties.Bitbucket();
-        props.setJira(jiraConfig);
-        props.setBitbucket(bitbucketConfig);
-        tokenService = new TokenService(props);
+        tokenService = new TokenService(jiraConfig, bitbucketConfig);
     }
 
     @Nested

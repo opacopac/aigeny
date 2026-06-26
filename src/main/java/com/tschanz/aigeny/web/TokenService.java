@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.web;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.BitbucketConfiguration;
+import com.tschanz.aigeny.config.JiraConfiguration;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,10 +20,12 @@ public class TokenService {
     private static final String SESSION_JIRA_TOKEN = "jiraToken";
     private static final String SESSION_BITBUCKET_TOKEN = "bitbucketToken";
 
-    private final AigenyProperties props;
+    private final JiraConfiguration jiraConfig;
+    private final BitbucketConfiguration bitbucketConfig;
 
-    public TokenService(AigenyProperties props) {
-        this.props = props;
+    public TokenService(JiraConfiguration jiraConfig, BitbucketConfiguration bitbucketConfig) {
+        this.jiraConfig = jiraConfig;
+        this.bitbucketConfig = bitbucketConfig;
     }
 
     /**
@@ -37,7 +40,7 @@ public class TokenService {
         if (userToken != null && !userToken.isBlank()) {
             return userToken;
         }
-        return props.getJira().getToken();
+        return jiraConfig.getToken();
     }
 
     /**
@@ -52,7 +55,7 @@ public class TokenService {
         if (userToken != null && !userToken.isBlank()) {
             return userToken;
         }
-        return props.getBitbucket().getToken();
+        return bitbucketConfig.getToken();
     }
 
     /**

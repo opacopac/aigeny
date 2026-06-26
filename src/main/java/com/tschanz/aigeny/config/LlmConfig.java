@@ -40,7 +40,7 @@ public class LlmConfig {
                 .map(factory -> {
                     log.debug("Using factory: {} for provider: {}",
                             factory.getClass().getSimpleName(), provider);
-                    return factory.createAdapter(props, github);
+                    return factory.createAdapter(props.getLlm(), github);
                 })
                 .orElseThrow(() -> new IllegalStateException(
                         "No LLM adapter factory found for provider: " + provider +

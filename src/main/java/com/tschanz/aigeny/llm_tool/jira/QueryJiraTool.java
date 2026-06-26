@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.llm_tool.jira;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.llm_tool.QueryResult;
 import com.tschanz.aigeny.llm_tool.Tool;
@@ -41,11 +41,11 @@ public class QueryJiraTool implements Tool {
     private static final String MSG_NO_ISSUES        = "jira.no_issues_found";
     private static final String MSG_ISSUES_FOUND     = "jira.issues_found";
 
-    private final AigenyProperties props;
+    private final JiraConfiguration jiraConfig;
     private final HttpClient http;
 
-    public QueryJiraTool(AigenyProperties props) {
-        this.props = props;
+    public QueryJiraTool(JiraConfiguration jiraConfig) {
+        this.jiraConfig = jiraConfig;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
@@ -85,8 +85,7 @@ public class QueryJiraTool implements Tool {
 
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
-        AigenyProperties.Jira jira = props.getJira();
-        String baseUrl = jira.getBaseUrl() == null ? "" : jira.getBaseUrl().replaceAll("/$", "");
+                String baseUrl = jiraConfig.getBaseUrl() == null ? "" : jiraConfig.getBaseUrl().replaceAll("/$", "");
 
         if (baseUrl.isBlank()) {
             return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
@@ -95,7 +94,7 @@ public class QueryJiraTool implements Tool {
         // Resolve effective token: ThreadLocal (set by ChatController) takes priority over server config
         String effectiveToken = JiraTokenContext.get();
         if (effectiveToken == null || effectiveToken.isBlank()) {
-            effectiveToken = props.getJira().getToken();
+            effectiveToken = jiraConfig.getToken();
         }
 
         if (effectiveToken == null || effectiveToken.isBlank()) {
@@ -296,4 +295,3 @@ public class QueryJiraTool implements Tool {
         return new ToolResult(text.toString(), new QueryResult("Jira", columns, rows));
     }
 }
-

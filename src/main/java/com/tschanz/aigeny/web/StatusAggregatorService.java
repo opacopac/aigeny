@@ -1,7 +1,10 @@
 package com.tschanz.aigeny.web;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.BitbucketConfiguration;
 import com.tschanz.aigeny.config.ConfigurationValidator;
+import com.tschanz.aigeny.config.DbConfiguration;
+import com.tschanz.aigeny.config.JiraConfiguration;
+import com.tschanz.aigeny.config.LlmConfiguration;
 import com.tschanz.aigeny.db.SchemaLoader;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Service;
@@ -29,18 +32,27 @@ public class StatusAggregatorService {
     private static final String KEY_SCHEMA_TABLES               = "schemaTables";
     private static final String KEY_HAS_EXPORT                  = "hasExport";
 
-    private final AigenyProperties props;
+    private final LlmConfiguration llmConfig;
+    private final DbConfiguration dbConfig;
+    private final JiraConfiguration jiraConfig;
+    private final BitbucketConfiguration bitbucketConfig;
     private final ConfigurationValidator configValidator;
     private final TokenService tokenService;
     private final ChatSessionService sessionService;
     private final SchemaLoader schemaLoader;
 
-    public StatusAggregatorService(AigenyProperties props,
+    public StatusAggregatorService(LlmConfiguration llmConfig,
+                                   DbConfiguration dbConfig,
+                                   JiraConfiguration jiraConfig,
+                                   BitbucketConfiguration bitbucketConfig,
                                    ConfigurationValidator configValidator,
                                    TokenService tokenService,
                                    ChatSessionService sessionService,
                                    SchemaLoader schemaLoader) {
-        this.props = props;
+        this.llmConfig = llmConfig;
+        this.dbConfig = dbConfig;
+        this.jiraConfig = jiraConfig;
+        this.bitbucketConfig = bitbucketConfig;
         this.configValidator = configValidator;
         this.tokenService = tokenService;
         this.sessionService = sessionService;
@@ -58,12 +70,12 @@ public class StatusAggregatorService {
         Map<String, Object> status = new HashMap<>();
 
         // LLM configuration
-        status.put(KEY_LLM_PROVIDER, props.getLlm().getProvider());
-        status.put(KEY_LLM_MODEL, props.getLlm().getModel());
+        status.put(KEY_LLM_PROVIDER, llmConfig.getProvider());
+        status.put(KEY_LLM_MODEL, llmConfig.getModel());
 
         // Database configuration
-        status.put(KEY_DB_CONFIGURED, configValidator.isDbConfigured(props.getDb()));
-        status.put(KEY_DB_USERNAME, props.getDb().getUsername());
+        status.put(KEY_DB_CONFIGURED, configValidator.isDbConfigured(dbConfig));
+        status.put(KEY_DB_USERNAME, dbConfig.getUsername());
         status.put(KEY_SCHEMA_TABLES, schemaLoader.getTableCount());
 
         // Jira configuration and session state
@@ -87,7 +99,7 @@ public class StatusAggregatorService {
      * @return true if Jira base URL is set and not blank
      */
     public boolean isJiraBaseUrlConfigured() {
-        String baseUrl = props.getJira().getBaseUrl();
+        String baseUrl = jiraConfig.getBaseUrl();
         return baseUrl != null && !baseUrl.isBlank();
     }
 
@@ -97,7 +109,7 @@ public class StatusAggregatorService {
      * @return true if Bitbucket base URL is set and not blank
      */
     public boolean isBitbucketBaseUrlConfigured() {
-        String baseUrl = props.getBitbucket().getBaseUrl();
+        String baseUrl = bitbucketConfig.getBaseUrl();
         return baseUrl != null && !baseUrl.isBlank();
     }
 }

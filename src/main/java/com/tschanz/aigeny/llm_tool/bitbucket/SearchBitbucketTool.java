@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.llm_tool.bitbucket;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.BitbucketConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.llm_tool.Tool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
@@ -29,11 +29,11 @@ public class SearchBitbucketTool implements Tool {
     private static final Logger log = LoggerFactory.getLogger(SearchBitbucketTool.class);
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    private final AigenyProperties props;
+    private final BitbucketConfiguration bitbucketConfig;
     private final HttpClient http;
 
-    public SearchBitbucketTool(AigenyProperties props) {
-        this.props = props;
+    public SearchBitbucketTool(BitbucketConfiguration bitbucketConfig) {
+        this.bitbucketConfig = bitbucketConfig;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
@@ -105,8 +105,7 @@ public class SearchBitbucketTool implements Tool {
 
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
-        AigenyProperties.Bitbucket bb = props.getBitbucket();
-        String baseUrl = (bb.getBaseUrl() == null ? "" : bb.getBaseUrl()).replaceAll("/$", "");
+                String baseUrl = (bitbucketConfig.getBaseUrl() == null ? "" : bitbucketConfig.getBaseUrl()).replaceAll("/$", "");
 
         if (baseUrl.isBlank()) {
             return new ToolResult("Bitbucket ist nicht konfiguriert (base-url fehlt).");
@@ -114,7 +113,7 @@ public class SearchBitbucketTool implements Tool {
 
         String effectiveToken = BitbucketTokenContext.get();
         if (effectiveToken == null || effectiveToken.isBlank()) {
-            effectiveToken = bb.getToken();
+            effectiveToken = bitbucketConfig.getToken();
         }
         if (effectiveToken == null || effectiveToken.isBlank()) {
             return new ToolResult("Kein Bitbucket-Token gesetzt. Bitte Token im UI eingeben.");
@@ -399,4 +398,3 @@ public class SearchBitbucketTool implements Tool {
 
     private static String enc(String s) { return URLEncoder.encode(s, StandardCharsets.UTF_8); }
 }
-

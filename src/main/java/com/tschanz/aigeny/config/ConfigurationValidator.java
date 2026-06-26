@@ -18,7 +18,7 @@ public class ConfigurationValidator {
      * @param db the database configuration to validate
      * @return true if database is properly configured, false otherwise
      */
-    public boolean isDbConfigured(AigenyProperties.Db db) {
+    public boolean isDbConfigured(DbConfiguration db) {
         if (db == null) {
             return false;
         }
@@ -33,7 +33,7 @@ public class ConfigurationValidator {
      * @param jira the Jira configuration to validate
      * @return true if Jira is properly configured, false otherwise
      */
-    public boolean isJiraConfigured(AigenyProperties.Jira jira) {
+    public boolean isJiraConfigured(JiraConfiguration jira) {
         if (jira == null) {
             return false;
         }
@@ -48,7 +48,7 @@ public class ConfigurationValidator {
      * @param bitbucket the Bitbucket configuration to validate
      * @return true if Bitbucket is properly configured, false otherwise
      */
-    public boolean isBitbucketConfigured(AigenyProperties.Bitbucket bitbucket) {
+    public boolean isBitbucketConfigured(BitbucketConfiguration bitbucket) {
         if (bitbucket == null) {
             return false;
         }
@@ -63,7 +63,7 @@ public class ConfigurationValidator {
      * @param llm the LLM configuration to validate
      * @return true if LLM is properly configured, false otherwise
      */
-    public boolean isLlmConfigured(AigenyProperties.Llm llm) {
+    public boolean isLlmConfigured(LlmConfiguration llm) {
         if (llm == null) {
             return false;
         }

@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.llm.factory;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.LlmConfiguration;
 import com.tschanz.aigeny.llm.GitHubCopilotService;
 import com.tschanz.aigeny.llm.LlmClient;
 
@@ -19,11 +19,11 @@ public interface LlmAdapterFactory {
     /**
      * Creates an LLM adapter instance for the provider.
      *
-     * @param props Configuration properties
+     * @param config LLM configuration
      * @param githubService GitHub Copilot service (may be null for providers that don't need it)
      * @return Configured LLM client
      */
-    LlmClient createAdapter(AigenyProperties props, GitHubCopilotService githubService);
+    LlmClient createAdapter(LlmConfiguration config, GitHubCopilotService githubService);
 
     /**
      * Checks if this factory supports the given provider name.

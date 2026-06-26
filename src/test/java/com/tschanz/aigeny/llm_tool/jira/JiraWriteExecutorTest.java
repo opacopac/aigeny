@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.llm_tool.jira;
 
 import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm_tool.jira.operation.AddCommentOperation;
 import com.tschanz.aigeny.llm_tool.jira.operation.CreateIssueOperation;
 import com.tschanz.aigeny.llm_tool.jira.operation.UpdateIssueOperation;
@@ -26,17 +27,15 @@ class JiraWriteExecutorTest {
 
     private JiraWriteExecutor executor;
 
-    @Mock private AigenyProperties properties;
-    @Mock private AigenyProperties.Jira jiraProperties;
+    @Mock private JiraConfiguration jiraConfig;
     @Mock private UpdateIssueOperation updateOperation;
     @Mock private AddCommentOperation commentOperation;
     @Mock private CreateIssueOperation createOperation;
 
     @BeforeEach
     void setUp() {
-        lenient().when(properties.getJira()).thenReturn(jiraProperties);
-        lenient().when(jiraProperties.getBaseUrl()).thenReturn("https://jira.example.com");
-        executor = new JiraWriteExecutor(properties, updateOperation, commentOperation, createOperation);
+        lenient().when(jiraConfig.getBaseUrl()).thenReturn("https://jira.example.com");
+        executor = new JiraWriteExecutor(jiraConfig, updateOperation, commentOperation, createOperation);
         JiraWriteContext.set(true);
     }
 
@@ -103,7 +102,7 @@ class JiraWriteExecutorTest {
     @Test
     @DisplayName("should strip trailing slash from base URL")
     void shouldStripTrailingSlash() throws Exception {
-        when(jiraProperties.getBaseUrl()).thenReturn("https://jira.example.com/");
+        when(jiraConfig.getBaseUrl()).thenReturn("https://jira.example.com/");
         PendingJiraAction a = action(PendingJiraAction.ActionType.UPDATE_ISSUE, "TEST-1");
         when(updateOperation.execute(eq(a), anyString(), anyString())).thenReturn("ok");
 

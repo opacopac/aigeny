@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.llm;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.LlmConfiguration;
 import com.tschanz.aigeny.llm.model.*;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,11 +36,11 @@ public class AnthropicAdapter implements LlmClient {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String ANTHROPIC_VERSION = "2023-06-01";
 
-    private final AigenyProperties props;
+    private final LlmConfiguration config;
     private final HttpClient http;
 
-    public AnthropicAdapter(AigenyProperties props) {
-        this.props = props;
+    public AnthropicAdapter(LlmConfiguration config) {
+        this.config = config;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
@@ -48,7 +48,7 @@ public class AnthropicAdapter implements LlmClient {
 
     @Override
     public ChatResponse chat(List<Message> messages, List<ToolDefinition> tools) throws Exception {
-        AigenyProperties.Llm llm = props.getLlm();
+        LlmConfiguration llm = config;
 
         ObjectNode body = JSON.createObjectNode();
         body.put("model", llm.getModel());
@@ -120,7 +120,7 @@ public class AnthropicAdapter implements LlmClient {
         }
 
         String bodyStr = JSON.writeValueAsString(body);
-        String url = props.getLlm().getBaseUrl().replaceAll("/$", "") + "/messages";
+        String url = config.getBaseUrl().replaceAll("/$", "") + "/messages";
 
         long userMsgCount = chatMessages.stream().filter(m -> "user".equals(m.getRole())).count();
         log.info(">> LLM REQUEST  provider=claude model={} messages={} tools={}", llm.getModel(), userMsgCount, tools != null ? tools.size() : 0);

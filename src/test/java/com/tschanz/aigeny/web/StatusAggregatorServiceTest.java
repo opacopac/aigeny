@@ -1,7 +1,11 @@
 package com.tschanz.aigeny.web;
 
 import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.BitbucketConfiguration;
 import com.tschanz.aigeny.config.ConfigurationValidator;
+import com.tschanz.aigeny.config.DbConfiguration;
+import com.tschanz.aigeny.config.JiraConfiguration;
+import com.tschanz.aigeny.config.LlmConfiguration;
 import com.tschanz.aigeny.db.SchemaLoader;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +25,6 @@ import static org.mockito.Mockito.*;
 @DisplayName("StatusAggregatorService")
 class StatusAggregatorServiceTest {
 
-    private AigenyProperties props;
     private AigenyProperties.Llm llmConfig;
     private AigenyProperties.Db dbConfig;
     private AigenyProperties.Jira jiraConfig;
@@ -46,20 +49,16 @@ class StatusAggregatorServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Use real configuration objects (no need to spy anymore)
-        props = mock(AigenyProperties.class);
         llmConfig = new AigenyProperties.Llm();
         dbConfig = new AigenyProperties.Db();
         jiraConfig = new AigenyProperties.Jira();
         bitbucketConfig = new AigenyProperties.Bitbucket();
 
-        lenient().when(props.getLlm()).thenReturn(llmConfig);
-        lenient().when(props.getDb()).thenReturn(dbConfig);
-        lenient().when(props.getJira()).thenReturn(jiraConfig);
-        lenient().when(props.getBitbucket()).thenReturn(bitbucketConfig);
-
         statusAggregator = new StatusAggregatorService(
-            props,
+            llmConfig,
+            dbConfig,
+            jiraConfig,
+            bitbucketConfig,
             configValidator,
             tokenService,
             sessionService,

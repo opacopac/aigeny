@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.llm.factory;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.LlmConfiguration;
 import com.tschanz.aigeny.llm.GitHubCopilotService;
 import com.tschanz.aigeny.llm.LlmClient;
 import com.tschanz.aigeny.llm.OpenAiCompatibleAdapter;
@@ -14,8 +14,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link OpenAiCompatibleAdapterFactory}.
@@ -27,10 +25,7 @@ class OpenAiCompatibleAdapterFactoryTest {
     private OpenAiCompatibleAdapterFactory factory;
 
     @Mock
-    private AigenyProperties properties;
-
-    @Mock
-    private AigenyProperties.Llm llmProperties;
+    private LlmConfiguration llmConfig;
 
     @Mock
     private GitHubCopilotService githubService;
@@ -38,7 +33,6 @@ class OpenAiCompatibleAdapterFactoryTest {
     @BeforeEach
     void setUp() {
         factory = new OpenAiCompatibleAdapterFactory();
-        lenient().when(properties.getLlm()).thenReturn(llmProperties);
     }
 
     @Test
@@ -66,7 +60,7 @@ class OpenAiCompatibleAdapterFactoryTest {
     @DisplayName("should create OpenAiCompatibleAdapter instance")
     void shouldCreateOpenAiCompatibleAdapter() {
         // When
-        LlmClient client = factory.createAdapter(properties, githubService);
+        LlmClient client = factory.createAdapter(llmConfig, githubService);
 
         // Then
         assertThat(client).isInstanceOf(OpenAiCompatibleAdapter.class);
@@ -76,14 +70,10 @@ class OpenAiCompatibleAdapterFactoryTest {
     @DisplayName("should create adapter without requiring GitHubCopilotService")
     void shouldCreateAdapterWithoutGithubService() {
         // When
-        LlmClient client = factory.createAdapter(properties, null);
+        LlmClient client = factory.createAdapter(llmConfig, null);
 
         // Then
         assertThat(client).isNotNull();
         assertThat(client).isInstanceOf(OpenAiCompatibleAdapter.class);
     }
 }
-
-
-
-

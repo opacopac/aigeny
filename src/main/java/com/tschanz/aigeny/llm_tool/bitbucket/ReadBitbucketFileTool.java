@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.llm_tool.bitbucket;
 
-import com.tschanz.aigeny.config.AigenyProperties;
+import com.tschanz.aigeny.config.BitbucketConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.llm_tool.Tool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
@@ -29,11 +29,11 @@ public class ReadBitbucketFileTool implements Tool {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final int MAX_CHARS = 20_000; // guard against huge files
 
-    private final AigenyProperties props;
+    private final BitbucketConfiguration bitbucketConfig;
     private final HttpClient http;
 
-    public ReadBitbucketFileTool(AigenyProperties props) {
-        this.props = props;
+    public ReadBitbucketFileTool(BitbucketConfiguration bitbucketConfig) {
+        this.bitbucketConfig = bitbucketConfig;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
@@ -79,15 +79,14 @@ public class ReadBitbucketFileTool implements Tool {
 
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
-        AigenyProperties.Bitbucket bb = props.getBitbucket();
-        String baseUrl = (bb.getBaseUrl() == null ? "" : bb.getBaseUrl()).replaceAll("/$", "");
+                String baseUrl = (bitbucketConfig.getBaseUrl() == null ? "" : bitbucketConfig.getBaseUrl()).replaceAll("/$", "");
 
         if (baseUrl.isBlank()) {
             return new ToolResult("Bitbucket ist nicht konfiguriert (base-url fehlt).");
         }
 
         String effectiveToken = BitbucketTokenContext.get();
-        if (effectiveToken == null || effectiveToken.isBlank()) effectiveToken = bb.getToken();
+        if (effectiveToken == null || effectiveToken.isBlank()) effectiveToken = bitbucketConfig.getToken();
         if (effectiveToken == null || effectiveToken.isBlank()) {
             return new ToolResult("Kein Bitbucket-Token gesetzt. Bitte Token im UI eingeben.");
         }
@@ -156,4 +155,3 @@ public class ReadBitbucketFileTool implements Tool {
 
     private static String enc(String s) { return URLEncoder.encode(s, StandardCharsets.UTF_8); }
 }
-

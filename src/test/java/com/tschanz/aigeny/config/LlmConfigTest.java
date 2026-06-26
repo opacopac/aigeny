@@ -1,5 +1,6 @@
 package com.tschanz.aigeny.config;
 
+import com.tschanz.aigeny.config.LlmConfiguration;
 import com.tschanz.aigeny.llm.AnthropicAdapter;
 import com.tschanz.aigeny.llm.GitHubCopilotAdapter;
 import com.tschanz.aigeny.llm.GitHubCopilotService;
@@ -278,9 +279,8 @@ class LlmConfigTest {
                 }
 
                 @Override
-                public LlmClient createAdapter(AigenyProperties props, GitHubCopilotService githubService) {
-                    // Return a mock adapter for testing
-                    return new OpenAiCompatibleAdapter(props);
+                public LlmClient createAdapter(LlmConfiguration config, GitHubCopilotService githubService) {
+                    return new OpenAiCompatibleAdapter(config);
                 }
             };
 
