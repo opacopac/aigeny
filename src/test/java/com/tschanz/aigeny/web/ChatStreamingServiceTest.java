@@ -35,6 +35,7 @@ class ChatStreamingServiceTest {
     @Mock private OrchestrationService orchestration;
     @Mock private ChatSessionService sessionService;
     @Mock private ConfirmationOrchestrator confirmationOrchestrator;
+    @Mock private ExecutionContextManager contextManager;
     @Mock private HttpSession session;
 
     private ObjectMapper objectMapper;
@@ -43,7 +44,7 @@ class ChatStreamingServiceTest {
     @BeforeEach
     void setUp() {
         objectMapper    = new ObjectMapper();
-        streamingService = new ChatStreamingService(orchestration, sessionService, confirmationOrchestrator, objectMapper);
+        streamingService = new ChatStreamingService(orchestration, sessionService, confirmationOrchestrator, contextManager, objectMapper);
     }
 
     @Nested
@@ -144,8 +145,8 @@ class ChatStreamingServiceTest {
     class ThreadLocalContextManagement {
 
         @Test
-        @DisplayName("should cleanup ThreadLocal contexts after completion")
-        void shouldCleanupThreadLocalContextsAfterCompletion() throws Exception {
+        @DisplayName("should setup and cleanup contexts via ExecutionContextManager")
+        void shouldSetupAndCleanupContextsViaExecutionContextManager() throws Exception {
             List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
@@ -153,15 +154,22 @@ class ChatStreamingServiceTest {
             when(orchestration.chat(any(), anyString(), any(), any(), any()))
                     .thenReturn(new ChatResult("response", null));
 
-            streamingService.streamChat("test", history, session, "token", true, "bb-token");
+            streamingService.streamChat("test", history, session, "jira-token", true, "bb-token");
             Thread.sleep(100);
 
-            verify(sessionService).clearCancelFlag(session);
+            verify(contextManager).setupContexts(
+                    eq("jira-token"),
+                    eq(true),
+                    eq("bb-token"),
+                    any(),
+                    any()
+            );
+            verify(contextManager).cleanupAllContexts();
         }
 
         @Test
-        @DisplayName("should cleanup ThreadLocal contexts after error")
-        void shouldCleanupThreadLocalContextsAfterError() throws Exception {
+        @DisplayName("should cleanup contexts even after error")
+        void shouldCleanupContextsEvenAfterError() throws Exception {
             List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
@@ -172,7 +180,7 @@ class ChatStreamingServiceTest {
             streamingService.streamChat("test", history, session, "token", false, "bb-token");
             Thread.sleep(100);
 
-            verify(sessionService).clearCancelFlag(session);
+            verify(contextManager).cleanupAllContexts();
         }
     }
 

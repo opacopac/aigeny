@@ -4,14 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;
 import com.tschanz.aigeny.llm.model.Message;
 import com.tschanz.aigeny.llm_tool.ToolResult;
-import com.tschanz.aigeny.llm_tool.bitbucket.BitbucketTokenContext;
-import com.tschanz.aigeny.llm_tool.jira.ConfirmationContext;
-import com.tschanz.aigeny.llm_tool.jira.JiraTokenContext;
-import com.tschanz.aigeny.llm_tool.jira.JiraWriteContext;
-import com.tschanz.aigeny.llm_tool.jira.PendingJiraActionContext;
-import com.tschanz.aigeny.orchestration.BatchConfirmationContext;
 import com.tschanz.aigeny.orchestration.ChatResult;
-import com.tschanz.aigeny.orchestration.CurrentToolCallContext;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
@@ -59,15 +52,18 @@ public class ChatStreamingService {
     private final OrchestrationService orchestration;
     private final ChatSessionService sessionService;
     private final ConfirmationOrchestrator confirmationOrchestrator;
+    private final ExecutionContextManager contextManager;
     private final ObjectMapper objectMapper;
 
     public ChatStreamingService(OrchestrationService orchestration,
                                 ChatSessionService sessionService,
                                 ConfirmationOrchestrator confirmationOrchestrator,
+                                ExecutionContextManager contextManager,
                                 ObjectMapper objectMapper) {
         this.orchestration            = orchestration;
         this.sessionService           = sessionService;
         this.confirmationOrchestrator = confirmationOrchestrator;
+        this.contextManager           = contextManager;
         this.objectMapper             = objectMapper;
     }
 
@@ -112,20 +108,15 @@ public class ChatStreamingService {
                                     String bitbucketToken,
                                     AtomicBoolean cancelFlag) {
 
-        JiraTokenContext.set(jiraToken);
-        JiraWriteContext.set(jiraWriteEnabled);
-        BitbucketTokenContext.set(bitbucketToken);
-        PendingJiraActionContext.clear();
-
-        // Set up synchronous confirmation handler for write tools
-        ConfirmationContext.set((humanDescription, action) ->
-                confirmationOrchestrator.handleSingleConfirmation(
-                        emitter, session, jiraToken, jiraWriteEnabled, humanDescription, action));
-
-        // Set up batch confirmation handler: when 2+ write tools appear in one LLM response,
-        // show a single combined dialog instead of one per write tool.
-        BatchConfirmationContext.set(writeToolInfos ->
-                confirmationOrchestrator.handleBatchConfirmation(emitter, session, writeToolInfos));
+        // Setup all ThreadLocal contexts via ExecutionContextManager
+        contextManager.setupContexts(
+                jiraToken,
+                jiraWriteEnabled,
+                bitbucketToken,
+                (humanDescription, action) -> confirmationOrchestrator.handleSingleConfirmation(
+                        emitter, session, jiraToken, jiraWriteEnabled, humanDescription, action),
+                writeToolInfos -> confirmationOrchestrator.handleBatchConfirmation(emitter, session, writeToolInfos)
+        );
 
         try {
             runOrchestrationAndComplete(emitter, message, history, session, cancelFlag);
@@ -245,12 +236,6 @@ public class ChatStreamingService {
 
     private void cleanup(HttpSession session) {
         sessionService.clearCancelFlag(session);
-        JiraTokenContext.clear();
-        JiraWriteContext.clear();
-        BitbucketTokenContext.clear();
-        PendingJiraActionContext.clear();
-        ConfirmationContext.clear();
-        ConfirmationContext.clearPreApproved();
-        BatchConfirmationContext.clear();
+        contextManager.cleanupAllContexts();
     }
 }
