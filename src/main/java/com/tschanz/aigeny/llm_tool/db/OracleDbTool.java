@@ -3,8 +3,8 @@ package com.tschanz.aigeny.llm_tool.db;
 import com.tschanz.aigeny.config.ConfigurationValidator;
 import com.tschanz.aigeny.config.DbConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
+import com.tschanz.aigeny.llm_tool.AbstractTool;
 import com.tschanz.aigeny.llm_tool.QueryResult;
-import com.tschanz.aigeny.llm_tool.Tool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
 import com.tschanz.aigeny.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -24,10 +24,9 @@ import java.util.regex.Pattern;
  * The generated SQL is logged and included in the tool result so it appears in the chat.
  */
 @Service
-public class OracleDbTool implements Tool {
+public class OracleDbTool extends AbstractTool {
 
     private static final Logger log = LoggerFactory.getLogger(OracleDbTool.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
     private static final int MAX_ROWS = 5000;
 
     // ── Message keys ─────────────────────────────────────────────────────────
@@ -47,7 +46,8 @@ public class OracleDbTool implements Tool {
     private final ConfigurationValidator configValidator;
     private HikariDataSource pool;
 
-    public OracleDbTool(DbConfiguration dbConfig, ConfigurationValidator configValidator) {
+    public OracleDbTool(DbConfiguration dbConfig, ConfigurationValidator configValidator, ObjectMapper objectMapper) {
+        super(objectMapper);
         this.dbConfig = dbConfig;
         this.configValidator = configValidator;
     }
@@ -106,7 +106,7 @@ public class OracleDbTool implements Tool {
             return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
         }
 
-        JsonNode args = JSON.readTree(argumentsJson);
+        JsonNode args = objectMapper.readTree(argumentsJson);
         String sql = args.path("sql").asText("").trim();
         String description = args.path("description").asText("Execute query");
 

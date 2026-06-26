@@ -2,7 +2,7 @@ package com.tschanz.aigeny.llm_tool.jira;
 
 import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
-import com.tschanz.aigeny.llm_tool.Tool;
+import com.tschanz.aigeny.llm_tool.AbstractTool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
 import com.tschanz.aigeny.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -18,10 +18,9 @@ import java.util.Map;
  * The actual HTTP call is deferred until the user confirms via the UI.
  */
 @Service
-public class AddJiraCommentTool implements Tool {
+public class AddJiraCommentTool extends AbstractTool {
 
     private static final Logger log = LoggerFactory.getLogger(AddJiraCommentTool.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
 
     // ── Tool identity ────────────────────────────────────────────────────────
     private static final String TOOL_NAME    = "add_jira_comment";
@@ -38,7 +37,8 @@ public class AddJiraCommentTool implements Tool {
 
     private final JiraConfiguration jiraConfig;
 
-    public AddJiraCommentTool(JiraConfiguration jiraConfig) {
+    public AddJiraCommentTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper) {
+        super(objectMapper);
         this.jiraConfig = jiraConfig;
     }
 
@@ -48,7 +48,7 @@ public class AddJiraCommentTool implements Tool {
     @Override
     public String getCallDescription(String argumentsJson) {
         try {
-            JsonNode args = JSON.readTree(argumentsJson);
+            JsonNode args = objectMapper.readTree(argumentsJson);
             String issueKey = args.path(ARG_ISSUE_KEY).asText("").trim();
             return "Kommentar hinzufügen zu " + (issueKey.isBlank() ? "Jira-Ticket" : issueKey);
         } catch (Exception ignored) {}
@@ -86,7 +86,7 @@ public class AddJiraCommentTool implements Tool {
             return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
         }
 
-        JsonNode args   = JSON.readTree(argumentsJson);
+        JsonNode args   = objectMapper.readTree(argumentsJson);
         String issueKey = args.path(ARG_ISSUE_KEY).asText("").trim();
         String comment  = args.path(ARG_COMMENT).asText("").trim();
 

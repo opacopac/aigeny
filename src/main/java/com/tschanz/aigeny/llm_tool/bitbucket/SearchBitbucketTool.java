@@ -2,7 +2,7 @@ package com.tschanz.aigeny.llm_tool.bitbucket;
 
 import com.tschanz.aigeny.config.BitbucketConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
-import com.tschanz.aigeny.llm_tool.Tool;
+import com.tschanz.aigeny.llm_tool.AbstractTool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,15 +24,15 @@ import java.util.Map;
  * Supports Bitbucket Server / Data Center REST API v1.
  */
 @Service
-public class SearchBitbucketTool implements Tool {
+public class SearchBitbucketTool extends AbstractTool {
 
     private static final Logger log = LoggerFactory.getLogger(SearchBitbucketTool.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final BitbucketConfiguration bitbucketConfig;
     private final HttpClient http;
 
-    public SearchBitbucketTool(BitbucketConfiguration bitbucketConfig) {
+    public SearchBitbucketTool(BitbucketConfiguration bitbucketConfig, ObjectMapper objectMapper) {
+        super(objectMapper);
         this.bitbucketConfig = bitbucketConfig;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
@@ -44,7 +44,7 @@ public class SearchBitbucketTool implements Tool {
     @Override
     public String getCallDescription(String argumentsJson) {
         try {
-            JsonNode args = JSON.readTree(argumentsJson);
+            JsonNode args = objectMapper.readTree(argumentsJson);
             String action   = args.path("action").asText("?");
             String project  = args.path("projectKey").asText("");
             String repo     = args.path("repoSlug").asText("");
@@ -119,7 +119,7 @@ public class SearchBitbucketTool implements Tool {
             return new ToolResult("Kein Bitbucket-Token gesetzt. Bitte Token im UI eingeben.");
         }
 
-        JsonNode args   = JSON.readTree(argumentsJson);
+        JsonNode args   = objectMapper.readTree(argumentsJson);
         String action   = args.path("action").asText("").trim();
         String project  = args.path("projectKey").asText("").trim();
         String repo     = args.path("repoSlug").asText("").trim();
@@ -151,7 +151,7 @@ public class SearchBitbucketTool implements Tool {
         HttpResponse<String> resp = get(url, auth);
         if (!isOk(resp)) return errorResult(resp);
 
-        JsonNode root = JSON.readTree(resp.body());
+        JsonNode root = objectMapper.readTree(resp.body());
         JsonNode values = root.path("values");
         if (!values.isArray() || values.isEmpty()) return new ToolResult("Keine Repositories gefunden.");
 
@@ -183,7 +183,7 @@ public class SearchBitbucketTool implements Tool {
         HttpResponse<String> resp = get(url, auth);
         if (!isOk(resp)) return errorResult(resp);
 
-        JsonNode values = JSON.readTree(resp.body()).path("values");
+        JsonNode values = objectMapper.readTree(resp.body()).path("values");
         if (!values.isArray() || values.isEmpty()) return new ToolResult("Keine Branches gefunden.");
 
         StringBuilder sb = new StringBuilder("**Branches in " + project + "/" + repo + ":**\n\n");
@@ -211,7 +211,7 @@ public class SearchBitbucketTool implements Tool {
         HttpResponse<String> resp = get(url.toString(), auth);
         if (!isOk(resp)) return errorResult(resp);
 
-        JsonNode values = JSON.readTree(resp.body()).path("values");
+        JsonNode values = objectMapper.readTree(resp.body()).path("values");
         if (!values.isArray() || values.isEmpty()) return new ToolResult("Keine Dateien gefunden.");
 
         StringBuilder sb = new StringBuilder("**Dateien in " + project + "/" + repo);
@@ -261,7 +261,7 @@ public class SearchBitbucketTool implements Tool {
 
         log.debug("<< BB search_code raw response: {}", resp.body());
 
-        JsonNode root = JSON.readTree(resp.body());
+        JsonNode root = objectMapper.readTree(resp.body());
         // Actual Bitbucket Server Code Search response structure:
         // {"scope": {...}, "code": {"values": [...], "count": N}, "query": {...}}
         // Each value: {"repository": {...}, "file": "<path-string>", "hitContexts": [[{line,text},...]], ...}
@@ -324,7 +324,7 @@ public class SearchBitbucketTool implements Tool {
         HttpResponse<String> resp = get(url.toString(), auth);
         if (!isOk(resp)) return errorResult(resp);
 
-        JsonNode values = JSON.readTree(resp.body()).path("values");
+        JsonNode values = objectMapper.readTree(resp.body()).path("values");
         if (!values.isArray() || values.isEmpty()) return new ToolResult("Keine Commits gefunden.");
 
         StringBuilder sb = new StringBuilder("**Commits in " + project + "/" + repo);

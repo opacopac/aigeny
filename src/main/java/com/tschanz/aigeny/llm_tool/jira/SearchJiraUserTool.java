@@ -2,7 +2,7 @@ package com.tschanz.aigeny.llm_tool.jira;
 
 import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
-import com.tschanz.aigeny.llm_tool.Tool;
+import com.tschanz.aigeny.llm_tool.AbstractTool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
 import com.tschanz.aigeny.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,10 +25,9 @@ import java.util.Map;
  * Returns the technical username (used in JQL assignee queries) together with display name and email.
  */
 @Service
-public class SearchJiraUserTool implements Tool {
+public class SearchJiraUserTool extends AbstractTool {
 
     private static final Logger log = LoggerFactory.getLogger(SearchJiraUserTool.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
 
     // ── Message keys ─────────────────────────────────────────────────────────
     private static final String MSG_NOT_CONFIGURED  = "jira.error.not_configured";
@@ -42,7 +41,8 @@ public class SearchJiraUserTool implements Tool {
     private final JiraConfiguration jiraConfig;
     private final HttpClient http;
 
-    public SearchJiraUserTool(JiraConfiguration jiraConfig) {
+    public SearchJiraUserTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper) {
+        super(objectMapper);
         this.jiraConfig = jiraConfig;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
@@ -55,7 +55,7 @@ public class SearchJiraUserTool implements Tool {
     @Override
     public String getCallDescription(String argumentsJson) {
         try {
-            JsonNode args = JSON.readTree(argumentsJson);
+            JsonNode args = objectMapper.readTree(argumentsJson);
             String name = args.path("displayName").asText("").trim();
             if (!name.isBlank()) return "Jira-Benutzer suchen: " + name;
         } catch (Exception ignored) {}
@@ -100,7 +100,7 @@ public class SearchJiraUserTool implements Tool {
             return new ToolResult(Messages.get(MSG_NO_TOKEN));
         }
 
-        JsonNode args = JSON.readTree(argumentsJson);
+        JsonNode args = objectMapper.readTree(argumentsJson);
         String displayName = args.path("displayName").asText("").trim();
 
         if (displayName.isBlank()) {
@@ -137,7 +137,7 @@ public class SearchJiraUserTool implements Tool {
     }
 
     private ToolResult parseUserSearchResponse(String json) throws Exception {
-        JsonNode users = JSON.readTree(json);
+        JsonNode users = objectMapper.readTree(json);
 
         if (!users.isArray() || users.isEmpty()) {
             return new ToolResult(Messages.get(MSG_NO_USERS));

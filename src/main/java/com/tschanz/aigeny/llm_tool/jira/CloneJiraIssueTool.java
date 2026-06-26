@@ -2,7 +2,7 @@ package com.tschanz.aigeny.llm_tool.jira;
 
 import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
-import com.tschanz.aigeny.llm_tool.Tool;
+import com.tschanz.aigeny.llm_tool.AbstractTool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
 import com.tschanz.aigeny.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -29,10 +29,9 @@ import java.util.Map;
  * then queues a CREATE_ISSUE action for user confirmation.
  */
 @Service
-public class CloneJiraIssueTool implements Tool {
+public class CloneJiraIssueTool extends AbstractTool {
 
     private static final Logger log = LoggerFactory.getLogger(CloneJiraIssueTool.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
     private static final int MAX_SUBTASKS = 20;
 
     // ── Message keys ─────────────────────────────────────────────────────────
@@ -50,7 +49,8 @@ public class CloneJiraIssueTool implements Tool {
     private final JiraConfiguration jiraConfig;
     private final HttpClient http;
 
-    public CloneJiraIssueTool(JiraConfiguration jiraConfig) {
+    public CloneJiraIssueTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper) {
+        super(objectMapper);
         this.jiraConfig = jiraConfig;
         this.http  = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
@@ -63,7 +63,7 @@ public class CloneJiraIssueTool implements Tool {
     @Override
     public String getCallDescription(String argumentsJson) {
         try {
-            JsonNode args = JSON.readTree(argumentsJson);
+            JsonNode args = objectMapper.readTree(argumentsJson);
             String source = args.path("sourceIssueKey").asText("?");
             String target = args.path("targetProject").asText("").trim();
             boolean subtasks = args.path("cloneSubtasks").asBoolean(false);
@@ -115,7 +115,7 @@ public class CloneJiraIssueTool implements Tool {
         }
         String auth = "Bearer " + token;
 
-        JsonNode args           = JSON.readTree(argumentsJson);
+        JsonNode args           = objectMapper.readTree(argumentsJson);
         String sourceKey        = args.path("sourceIssueKey").asText("").trim();
         String targetProject    = args.path("targetProject").asText("").trim();
         String summaryOverride  = args.path("summaryOverride").asText("").trim();
@@ -229,10 +229,10 @@ public class CloneJiraIssueTool implements Tool {
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
             log.info("<< JIRA GET {} status={}", url, resp.statusCode());
             if (resp.statusCode() == 200) {
-                return JSON.readTree(resp.body());
+                return objectMapper.readTree(resp.body());
             }
             // Return sentinel error node
-            return JSON.createObjectNode()
+            return objectMapper.createObjectNode()
                     .put("_error", true)
                     .put("_status", resp.statusCode())
                     .put("_body", resp.body());

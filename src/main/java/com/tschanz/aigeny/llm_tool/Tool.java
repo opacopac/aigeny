@@ -1,15 +1,15 @@
 package com.tschanz.aigeny.llm_tool;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 
 /**
  * Interface for all tools that the LLM can call.
+ *
+ * <p>Concrete implementations should extend {@link AbstractTool} to inherit the shared
+ * {@link com.fasterxml.jackson.databind.ObjectMapper} and the default
+ * {@link #getCallDescription(String)} behaviour.
  */
 public interface Tool {
-
-    ObjectMapper _TOOL_JSON = new ObjectMapper();
 
     /** Unique name used in tool definitions (must match what LLM calls) */
     String getName();
@@ -37,17 +37,11 @@ public interface Tool {
     /**
      * Returns a short human-readable description of what this specific call is doing,
      * based on its arguments. Shown in the UI typing indicator.
-     * Default: tries a 'description' field in the args, falls back to the tool name.
+     * The richer implementation in {@link AbstractTool} reads a {@code description} field
+     * from the args JSON. Tools that extend {@link AbstractTool} inherit that behaviour.
      * Tools with structured args (action, query, etc.) should override this.
      */
     default String getCallDescription(String argumentsJson) {
-        try {
-            JsonNode node = _TOOL_JSON.readTree(argumentsJson);
-            JsonNode desc = node.get("description");
-            if (desc != null && !desc.isNull() && !desc.asText().isBlank()) {
-                return desc.asText();
-            }
-        } catch (Exception ignored) {}
         return getName();
     }
 }

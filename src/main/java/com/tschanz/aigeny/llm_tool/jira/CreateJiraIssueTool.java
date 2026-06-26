@@ -2,7 +2,7 @@ package com.tschanz.aigeny.llm_tool.jira;
 
 import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
-import com.tschanz.aigeny.llm_tool.Tool;
+import com.tschanz.aigeny.llm_tool.AbstractTool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
 import com.tschanz.aigeny.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -19,10 +19,9 @@ import java.util.Map;
  * The actual HTTP call is deferred until the user confirms via the UI.
  */
 @Service
-public class CreateJiraIssueTool implements Tool {
+public class CreateJiraIssueTool extends AbstractTool {
 
     private static final Logger log = LoggerFactory.getLogger(CreateJiraIssueTool.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
 
     // ── Message keys ─────────────────────────────────────────────────────────
     private static final String MSG_NOT_CONFIGURED   = "jira.error.not_configured_de";
@@ -32,7 +31,8 @@ public class CreateJiraIssueTool implements Tool {
 
     private final JiraConfiguration jiraConfig;
 
-    public CreateJiraIssueTool(JiraConfiguration jiraConfig) {
+    public CreateJiraIssueTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper) {
+        super(objectMapper);
         this.jiraConfig = jiraConfig;
     }
 
@@ -42,7 +42,7 @@ public class CreateJiraIssueTool implements Tool {
     @Override
     public String getCallDescription(String argumentsJson) {
         try {
-            JsonNode args = JSON.readTree(argumentsJson);
+            JsonNode args = objectMapper.readTree(argumentsJson);
             String project = args.path("project").asText("?");
             String summary = args.path("summary").asText("").trim();
             String display = summary.length() > 50 ? summary.substring(0, 47) + "..." : summary;
@@ -83,7 +83,7 @@ public class CreateJiraIssueTool implements Tool {
             return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
         }
 
-        JsonNode args       = JSON.readTree(argumentsJson);
+        JsonNode args       = objectMapper.readTree(argumentsJson);
         String projectKey   = args.path("project").asText("").trim();
         String summary      = args.path("summary").asText("").trim();
         String issuetype    = args.path("issuetype").asText("Task").trim();

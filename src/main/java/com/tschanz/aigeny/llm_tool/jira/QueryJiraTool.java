@@ -2,8 +2,8 @@ package com.tschanz.aigeny.llm_tool.jira;
 
 import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
+import com.tschanz.aigeny.llm_tool.AbstractTool;
 import com.tschanz.aigeny.llm_tool.QueryResult;
-import com.tschanz.aigeny.llm_tool.Tool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
 import com.tschanz.aigeny.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,10 +25,9 @@ import java.util.*;
  * Tool for searching Jira issues via REST API (Jira Server/Data Center).
  */
 @Service
-public class QueryJiraTool implements Tool {
+public class QueryJiraTool extends AbstractTool {
 
     private static final Logger log = LoggerFactory.getLogger(QueryJiraTool.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
     private static final int MAX_RESULTS = 50;
 
     // ── Message keys ─────────────────────────────────────────────────────────
@@ -44,7 +43,8 @@ public class QueryJiraTool implements Tool {
     private final JiraConfiguration jiraConfig;
     private final HttpClient http;
 
-    public QueryJiraTool(JiraConfiguration jiraConfig) {
+    public QueryJiraTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper) {
+        super(objectMapper);
         this.jiraConfig = jiraConfig;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
@@ -56,7 +56,7 @@ public class QueryJiraTool implements Tool {
     @Override
     public String getCallDescription(String argumentsJson) {
         try {
-            JsonNode args = JSON.readTree(argumentsJson);
+            JsonNode args = objectMapper.readTree(argumentsJson);
             String issueKey = args.path("issueKey").asText("").trim();
             String jql      = args.path("jql").asText("").trim();
             if (!issueKey.isBlank()) return "Jira-Ticket lesen: " + issueKey;
@@ -101,7 +101,7 @@ public class QueryJiraTool implements Tool {
             return new ToolResult(Messages.get(MSG_NO_TOKEN));
         }
 
-        JsonNode args = JSON.readTree(argumentsJson);
+        JsonNode args = objectMapper.readTree(argumentsJson);
         String issueKey = args.path("issueKey").asText("").trim();
         String jql = args.path("jql").asText("").trim();
         int maxResults = Math.min(args.path("maxResults").asInt(20), MAX_RESULTS);
@@ -180,7 +180,7 @@ public class QueryJiraTool implements Tool {
     }
 
     private ToolResult parseSingleIssue(String json) throws Exception {
-        JsonNode f = JSON.readTree(json);
+        JsonNode f = objectMapper.readTree(json);
         String key = f.path("key").asText();
         JsonNode fields = f.path("fields");
 
@@ -263,7 +263,7 @@ public class QueryJiraTool implements Tool {
     }
 
     private ToolResult parseJiraResponse(String json) throws Exception {
-        JsonNode root = JSON.readTree(json);
+        JsonNode root = objectMapper.readTree(json);
         int total = root.path("total").asInt(0);
         JsonNode issues = root.path("issues");
 

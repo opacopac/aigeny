@@ -2,7 +2,7 @@ package com.tschanz.aigeny.llm_tool.bitbucket;
 
 import com.tschanz.aigeny.config.BitbucketConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
-import com.tschanz.aigeny.llm_tool.Tool;
+import com.tschanz.aigeny.llm_tool.AbstractTool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,16 +23,16 @@ import java.util.Map;
  * Read-only tool to fetch the raw content of a single file from a Bitbucket repository.
  */
 @Service
-public class ReadBitbucketFileTool implements Tool {
+public class ReadBitbucketFileTool extends AbstractTool {
 
     private static final Logger log = LoggerFactory.getLogger(ReadBitbucketFileTool.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
     private static final int MAX_CHARS = 20_000; // guard against huge files
 
     private final BitbucketConfiguration bitbucketConfig;
     private final HttpClient http;
 
-    public ReadBitbucketFileTool(BitbucketConfiguration bitbucketConfig) {
+    public ReadBitbucketFileTool(BitbucketConfiguration bitbucketConfig, ObjectMapper objectMapper) {
+        super(objectMapper);
         this.bitbucketConfig = bitbucketConfig;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
@@ -44,7 +44,7 @@ public class ReadBitbucketFileTool implements Tool {
     @Override
     public String getCallDescription(String argumentsJson) {
         try {
-            JsonNode args = JSON.readTree(argumentsJson);
+            JsonNode args = objectMapper.readTree(argumentsJson);
             String project  = args.path("projectKey").asText("");
             String repo     = args.path("repoSlug").asText("");
             String filePath = args.path("filePath").asText("");
@@ -91,7 +91,7 @@ public class ReadBitbucketFileTool implements Tool {
             return new ToolResult("Kein Bitbucket-Token gesetzt. Bitte Token im UI eingeben.");
         }
 
-        JsonNode args   = JSON.readTree(argumentsJson);
+        JsonNode args   = objectMapper.readTree(argumentsJson);
         String project  = args.path("projectKey").asText("").trim();
         String repo     = args.path("repoSlug").asText("").trim();
         String filePath = args.path("filePath").asText("").trim();

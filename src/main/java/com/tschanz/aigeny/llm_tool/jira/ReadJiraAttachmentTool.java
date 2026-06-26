@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
-import com.tschanz.aigeny.llm_tool.Tool;
+import com.tschanz.aigeny.llm_tool.AbstractTool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
 import com.tschanz.aigeny.Messages;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
@@ -30,10 +30,9 @@ import java.util.Map;
  * The attachment content URL is obtained from search_jira (issueKey fetch).
  */
 @Service
-public class ReadJiraAttachmentTool implements Tool {
+public class ReadJiraAttachmentTool extends AbstractTool {
 
     private static final Logger log = LoggerFactory.getLogger(ReadJiraAttachmentTool.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
 
     /** Max characters returned for text/CSV attachments to avoid overwhelming the LLM context. */
     private static final int MAX_TEXT_CHARS = 12_000;
@@ -52,7 +51,8 @@ public class ReadJiraAttachmentTool implements Tool {
     private final JiraConfiguration jiraConfig;
     private final HttpClient http;
 
-    public ReadJiraAttachmentTool(JiraConfiguration jiraConfig) {
+    public ReadJiraAttachmentTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper) {
+        super(objectMapper);
         this.jiraConfig = jiraConfig;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
@@ -65,7 +65,7 @@ public class ReadJiraAttachmentTool implements Tool {
     @Override
     public String getCallDescription(String argumentsJson) {
         try {
-            JsonNode args = JSON.readTree(argumentsJson);
+            JsonNode args = objectMapper.readTree(argumentsJson);
             String filename = args.path("filename").asText("").trim();
             if (!filename.isBlank()) return "Anhang lesen: " + filename;
             // Try to extract filename from URL
@@ -116,7 +116,7 @@ public class ReadJiraAttachmentTool implements Tool {
             return new ToolResult(Messages.get(MSG_NO_TOKEN));
         }
 
-        JsonNode args = JSON.readTree(argumentsJson);
+        JsonNode args = objectMapper.readTree(argumentsJson);
         String attachmentUrl = args.path("attachmentUrl").asText("").trim();
         String filename = args.path("filename").asText("").trim();
 
