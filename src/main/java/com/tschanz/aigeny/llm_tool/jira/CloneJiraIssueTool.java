@@ -45,6 +45,7 @@ public class CloneJiraIssueTool implements Tool {
     private static final String MSG_QUEUED           = "jira.clone.queued";
     private static final String MSG_QUEUED_SUBTASKS  = "jira.clone.queued_with_subtasks";
     private static final String MSG_WRITE_DISABLED   = "jira.write.mode_disabled";
+    private static final String MSG_NO_STREAMING     = "jira.error.no_streaming_context";
 
     private final AigenyProperties props;
     private final HttpClient http;
@@ -205,16 +206,15 @@ public class CloneJiraIssueTool implements Tool {
             humanDesc.append("- **Sub-Tasks**: ").append(subtaskList.size()).append(" werden ebenfalls geklont\n");
         }
 
-        PendingJiraActionContext.add(new PendingJiraAction(
-                PendingJiraAction.ActionType.CREATE_ISSUE, null, params, humanDesc.toString()));
-
-        log.info("Queued clone_jira_issue {} → project={} subtasks={} confirmation",
-                sourceKey, projectKey, subtaskList.size());
-
-        if (!subtaskList.isEmpty()) {
-            return new ToolResult(Messages.get(MSG_QUEUED_SUBTASKS, sourceKey, projectKey, subtaskList.size()));
+        if (!ConfirmationContext.isAvailable()) {
+            return new ToolResult(Messages.get(MSG_NO_STREAMING));
         }
-        return new ToolResult(Messages.get(MSG_QUEUED, sourceKey, projectKey));
+
+        log.info("Requesting confirmation for clone_jira_issue {} → project={} subtasks={}",
+                sourceKey, projectKey, subtaskList.size());
+        return ConfirmationContext.get().requestConfirmation(
+                humanDesc.toString(),
+                new PendingJiraAction(PendingJiraAction.ActionType.CREATE_ISSUE, null, params, humanDesc.toString()));
     }
 
     /** Fetches a URL and returns the parsed JSON, or a sentinel node with _error/_status/_body on failure. */

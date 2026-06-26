@@ -25,10 +25,10 @@ public class CreateJiraIssueTool implements Tool {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     // ── Message keys ─────────────────────────────────────────────────────────
-    private static final String MSG_NOT_CONFIGURED = "jira.error.not_configured_de";
-    private static final String MSG_MISSING_ARGS   = "jira.create.missing_args";
-    private static final String MSG_QUEUED         = "jira.create.queued";
-    private static final String MSG_WRITE_DISABLED = "jira.write.mode_disabled";
+    private static final String MSG_NOT_CONFIGURED   = "jira.error.not_configured_de";
+    private static final String MSG_MISSING_ARGS     = "jira.create.missing_args";
+    private static final String MSG_WRITE_DISABLED   = "jira.write.mode_disabled";
+    private static final String MSG_NO_STREAMING     = "jira.error.no_streaming_context";
 
     private final AigenyProperties props;
 
@@ -94,6 +94,10 @@ public class CreateJiraIssueTool implements Tool {
             return new ToolResult(Messages.get(MSG_MISSING_ARGS));
         }
 
+        if (!ConfirmationContext.isAvailable()) {
+            return new ToolResult(Messages.get(MSG_NO_STREAMING));
+        }
+
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("projectKey",  projectKey);
         params.put("summary",     summary);
@@ -109,11 +113,10 @@ public class CreateJiraIssueTool implements Tool {
                 description.length() > 200 ? description.substring(0, 197) + "..." : description).append("\n");
         if (!assignee.isBlank()) humanDesc.append("- **Assignee**: ").append(assignee).append("\n");
 
-        PendingJiraActionContext.add(new PendingJiraAction(
-                PendingJiraAction.ActionType.CREATE_ISSUE, null, params, humanDesc.toString()));
-
-        log.info("Queued create_jira_issue for project={} confirmation", projectKey);
-        return new ToolResult(Messages.get(MSG_QUEUED, projectKey));
+        log.info("Requesting confirmation for create_jira_issue in project={}", projectKey);
+        return ConfirmationContext.get().requestConfirmation(
+                humanDesc.toString(),
+                new PendingJiraAction(PendingJiraAction.ActionType.CREATE_ISSUE, null, params, humanDesc.toString()));
     }
 }
 

@@ -17,49 +17,29 @@
  *   renderer            – { appendMessage, showTypingIndicator, updateTypingIndicator,
  *                           finalizeTypingIndicator, removeTypingIndicator,
  *                           showJiraConfirmation }
- *   hasPendingJiraConfirmationFn – () => boolean  (injected from chat-renderer)
  */
 
 // ── Module-level state (set once by initStream) ───────────────────────────────
-let _isThinkingFn                  = () => false;
-let _setThinkingFn                 = (_v) => {};
-let _setExportEnabledFn            = (_v) => {};
-let _hasPendingJiraConfirmationFn  = () => false;
-let _renderer                      = {};
-let _currentAbortCtrl              = null;
+let _isThinkingFn       = () => false;
+let _setThinkingFn      = (_v) => {};
+let _setExportEnabledFn = (_v) => {};
+let _renderer           = {};
+let _currentAbortCtrl   = null;
 
 /**
  * Inject app-level callbacks and the renderer.  Call once after the DOM is ready.
- *
- * @param {{
- *   isThinkingFn:                   () => boolean,
- *   setThinkingFn:                  (v: boolean) => void,
- *   setExportEnabledFn:             (v: boolean) => void,
- *   hasPendingJiraConfirmationFn:   () => boolean,
- *   renderer: {
- *     appendMessage:           Function,
- *     showTypingIndicator:     Function,
- *     updateTypingIndicator:   Function,
- *     finalizeTypingIndicator: Function,
- *     removeTypingIndicator:   Function,
- *     showJiraConfirmation:    Function,
- *   },
- * }} deps
  */
-export function initStream({ isThinkingFn, setThinkingFn, setExportEnabledFn,
-                             hasPendingJiraConfirmationFn, renderer }) {
-  _isThinkingFn                 = isThinkingFn;
-  _setThinkingFn                = setThinkingFn;
-  _setExportEnabledFn           = setExportEnabledFn;
-  _hasPendingJiraConfirmationFn = hasPendingJiraConfirmationFn ?? (() => false);
-  _renderer                     = renderer;
+export function initStream({ isThinkingFn, setThinkingFn, setExportEnabledFn, renderer }) {
+  _isThinkingFn       = isThinkingFn;
+  _setThinkingFn      = setThinkingFn;
+  _setExportEnabledFn = setExportEnabledFn;
+  _renderer           = renderer;
 }
 
 // ── Communication ─────────────────────────────────────────────────────────────
 
 /**
  * Process a readable SSE stream, delegating each event to the renderer.
- * Shared by sendMessage() and handleJiraConfirmAndResume().
  * @param {ReadableStream} responseBody
  */
 async function processStream(responseBody) {
@@ -87,11 +67,16 @@ async function processStream(responseBody) {
         _renderer.finalizeTypingIndicator();
         _renderer.appendMessage('aigeny', data.response);
         _renderer.showTypingIndicator();
+      } else if (data.type === 'confirmation_required') {
+        // Pause visual: finalize the current tool-call list, show the confirmation dialog.
+        // The SSE stream stays open – the orchestration thread is blocked waiting for the
+        // user's decision via POST /api/jira/confirm-decision.
+        _renderer.finalizeTypingIndicator();
+        _renderer.showJiraConfirmation(data.description);
       } else if (data.type === 'done') {
         _renderer.finalizeTypingIndicator();
-        if (data.response)      _renderer.appendMessage('aigeny', data.response);
-        if (data.pendingAction) _renderer.showJiraConfirmation(data.pendingAction);
-        if (data.hasExport)     _setExportEnabledFn(true);
+        if (data.response)  _renderer.appendMessage('aigeny', data.response);
+        if (data.hasExport) _setExportEnabledFn(true);
       } else if (data.type === 'cancelled') {
         _renderer.removeTypingIndicator();
         _renderer.appendMessage('aigeny', '_Abgebrochen, Towarischtsch. AIgeny steht wieder bereit._');
@@ -105,13 +90,6 @@ async function processStream(responseBody) {
 
 export async function sendMessage() {
   if (_isThinkingFn()) return;
-
-  // Guard: block new messages while a Jira write confirmation is still pending
-  if (_hasPendingJiraConfirmationFn()) {
-    _renderer.appendMessage('aigeny',
-      '⚠️ Bitte bestätige oder brich die ausstehende Jira-Aktion zuerst ab, Towarischtsch!');
-    return;
-  }
 
   const input   = document.getElementById('userInput');
   const message = input.value.trim();
@@ -145,45 +123,7 @@ export async function sendMessage() {
   }
 }
 
-/**
- * Confirm handler injected into chat-renderer.js via setConfirmHandler().
- *
- * Removes the confirmation block, starts the thinking state, calls the
- * /api/jira/confirm-stream SSE endpoint (which executes the pending Jira
- * actions AND resumes the LLM so it can continue multi-step plans), then
- * processes the SSE stream exactly like sendMessage() does.
- *
- * @param {HTMLElement} confirmBlock – the .jira-confirm-msg div to remove
- */
-export async function handleJiraConfirmAndResume(confirmBlock) {
-  _setThinkingFn(true);
-  confirmBlock.remove();
-  _renderer.showTypingIndicator();
-
-  _currentAbortCtrl = new AbortController();
-
-  try {
-    const response = await fetch('/api/jira/confirm-stream', {
-      method: 'POST',
-      signal: _currentAbortCtrl.signal,
-    });
-    await processStream(response.body);
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      _renderer.removeTypingIndicator();
-    } else {
-      _renderer.removeTypingIndicator();
-      _renderer.appendMessage('aigeny', 'Njet! Netzwerkfehler, Towarischtsch: ' + err.message);
-    }
-  } finally {
-    _currentAbortCtrl = null;
-    _setThinkingFn(false);
-  }
-}
-
 export async function stopGeneration() {
   if (!_isThinkingFn()) return;
-  // Do NOT abort the fetch – let the backend close the stream gracefully.
   fetch('/api/chat/cancel', { method: 'POST' }).catch(() => {});
 }
-

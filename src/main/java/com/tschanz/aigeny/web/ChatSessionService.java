@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -22,11 +23,12 @@ public class ChatSessionService {
     private static final Logger log = LoggerFactory.getLogger(ChatSessionService.class);
 
     // Session attribute keys
-    private static final String SESSION_HISTORY = "chatHistory";
-    private static final String SESSION_RESULT = "lastQueryResult";
-    private static final String SESSION_PENDING_ACTION = "pendingJiraAction";
-    private static final String SESSION_JIRA_WRITE = "jiraWriteEnabled";
-    private static final String SESSION_CANCEL_FLAG = "chatCancelFlag";
+    private static final String SESSION_HISTORY             = "chatHistory";
+    private static final String SESSION_RESULT              = "lastQueryResult";
+    private static final String SESSION_PENDING_ACTION      = "pendingJiraAction";
+    private static final String SESSION_JIRA_WRITE          = "jiraWriteEnabled";
+    private static final String SESSION_CANCEL_FLAG         = "chatCancelFlag";
+    private static final String SESSION_CONFIRMATION_FUTURE = "jiraConfirmationFuture";
 
     // ── Chat History Management ──────────────────────────────────────────────
 
@@ -221,6 +223,44 @@ public class ChatSessionService {
     public void clearCancelFlag(HttpSession session) {
         session.removeAttribute(SESSION_CANCEL_FLAG);
         log.debug("Cleared cancel flag for session {}", session.getId());
+    }
+
+    // ── Confirmation Future Management ───────────────────────────────────────
+
+    /**
+     * Creates a new CompletableFuture<Boolean> for a synchronous Jira confirmation.
+     * Stored in the session so the /api/jira/confirm-decision endpoint can resolve it.
+     *
+     * @param session HTTP session
+     * @return the future that will be completed when the user decides
+     */
+    public CompletableFuture<Boolean> createConfirmationFuture(HttpSession session) {
+        CompletableFuture<Boolean> future = new CompletableFuture<>();
+        session.setAttribute(SESSION_CONFIRMATION_FUTURE, future);
+        log.debug("Created confirmation future for session {}", session.getId());
+        return future;
+    }
+
+    /**
+     * Resolves the pending confirmation future with the user's decision.
+     * Removes it from the session after resolving.
+     *
+     * @param session   HTTP session
+     * @param confirmed true if the user confirmed, false if declined
+     * @return true if a pending future was found and resolved, false otherwise
+     */
+    @SuppressWarnings("unchecked")
+    public boolean resolveConfirmation(HttpSession session, boolean confirmed) {
+        CompletableFuture<Boolean> future =
+                (CompletableFuture<Boolean>) session.getAttribute(SESSION_CONFIRMATION_FUTURE);
+        if (future != null) {
+            session.removeAttribute(SESSION_CONFIRMATION_FUTURE);
+            future.complete(confirmed);
+            log.debug("Confirmation resolved ({}) for session {}", confirmed ? "confirmed" : "declined", session.getId());
+            return true;
+        }
+        log.warn("resolveConfirmation called but no pending future for session {}", session.getId());
+        return false;
     }
 
     // ── Session Cleanup ──────────────────────────────────────────────────────

@@ -33,8 +33,8 @@ public class AddJiraCommentTool implements Tool {
     // ── Message keys ─────────────────────────────────────────────────────────
     private static final String MSG_NOT_CONFIGURED = "jira.error.not_configured_de";
     private static final String MSG_MISSING_ARGS   = "jira.comment.missing_args";
-    private static final String MSG_QUEUED         = "jira.comment.queued";
     private static final String MSG_WRITE_DISABLED = "jira.write.mode_disabled";
+    private static final String MSG_NO_STREAMING   = "jira.error.no_streaming_context";
 
     private final AigenyProperties props;
 
@@ -94,14 +94,17 @@ public class AddJiraCommentTool implements Tool {
             return new ToolResult(Messages.get(MSG_MISSING_ARGS));
         }
 
+        if (!ConfirmationContext.isAvailable()) {
+            return new ToolResult(Messages.get(MSG_NO_STREAMING));
+        }
+
         String humanDesc = "Kommentar zu Jira-Ticket **" + issueKey + "** hinzufügen:\n> " + comment;
 
-        PendingJiraActionContext.add(new PendingJiraAction(
-                PendingJiraAction.ActionType.ADD_COMMENT, issueKey,
-                Map.of(ARG_COMMENT, comment), humanDesc));
-
-        log.info("Queued add_jira_comment for {} confirmation", issueKey);
-        return new ToolResult(Messages.get(MSG_QUEUED, issueKey));
+        log.info("Requesting confirmation for add_jira_comment on {}", issueKey);
+        return ConfirmationContext.get().requestConfirmation(
+                humanDesc,
+                new PendingJiraAction(PendingJiraAction.ActionType.ADD_COMMENT, issueKey,
+                        Map.of(ARG_COMMENT, comment), humanDesc));
     }
 }
 

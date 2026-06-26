@@ -10,11 +10,8 @@
  *   updateTypingIndicator(name,desc)– add one tool-call entry to the list
  *   finalizeTypingIndicator()       – hide dots, keep/remove tool-call list
  *   removeTypingIndicator()         – force-remove the indicator
- *   showJiraConfirmation(action)       – render a Jira confirm/cancel block
- *   hasPendingJiraConfirmation()      – true when a confirmation block is visible
- *   setConfirmHandler(fn)             – inject the confirm-and-resume handler (DIP)
- *   executeJiraAction(block)          – POST /api/jira/confirm-stream via injected handler
- *   cancelJiraAction(block)           – POST /api/jira/cancel, update DOM
+ *   showJiraConfirmation(desc)      – render a Jira confirm/cancel block
+ *   hasPendingJiraConfirmation()    – true when a confirmation block is visible
  */
 
 import { renderMarkdown } from './markdown.js';
@@ -123,39 +120,23 @@ export function removeTypingIndicator() {
 // ── Jira confirmation block ───────────────────────────────────────────────────
 
 /**
- * Injected handler for confirm-and-resume (set by chat.js coordinator).
- * Receives the confirmBlock div, executes the pending Jira actions via SSE and
- * continues the LLM conversation.  Set once at startup via setConfirmHandler().
- * @type {((block: HTMLElement) => Promise<void>)|null}
- */
-let _confirmHandler = null;
-
-/**
- * Inject the confirm-and-resume handler from the stream module.
- * Must be called once during initialisation (DIP – renderer does not import stream).
- * @param {(block: HTMLElement) => Promise<void>} fn
- */
-export function setConfirmHandler(fn) {
-  _confirmHandler = fn;
-}
-
-/**
- * Render an inline confirm/cancel block for a pending Jira write action.
- * @param {{ description: string }} pendingAction
- */
-/**
  * Returns true when at least one Jira confirmation block is currently visible.
- * Used by the stream module to block new messages while confirmation is pending.
  */
 export function hasPendingJiraConfirmation() {
   return !!document.querySelector('.jira-confirm-msg');
 }
 
-export function showJiraConfirmation(pendingAction) {
+/**
+ * Render an inline confirm/cancel block for a pending Jira write action.
+ * Called when the SSE stream delivers a {@code confirmation_required} event.
+ * The SSE stream stays open; the user's decision is posted to
+ * {@code POST /api/jira/confirm-decision} and the stream resumes automatically.
+ *
+ * @param {string} description – markdown-formatted action description
+ */
+export function showJiraConfirmation(description) {
   const container = document.getElementById('chatMessages');
   const div = document.createElement('div');
-  // No fixed id – multiple blocks could theoretically exist across turns.
-  // Identification is done via the .jira-confirm-msg CSS class.
   div.className = 'message aigeny jira-confirm-msg';
 
   const header = document.createElement('div');
@@ -167,11 +148,10 @@ export function showJiraConfirmation(pendingAction) {
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
 
-  const plural = pendingAction.description.startsWith('**') ? 'en' : '';
   bubble.innerHTML = renderMarkdown(
-    `⚠️ **Jira Schreibaktion${plural} – Bestätigung erforderlich!**\n\n` +
-    `${pendingAction.description}\n\n` +
-    `Soll ich diese Aktion${plural} wirklich ausführen, Towarischtsch?`
+    `⚠️ **Jira Schreibaktion – Bestätigung erforderlich!**\n\n` +
+    `${description}\n\n` +
+    `Soll ich diese Aktion wirklich ausführen, Towarischtsch?`
   );
 
   const btnRow = document.createElement('div');
@@ -195,29 +175,33 @@ export function showJiraConfirmation(pendingAction) {
   container.scrollTop = container.scrollHeight;
 }
 
+/**
+ * User confirmed the Jira action.
+ * Removes the dialog, shows a typing indicator and posts the decision to the backend.
+ * The open SSE stream resumes naturally once the backend unblocks.
+ */
 export async function executeJiraAction(confirmBlock) {
   confirmBlock.querySelectorAll('button').forEach(b => b.disabled = true);
-  if (_confirmHandler) {
-    // Preferred path: hand off to the stream module which calls /api/jira/confirm-stream
-    // and continues the LLM conversation so multi-step plans can finish.
-    await _confirmHandler(confirmBlock);
-  } else {
-    // Fallback (should not occur in production – handler is always set by chat.js).
-    try {
-      const res  = await fetch('/api/jira/confirm', { method: 'POST' });
-      const data = await res.json();
-      confirmBlock.remove();
-      appendMessage('aigeny', data.result || 'Aktion ausgeführt, da!');
-    } catch (err) {
-      confirmBlock.remove();
-      appendMessage('aigeny', 'Njet! Netzwerkfehler: ' + err.message);
-    }
-  }
-}
-
-export async function cancelJiraAction(confirmBlock) {
-  await fetch('/api/jira/cancel', { method: 'POST' }).catch(() => {});
   confirmBlock.remove();
-  appendMessage('aigeny', 'Njet! Aktion wurde abgebrochen, Towarischtsch. Choroscho, keine Änderungen gemacht, da!');
+  showTypingIndicator();
+  await fetch('/api/jira/confirm-decision', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ confirmed: true }),
+  }).catch(() => {});
 }
 
+/**
+ * User declined the Jira action.
+ * Removes the dialog, shows a typing indicator and posts the decline to the backend.
+ * The LLM will be told the action was declined and produce a response.
+ */
+export async function cancelJiraAction(confirmBlock) {
+  confirmBlock.remove();
+  showTypingIndicator();
+  await fetch('/api/jira/confirm-decision', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ confirmed: false }),
+  }).catch(() => {});
+}

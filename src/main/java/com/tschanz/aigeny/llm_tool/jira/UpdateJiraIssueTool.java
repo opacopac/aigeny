@@ -45,6 +45,7 @@ public class UpdateJiraIssueTool implements Tool {
     private static final String MSG_ARG_SUMMARY     = "jira.update.arg_summary_desc";
     private static final String MSG_ARG_DESCRIPTION = "jira.update.arg_description_desc";
     private static final String MSG_WRITE_DISABLED  = "jira.write.mode_disabled";
+    private static final String MSG_NO_STREAMING    = "jira.error.no_streaming_context";
 
     private final AigenyProperties props;
 
@@ -119,11 +120,14 @@ public class UpdateJiraIssueTool implements Tool {
         if (!summary.isBlank())     desc.append(Messages.get(MSG_DESC_SUMMARY,  summary));
         if (!description.isBlank()) desc.append(Messages.get(MSG_DESC_DESC, description));
 
-        PendingJiraActionContext.add(new PendingJiraAction(
-                PendingJiraAction.ActionType.UPDATE_ISSUE, issueKey, params, desc.toString()));
+        if (!ConfirmationContext.isAvailable()) {
+            return new ToolResult(Messages.get(MSG_NO_STREAMING));
+        }
 
-        log.info("Queued update_jira_issue for {} confirmation", issueKey);
-        return new ToolResult(Messages.get(MSG_QUEUED, issueKey));
+        log.info("Requesting confirmation for update_jira_issue on {}", issueKey);
+        return ConfirmationContext.get().requestConfirmation(
+                desc.toString(),
+                new PendingJiraAction(PendingJiraAction.ActionType.UPDATE_ISSUE, issueKey, params, desc.toString()));
     }
 }
 

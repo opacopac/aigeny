@@ -4,23 +4,17 @@
  * Single Responsibility: wires together the two sub-modules and owns the
  * remaining chat-level actions (clearChat, exportData).
  *
- *   chat-renderer.js  – all DOM creation / mutation
- *   chat-stream.js    – fetch / SSE stream lifecycle
- *
- * Re-exports every public symbol so that existing consumers (app.js, tests)
- * do not need to change their import paths.
- *
- * Public API (unchanged):
+ * Public API:
  *   initChat(deps)           – inject app-level callbacks and wire DOM listeners
  *   appendMessage(role,text) – append a rendered message bubble
  *   showTypingIndicator()    – show the bouncing-dots + tool-call list
  *   updateTypingIndicator()  – add a tool-call entry to the list
  *   finalizeTypingIndicator()– hide dots, keep tool-call list, or remove entirely
  *   removeTypingIndicator()  – force-remove the indicator
- *   showJiraConfirmation()        – render a Jira confirm/cancel block
+ *   showJiraConfirmation()   – render a Jira confirm/cancel block
  *   hasPendingJiraConfirmation() – true when a confirmation block is visible
- *   executeJiraAction()          – POST /api/jira/confirm
- *   cancelJiraAction()           – POST /api/jira/cancel
+ *   executeJiraAction()      – POST /api/jira/confirm-decision {"confirmed":true}
+ *   cancelJiraAction()       – POST /api/jira/confirm-decision {"confirmed":false}
  *   sendMessage()            – POST chat message, consume SSE stream
  *   stopGeneration()         – POST /api/chat/cancel
  *   clearChat()              – POST /api/chat/clear, reset UI
@@ -30,7 +24,7 @@
 // ── Sub-module imports ────────────────────────────────────────────────────────
 
 import * as Renderer from './chat-renderer.js';
-import { initStream, sendMessage, stopGeneration, handleJiraConfirmAndResume } from './chat-stream.js';
+import { initStream, sendMessage, stopGeneration } from './chat-stream.js';
 
 // ── Re-exports (backwards-compatibility) ─────────────────────────────────────
 
@@ -43,7 +37,7 @@ export const showJiraConfirmation       = Renderer.showJiraConfirmation;
 export const hasPendingJiraConfirmation = Renderer.hasPendingJiraConfirmation;
 export const executeJiraAction          = Renderer.executeJiraAction;
 export const cancelJiraAction           = Renderer.cancelJiraAction;
-export { sendMessage, stopGeneration, handleJiraConfirmAndResume };
+export { sendMessage, stopGeneration };
 
 // ── Module-level state ────────────────────────────────────────────────────────
 
@@ -54,24 +48,15 @@ let _setExportEnabledFn = (_v) => {};
 /**
  * Inject app-level callbacks and register all DOM event listeners for the
  * chat panel.  Call once after the DOM is ready.
- *
- * @param {Object} deps
- * @param {()=>boolean}       deps.isThinkingFn       – returns current thinking state
- * @param {(v:boolean)=>void} deps.setThinkingFn      – update thinking state + UI
- * @param {(v:boolean)=>void} deps.setExportEnabledFn – enable/disable export button
  */
 export function initChat({ isThinkingFn, setThinkingFn, setExportEnabledFn }) {
   _setExportEnabledFn = setExportEnabledFn;
-
-  // Wire the confirm-and-resume handler into the renderer (Dependency Inversion)
-  Renderer.setConfirmHandler(handleJiraConfirmAndResume);
 
   // Forward deps + renderer to the stream module
   initStream({
     isThinkingFn,
     setThinkingFn,
     setExportEnabledFn,
-    hasPendingJiraConfirmationFn: Renderer.hasPendingJiraConfirmation,
     renderer: {
       appendMessage:           Renderer.appendMessage,
       showTypingIndicator:     Renderer.showTypingIndicator,

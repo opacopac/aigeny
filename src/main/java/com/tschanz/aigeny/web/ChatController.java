@@ -6,8 +6,6 @@ import com.tschanz.aigeny.orchestration.ChatResult;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
 import com.tschanz.aigeny.llm_tool.jira.JiraTokenContext;
 import com.tschanz.aigeny.llm_tool.jira.JiraWriteContext;
-import com.tschanz.aigeny.llm_tool.jira.JiraWriteExecutor;
-import com.tschanz.aigeny.llm_tool.jira.PendingJiraAction;
 import com.tschanz.aigeny.llm_tool.jira.PendingJiraActionContext;
 import com.tschanz.aigeny.llm_tool.bitbucket.BitbucketTokenContext;
 import com.tschanz.aigeny.llm_tool.QueryResult;
@@ -39,32 +37,25 @@ public class ChatController {
     private static final String REQ_TOKEN         = "token";
 
     // ── JSON response keys ───────────────────────────────────────────────────
-    private static final String KEY_ERROR                    = "error";
-    private static final String KEY_RESPONSE                 = "response";
-    private static final String KEY_HAS_EXPORT               = "hasExport";
-    private static final String KEY_PENDING_ACTION           = "pendingAction";
-    private static final String KEY_DESCRIPTION              = "description";
-    private static final String KEY_ISSUE_KEY                = "issueKey";
-    private static final String KEY_RESULT                   = "result";
-    private static final String KEY_STATUS                   = "status";
-    private static final String KEY_TABLES                   = "tables";
+    private static final String KEY_ERROR         = "error";
+    private static final String KEY_RESPONSE      = "response";
+    private static final String KEY_HAS_EXPORT    = "hasExport";
+    private static final String KEY_STATUS        = "status";
+    private static final String KEY_TABLES        = "tables";
 
     // ── JSON response values ─────────────────────────────────────────────────
     private static final String VAL_OK    = "ok";
     private static final String VAL_ERROR = "error";
 
     // ── Message keys ─────────────────────────────────────────────────────────
-    private static final String MSG_ERROR_EMPTY_MESSAGE = "chat.error.empty_message";
-    private static final String MSG_ERROR_GENERIC       = "chat.error.generic";
-    private static final String MSG_JIRA_NO_PENDING     = "chat.jira.no_pending_action";
-    private static final String MSG_JIRA_NO_TOKEN       = "chat.jira.no_token";
-    private static final String MSG_JIRA_WRITE_ERROR    = "chat.jira.write_error";
-    private static final String MSG_STATUS_CANCELLED    = "chat.status.cancelled";
-    private static final String MSG_STATUS_CLEARED      = "chat.status.cleared";
+    private static final String MSG_ERROR_EMPTY_MESSAGE  = "chat.error.empty_message";
+    private static final String MSG_ERROR_GENERIC        = "chat.error.generic";
+    private static final String MSG_STATUS_CANCELLED     = "chat.status.cancelled";
+    private static final String MSG_STATUS_CLEARED       = "chat.status.cleared";
+    private static final String MSG_NO_PENDING           = "chat.jira.no_pending_action";
 
     private final OrchestrationService orchestration;
     private final SchemaLoader schemaLoader;
-    private final JiraWriteExecutor jiraWriteExecutor;
     private final ObjectMapper objectMapper;
     private final TokenService tokenService;
     private final ChatSessionService sessionService;
@@ -73,7 +64,6 @@ public class ChatController {
 
     public ChatController(OrchestrationService orchestration,
                           SchemaLoader schemaLoader,
-                          JiraWriteExecutor jiraWriteExecutor,
                           ObjectMapper objectMapper,
                           TokenService tokenService,
                           ChatSessionService sessionService,
@@ -81,7 +71,6 @@ public class ChatController {
                           ChatStreamingService streamingService) {
         this.orchestration     = orchestration;
         this.schemaLoader      = schemaLoader;
-        this.jiraWriteExecutor = jiraWriteExecutor;
         this.objectMapper      = objectMapper;
         this.tokenService      = tokenService;
         this.sessionService    = sessionService;
@@ -104,11 +93,9 @@ public class ChatController {
 
         List<Message> history = sessionService.getOrCreateHistory(session);
 
-        // Read token in the HTTP thread (RequestContextHolder is available here)
-        // then pass it into the async lambda via ThreadLocal
-        final String jiraToken = tokenService.getEffectiveJiraToken(session);
+        final String jiraToken       = tokenService.getEffectiveJiraToken(session);
         final boolean jiraWriteEnabled = sessionService.isJiraWriteModeEnabled(session);
-        final String bitbucketToken = tokenService.getEffectiveBitbucketToken(session);
+        final String bitbucketToken  = tokenService.getEffectiveBitbucketToken(session);
 
         return CompletableFuture.supplyAsync(() -> {
             JiraTokenContext.set(jiraToken);
@@ -116,57 +103,21 @@ public class ChatController {
             BitbucketTokenContext.set(bitbucketToken);
             PendingJiraActionContext.clear();
 
-            // Guard (defence-in-depth): drop any stale pending actions from a
-            // previous turn that the user never confirmed or cancelled.
-            if (sessionService.hasPendingJiraActions(session)) {
-                log.warn("Non-streaming chat turn started for session {} while Jira " +
-                         "confirmation was still pending – clearing stale pending actions",
-                         session.getId());
-                sessionService.clearPendingJiraActions(session);
-            }
-
             try {
                 ChatResult result = orchestration.chat(history, message);
 
-                // Persist last query result in session for export
                 if (result.hasExportData()) {
                     sessionService.setLastQueryResult(session, result.lastToolResult().getQueryResult());
                 }
 
-                // Check for pending Jira write actions queued by tools
-                List<PendingJiraAction> pendingActions142 = PendingJiraActionContext.get();
-                if (pendingActions142 != null && !pendingActions142.isEmpty()) {
-                    sessionService.setPendingJiraActions(session, pendingActions142);
-                    StringBuilder combinedDesc = new StringBuilder();
-                    if (pendingActions142.size() == 1) {
-                        combinedDesc.append(pendingActions142.get(0).getHumanDescription());
-                    } else {
-                        combinedDesc.append("**").append(pendingActions142.size())
-                                .append(" Aktionen werden ausgeführt:**\n\n");
-                        for (int i = 0; i < pendingActions142.size(); i++) {
-                            combinedDesc.append("**").append(i + 1).append(".** ")
-                                    .append(pendingActions142.get(i).getHumanDescription())
-                                    .append("\n\n");
-                        }
-                    }
-                    return ResponseEntity.ok(Map.of(
-                            KEY_RESPONSE,       result.response(),
-                            KEY_HAS_EXPORT,     result.hasExportData(),
-                            KEY_PENDING_ACTION, Map.of(
-                                    KEY_DESCRIPTION, combinedDesc.toString().trim(),
-                                    KEY_ISSUE_KEY,   ""
-                            )
-                    ));
-                }
-
                 return ResponseEntity.ok(Map.of(
-                        KEY_RESPONSE,  result.response(),
+                        KEY_RESPONSE,   result.response(),
                         KEY_HAS_EXPORT, result.hasExportData()
                 ));
             } catch (Exception e) {
                 log.error("Chat error", e);
                 return ResponseEntity.ok(Map.of(
-                        KEY_RESPONSE,  Messages.get(MSG_ERROR_GENERIC, e.getMessage()),
+                        KEY_RESPONSE,   Messages.get(MSG_ERROR_GENERIC, e.getMessage()),
                         KEY_HAS_EXPORT, false
                 ));
             } finally {
@@ -197,102 +148,27 @@ public class ChatController {
         );
     }
 
-    // ── POST /api/jira/confirm ────────────────────────────────────────────────
+    // ── POST /api/jira/confirm-decision ──────────────────────────────────────
 
     /**
-     * Legacy JSON confirm endpoint – kept for backwards compatibility.
-     * Prefer {@link #confirmJiraActionStream} for multi-step LLM workflows.
-     */
-    @PostMapping("/jira/confirm")
-    public CompletableFuture<ResponseEntity<Map<String, Object>>> confirmJiraAction(HttpSession session) {
-        List<PendingJiraAction> pendingActions = sessionService.getPendingJiraActions(session);
-        if (pendingActions == null || pendingActions.isEmpty()) {
-            return CompletableFuture.completedFuture(
-                    ResponseEntity.ok(Map.of(KEY_RESULT, Messages.get(MSG_JIRA_NO_PENDING))));
-        }
-        sessionService.clearPendingJiraActions(session);
-        final String token = tokenService.getEffectiveJiraToken(session);
-        if (token == null || token.isBlank()) {
-            return CompletableFuture.completedFuture(
-                    ResponseEntity.ok(Map.of(KEY_RESULT, Messages.get(MSG_JIRA_NO_TOKEN))));
-        }
-        final boolean writeEnabled = sessionService.isJiraWriteModeEnabled(session);
-        final List<PendingJiraAction> actions = pendingActions;
-        return CompletableFuture.supplyAsync(() -> {
-            JiraWriteContext.set(writeEnabled);
-            try {
-                StringBuilder combined = new StringBuilder();
-                for (PendingJiraAction action : actions) {
-                    try {
-                        String res = jiraWriteExecutor.execute(action, token);
-                        combined.append(res).append("\n");
-                    } catch (Exception e) {
-                        log.error("Jira write failed for action {}", action.getActionType(), e);
-                        combined.append(Messages.get(MSG_JIRA_WRITE_ERROR, e.getMessage())).append("\n");
-                    }
-                }
-                return ResponseEntity.ok(Map.<String, Object>of(KEY_RESULT, combined.toString().trim()));
-            } finally {
-                JiraWriteContext.clear();
-            }
-        });
-    }
-
-    // ── POST /api/jira/confirm-stream (SSE) ──────────────────────────────────
-
-    /**
-     * Executes pending Jira actions and resumes the LLM conversation via SSE so
-     * the model can continue any multi-step plan (e.g. renaming cloned sub-tasks).
+     * Resolves a pending synchronous Jira confirmation.
+     * Called by the frontend when the user clicks "Confirm" or "Decline" in the dialog.
+     * The SSE stream remains open; the orchestration thread unblocks and continues.
      *
-     * Flow:
-     *  1. Execute all pending actions → build result string.
-     *  2. Send result as SSE {@code intermediate} event (visible in chat immediately).
-     *  3. Continue LLM orchestration with the result as context.
-     *  4. Stream tool_call / intermediate / done events as usual.
+     * @param body JSON with {@code {"confirmed": true}} or {@code {"confirmed": false}}
      */
-    @PostMapping(value = "/jira/confirm-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter confirmJiraActionStream(HttpSession session) {
-        List<PendingJiraAction> pendingActions = sessionService.getPendingJiraActions(session);
-        if (pendingActions == null || pendingActions.isEmpty()) {
-            // No pending actions – return an immediate done event
-            SseEmitter emitter = new SseEmitter(5_000L);
-            String msg = Messages.get(MSG_JIRA_NO_PENDING);
-            java.util.concurrent.CompletableFuture.runAsync(() -> {
-                try {
-                    String json = objectMapper.writeValueAsString(
-                            Map.of("type", "done", "response", msg, "hasExport", false));
-                    emitter.send(SseEmitter.event().data(json));
-                    emitter.complete();
-                } catch (Exception e) { emitter.completeWithError(e); }
-            });
-            return emitter;
+    @PostMapping("/jira/confirm-decision")
+    public ResponseEntity<Map<String, String>> jiraConfirmDecision(
+            @RequestBody Map<String, Object> body,
+            HttpSession session) {
+        boolean confirmed = Boolean.parseBoolean(String.valueOf(body.getOrDefault("confirmed", "false")));
+        boolean resolved = sessionService.resolveConfirmation(session, confirmed);
+        if (!resolved) {
+            log.warn("confirm-decision called but no pending confirmation for session {}", session.getId());
+            return ResponseEntity.ok(Map.of(KEY_STATUS, "no_pending"));
         }
-
-        sessionService.clearPendingJiraActions(session);
-        final String jiraToken      = tokenService.getEffectiveJiraToken(session);
-        final boolean writeEnabled  = sessionService.isJiraWriteModeEnabled(session);
-        final String bitbucketToken = tokenService.getEffectiveBitbucketToken(session);
-        final List<Message> history = sessionService.getOrCreateHistory(session);
-
-        return streamingService.streamAfterConfirmation(
-                pendingActions, history, session, jiraToken, writeEnabled, bitbucketToken);
-    }
-
-    // ── POST /api/jira/cancel ────────────────────────────────────────────────
-
-    @PostMapping("/jira/cancel")
-    public ResponseEntity<Map<String, String>> cancelJiraAction(HttpSession session) {
-        sessionService.clearPendingJiraActions(session);
-        return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CANCELLED)));
-    }
-
-    // ── POST /api/chat/clear ─────────────────────────────────────────────────
-
-    @PostMapping("/chat/clear")
-    public ResponseEntity<Map<String, String>> clear(HttpSession session) {
-        sessionService.clearHistory(session);
-        sessionService.clearLastQueryResult(session);
-        return ResponseEntity.ok(Map.of("status", Messages.get(MSG_STATUS_CLEARED)));
+        log.info("Jira confirmation {} for session {}", confirmed ? "accepted" : "declined", session.getId());
+        return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
     }
 
     // ── POST /api/chat/cancel ────────────────────────────────────────────────
@@ -302,6 +178,15 @@ public class ChatController {
         sessionService.triggerCancellation(session);
         log.info("Chat cancelled via /api/chat/cancel for session {}", session.getId());
         return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
+    }
+
+    // ── POST /api/chat/clear ─────────────────────────────────────────────────
+
+    @PostMapping("/chat/clear")
+    public ResponseEntity<Map<String, String>> clear(HttpSession session) {
+        sessionService.clearHistory(session);
+        sessionService.clearLastQueryResult(session);
+        return ResponseEntity.ok(Map.of("status", Messages.get(MSG_STATUS_CLEARED)));
     }
 
     // ── POST /api/schema/reload ──────────────────────────────────────────────
@@ -376,7 +261,6 @@ public class ChatController {
         return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
     }
 
-
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     /** Expose last query result to ExportController within the same session. */
@@ -385,4 +269,3 @@ public class ChatController {
         return service.getLastQueryResult(session);
     }
 }
-
