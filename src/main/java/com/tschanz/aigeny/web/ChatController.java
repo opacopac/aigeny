@@ -299,12 +299,4 @@ public class ChatController {
         }
         return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
     }
-
-    // ── Helpers ─────────────────────────────────────────────────────────────
-
-    /** Expose last query result to ExportController within the same session. */
-    public static QueryResult getLastResult(HttpSession session) {
-        ChatSessionService service = new ChatSessionService();
-        return service.getLastQueryResult(session);
-    }
 }

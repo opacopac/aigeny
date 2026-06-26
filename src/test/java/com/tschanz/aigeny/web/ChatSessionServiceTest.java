@@ -31,11 +31,14 @@ class ChatSessionServiceTest {
     @Mock
     private HttpSession session;
 
+    @Mock
+    private ConfirmationFutureManager confirmationFutureManager;
+
     private ChatSessionService sessionService;
 
     @BeforeEach
     void setUp() {
-        sessionService = new ChatSessionService();
+        sessionService = new ChatSessionService(confirmationFutureManager);
         lenient().when(session.getId()).thenReturn("test-session-123");
     }
 
@@ -472,48 +475,95 @@ class ChatSessionServiceTest {
     class BatchConfirmationFutureManagement {
 
         @Test
-        @DisplayName("should create batch confirmation future and store it in session")
-        void shouldCreateBatchConfirmationFutureAndStoreInSession() {
+        @DisplayName("should delegate batch confirmation future creation to ConfirmationFutureManager")
+        void shouldDelegateBatchConfirmationFutureCreation() {
+            // Given
+            CompletableFuture<Map<String, Boolean>> expectedFuture = new CompletableFuture<>();
+            when(confirmationFutureManager.createBatchConfirmationFuture(session)).thenReturn(expectedFuture);
+
             // When
-            CompletableFuture<Map<String, Boolean>> future =
-                    sessionService.createBatchConfirmationFuture(session);
+            CompletableFuture<Map<String, Boolean>> future = sessionService.createBatchConfirmationFuture(session);
 
             // Then
-            assertThat(future).isNotNull();
-            assertThat(future.isDone()).isFalse();
-            verify(session).setAttribute(eq("jiraBatchConfirmFuture"), any(CompletableFuture.class));
+            assertThat(future).isSameAs(expectedFuture);
+            verify(confirmationFutureManager).createBatchConfirmationFuture(session);
         }
 
         @Test
-        @DisplayName("should resolve batch confirmation future with decisions")
-        void shouldResolveBatchConfirmationFutureWithDecisions() throws Exception {
+        @DisplayName("should delegate batch confirmation resolution to ConfirmationFutureManager")
+        void shouldDelegateBatchConfirmationResolution() {
             // Given
-            CompletableFuture<Map<String, Boolean>> future = new CompletableFuture<>();
-            when(session.getAttribute("jiraBatchConfirmFuture")).thenReturn(future);
-
             Map<String, Boolean> decisions = Map.of("call-1", true, "call-2", false);
+            when(confirmationFutureManager.resolveBatchConfirmation(session, decisions)).thenReturn(true);
 
             // When
             boolean resolved = sessionService.resolveBatchConfirmation(session, decisions);
 
             // Then
             assertThat(resolved).isTrue();
-            assertThat(future.isDone()).isTrue();
-            assertThat(future.get()).isEqualTo(decisions);
-            verify(session).removeAttribute("jiraBatchConfirmFuture");
+            verify(confirmationFutureManager).resolveBatchConfirmation(session, decisions);
         }
 
         @Test
         @DisplayName("should return false when no batch future is pending")
         void shouldReturnFalseWhenNoBatchFuturePending() {
             // Given
-            when(session.getAttribute("jiraBatchConfirmFuture")).thenReturn(null);
+            when(confirmationFutureManager.resolveBatchConfirmation(session, Map.of())).thenReturn(false);
 
             // When
             boolean resolved = sessionService.resolveBatchConfirmation(session, Map.of());
 
             // Then
             assertThat(resolved).isFalse();
+            verify(confirmationFutureManager).resolveBatchConfirmation(session, Map.of());
+        }
+    }
+
+    @Nested
+    @DisplayName("Single Confirmation Future Management")
+    class SingleConfirmationFutureManagement {
+
+        @Test
+        @DisplayName("should delegate single confirmation future creation to ConfirmationFutureManager")
+        void shouldDelegateSingleConfirmationFutureCreation() {
+            // Given
+            CompletableFuture<Boolean> expectedFuture = new CompletableFuture<>();
+            when(confirmationFutureManager.createSingleConfirmationFuture(session)).thenReturn(expectedFuture);
+
+            // When
+            CompletableFuture<Boolean> future = sessionService.createConfirmationFuture(session);
+
+            // Then
+            assertThat(future).isSameAs(expectedFuture);
+            verify(confirmationFutureManager).createSingleConfirmationFuture(session);
+        }
+
+        @Test
+        @DisplayName("should delegate single confirmation resolution to ConfirmationFutureManager")
+        void shouldDelegateSingleConfirmationResolution() {
+            // Given
+            when(confirmationFutureManager.resolveSingleConfirmation(session, true)).thenReturn(true);
+
+            // When
+            boolean resolved = sessionService.resolveConfirmation(session, true);
+
+            // Then
+            assertThat(resolved).isTrue();
+            verify(confirmationFutureManager).resolveSingleConfirmation(session, true);
+        }
+
+        @Test
+        @DisplayName("should return false when no single future is pending")
+        void shouldReturnFalseWhenNoSingleFuturePending() {
+            // Given
+            when(confirmationFutureManager.resolveSingleConfirmation(session, false)).thenReturn(false);
+
+            // When
+            boolean resolved = sessionService.resolveConfirmation(session, false);
+
+            // Then
+            assertThat(resolved).isFalse();
+            verify(confirmationFutureManager).resolveSingleConfirmation(session, false);
         }
     }
 }

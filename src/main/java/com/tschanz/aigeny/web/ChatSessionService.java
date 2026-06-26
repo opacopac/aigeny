@@ -23,14 +23,18 @@ public class ChatSessionService {
 
     private static final Logger log = LoggerFactory.getLogger(ChatSessionService.class);
 
+    private final ConfirmationFutureManager confirmationFutureManager;
+
     // Session attribute keys
     private static final String SESSION_HISTORY              = "chatHistory";
     private static final String SESSION_RESULT               = "lastQueryResult";
     private static final String SESSION_PENDING_ACTION       = "pendingJiraAction";
     private static final String SESSION_JIRA_WRITE           = "jiraWriteEnabled";
     private static final String SESSION_CANCEL_FLAG          = "chatCancelFlag";
-    private static final String SESSION_CONFIRMATION_FUTURE  = "jiraConfirmationFuture";
-    private static final String SESSION_BATCH_CONFIRM_FUTURE = "jiraBatchConfirmFuture";
+
+    public ChatSessionService(ConfirmationFutureManager confirmationFutureManager) {
+        this.confirmationFutureManager = confirmationFutureManager;
+    }
 
     // ── Chat History Management ──────────────────────────────────────────────
 
@@ -231,77 +235,50 @@ public class ChatSessionService {
 
     /**
      * Creates a new CompletableFuture<Boolean> for a synchronous Jira confirmation.
-     * Stored in the session so the /api/jira/confirm-decision endpoint can resolve it.
+     * Delegates to {@link ConfirmationFutureManager}.
      *
      * @param session HTTP session
      * @return the future that will be completed when the user decides
      */
     public CompletableFuture<Boolean> createConfirmationFuture(HttpSession session) {
-        CompletableFuture<Boolean> future = new CompletableFuture<>();
-        session.setAttribute(SESSION_CONFIRMATION_FUTURE, future);
-        log.debug("Created confirmation future for session {}", session.getId());
-        return future;
+        return confirmationFutureManager.createSingleConfirmationFuture(session);
     }
 
     /**
      * Resolves the pending confirmation future with the user's decision.
-     * Removes it from the session after resolving.
+     * Delegates to {@link ConfirmationFutureManager}.
      *
      * @param session   HTTP session
      * @param confirmed true if the user confirmed, false if declined
      * @return true if a pending future was found and resolved, false otherwise
      */
-    @SuppressWarnings("unchecked")
     public boolean resolveConfirmation(HttpSession session, boolean confirmed) {
-        CompletableFuture<Boolean> future =
-                (CompletableFuture<Boolean>) session.getAttribute(SESSION_CONFIRMATION_FUTURE);
-        if (future != null) {
-            session.removeAttribute(SESSION_CONFIRMATION_FUTURE);
-            future.complete(confirmed);
-            log.debug("Confirmation resolved ({}) for session {}", confirmed ? "confirmed" : "declined", session.getId());
-            return true;
-        }
-        log.warn("resolveConfirmation called but no pending future for session {}", session.getId());
-        return false;
+        return confirmationFutureManager.resolveSingleConfirmation(session, confirmed);
     }
 
     // ── Batch Confirmation Future Management ─────────────────────────────────
 
     /**
      * Creates a new CompletableFuture for a batch Jira confirmation dialog.
-     * The future resolves with a map of {@code toolCallId → confirmed}.
-     * Stored in the session so the /api/jira/batch-confirm-decision endpoint can resolve it.
+     * Delegates to {@link ConfirmationFutureManager}.
      *
      * @param session HTTP session
      * @return the future that will be completed when the user submits all decisions
      */
     public CompletableFuture<Map<String, Boolean>> createBatchConfirmationFuture(HttpSession session) {
-        CompletableFuture<Map<String, Boolean>> future = new CompletableFuture<>();
-        session.setAttribute(SESSION_BATCH_CONFIRM_FUTURE, future);
-        log.debug("Created batch confirmation future for session {}", session.getId());
-        return future;
+        return confirmationFutureManager.createBatchConfirmationFuture(session);
     }
 
     /**
      * Resolves the pending batch confirmation future with the user's decisions.
-     * Removes it from the session after resolving.
+     * Delegates to {@link ConfirmationFutureManager}.
      *
      * @param session   HTTP session
      * @param decisions map of toolCallId → confirmed
      * @return true if a pending future was found and resolved, false otherwise
      */
-    @SuppressWarnings("unchecked")
     public boolean resolveBatchConfirmation(HttpSession session, Map<String, Boolean> decisions) {
-        CompletableFuture<Map<String, Boolean>> future =
-                (CompletableFuture<Map<String, Boolean>>) session.getAttribute(SESSION_BATCH_CONFIRM_FUTURE);
-        if (future != null) {
-            session.removeAttribute(SESSION_BATCH_CONFIRM_FUTURE);
-            future.complete(decisions);
-            log.debug("Batch confirmation resolved ({} decisions) for session {}", decisions.size(), session.getId());
-            return true;
-        }
-        log.warn("resolveBatchConfirmation called but no pending future for session {}", session.getId());
-        return false;
+        return confirmationFutureManager.resolveBatchConfirmation(session, decisions);
     }
 
     // ── Session Cleanup ──────────────────────────────────────────────────────
