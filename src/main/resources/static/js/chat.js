@@ -17,9 +17,10 @@
  *   updateTypingIndicator()  – add a tool-call entry to the list
  *   finalizeTypingIndicator()– hide dots, keep tool-call list, or remove entirely
  *   removeTypingIndicator()  – force-remove the indicator
- *   showJiraConfirmation()   – render a Jira confirm/cancel block
- *   executeJiraAction()      – POST /api/jira/confirm
- *   cancelJiraAction()       – POST /api/jira/cancel
+ *   showJiraConfirmation()        – render a Jira confirm/cancel block
+ *   hasPendingJiraConfirmation() – true when a confirmation block is visible
+ *   executeJiraAction()          – POST /api/jira/confirm
+ *   cancelJiraAction()           – POST /api/jira/cancel
  *   sendMessage()            – POST chat message, consume SSE stream
  *   stopGeneration()         – POST /api/chat/cancel
  *   clearChat()              – POST /api/chat/clear, reset UI
@@ -29,19 +30,20 @@
 // ── Sub-module imports ────────────────────────────────────────────────────────
 
 import * as Renderer from './chat-renderer.js';
-import { initStream, sendMessage, stopGeneration } from './chat-stream.js';
+import { initStream, sendMessage, stopGeneration, handleJiraConfirmAndResume } from './chat-stream.js';
 
 // ── Re-exports (backwards-compatibility) ─────────────────────────────────────
 
-export const appendMessage           = Renderer.appendMessage;
-export const showTypingIndicator     = Renderer.showTypingIndicator;
-export const updateTypingIndicator   = Renderer.updateTypingIndicator;
-export const finalizeTypingIndicator = Renderer.finalizeTypingIndicator;
-export const removeTypingIndicator   = Renderer.removeTypingIndicator;
-export const showJiraConfirmation    = Renderer.showJiraConfirmation;
-export const executeJiraAction       = Renderer.executeJiraAction;
-export const cancelJiraAction        = Renderer.cancelJiraAction;
-export { sendMessage, stopGeneration };
+export const appendMessage              = Renderer.appendMessage;
+export const showTypingIndicator        = Renderer.showTypingIndicator;
+export const updateTypingIndicator      = Renderer.updateTypingIndicator;
+export const finalizeTypingIndicator    = Renderer.finalizeTypingIndicator;
+export const removeTypingIndicator      = Renderer.removeTypingIndicator;
+export const showJiraConfirmation       = Renderer.showJiraConfirmation;
+export const hasPendingJiraConfirmation = Renderer.hasPendingJiraConfirmation;
+export const executeJiraAction          = Renderer.executeJiraAction;
+export const cancelJiraAction           = Renderer.cancelJiraAction;
+export { sendMessage, stopGeneration, handleJiraConfirmAndResume };
 
 // ── Module-level state ────────────────────────────────────────────────────────
 
@@ -61,11 +63,15 @@ let _setExportEnabledFn = (_v) => {};
 export function initChat({ isThinkingFn, setThinkingFn, setExportEnabledFn }) {
   _setExportEnabledFn = setExportEnabledFn;
 
+  // Wire the confirm-and-resume handler into the renderer (Dependency Inversion)
+  Renderer.setConfirmHandler(handleJiraConfirmAndResume);
+
   // Forward deps + renderer to the stream module
   initStream({
     isThinkingFn,
     setThinkingFn,
     setExportEnabledFn,
+    hasPendingJiraConfirmationFn: Renderer.hasPendingJiraConfirmation,
     renderer: {
       appendMessage:           Renderer.appendMessage,
       showTypingIndicator:     Renderer.showTypingIndicator,

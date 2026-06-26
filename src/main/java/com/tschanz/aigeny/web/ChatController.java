@@ -115,6 +115,16 @@ public class ChatController {
             JiraWriteContext.set(jiraWriteEnabled);
             BitbucketTokenContext.set(bitbucketToken);
             PendingJiraActionContext.clear();
+
+            // Guard (defence-in-depth): drop any stale pending actions from a
+            // previous turn that the user never confirmed or cancelled.
+            if (sessionService.hasPendingJiraActions(session)) {
+                log.warn("Non-streaming chat turn started for session {} while Jira " +
+                         "confirmation was still pending – clearing stale pending actions",
+                         session.getId());
+                sessionService.clearPendingJiraActions(session);
+            }
+
             try {
                 ChatResult result = orchestration.chat(history, message);
 
@@ -189,6 +199,10 @@ public class ChatController {
 
     // ── POST /api/jira/confirm ────────────────────────────────────────────────
 
+    /**
+     * Legacy JSON confirm endpoint – kept for backwards compatibility.
+     * Prefer {@link #confirmJiraActionStream} for multi-step LLM workflows.
+     */
     @PostMapping("/jira/confirm")
     public CompletableFuture<ResponseEntity<Map<String, Object>>> confirmJiraAction(HttpSession session) {
         List<PendingJiraAction> pendingActions = sessionService.getPendingJiraActions(session);
@@ -222,6 +236,46 @@ public class ChatController {
                 JiraWriteContext.clear();
             }
         });
+    }
+
+    // ── POST /api/jira/confirm-stream (SSE) ──────────────────────────────────
+
+    /**
+     * Executes pending Jira actions and resumes the LLM conversation via SSE so
+     * the model can continue any multi-step plan (e.g. renaming cloned sub-tasks).
+     *
+     * Flow:
+     *  1. Execute all pending actions → build result string.
+     *  2. Send result as SSE {@code intermediate} event (visible in chat immediately).
+     *  3. Continue LLM orchestration with the result as context.
+     *  4. Stream tool_call / intermediate / done events as usual.
+     */
+    @PostMapping(value = "/jira/confirm-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter confirmJiraActionStream(HttpSession session) {
+        List<PendingJiraAction> pendingActions = sessionService.getPendingJiraActions(session);
+        if (pendingActions == null || pendingActions.isEmpty()) {
+            // No pending actions – return an immediate done event
+            SseEmitter emitter = new SseEmitter(5_000L);
+            String msg = Messages.get(MSG_JIRA_NO_PENDING);
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                try {
+                    String json = objectMapper.writeValueAsString(
+                            Map.of("type", "done", "response", msg, "hasExport", false));
+                    emitter.send(SseEmitter.event().data(json));
+                    emitter.complete();
+                } catch (Exception e) { emitter.completeWithError(e); }
+            });
+            return emitter;
+        }
+
+        sessionService.clearPendingJiraActions(session);
+        final String jiraToken      = tokenService.getEffectiveJiraToken(session);
+        final boolean writeEnabled  = sessionService.isJiraWriteModeEnabled(session);
+        final String bitbucketToken = tokenService.getEffectiveBitbucketToken(session);
+        final List<Message> history = sessionService.getOrCreateHistory(session);
+
+        return streamingService.streamAfterConfirmation(
+                pendingActions, history, session, jiraToken, writeEnabled, bitbucketToken);
     }
 
     // ── POST /api/jira/cancel ────────────────────────────────────────────────

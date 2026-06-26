@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.llm.model.Message;
 import com.tschanz.aigeny.llm_tool.QueryResult;
 import com.tschanz.aigeny.llm_tool.ToolResult;
+import com.tschanz.aigeny.llm_tool.jira.JiraWriteExecutor;
 import com.tschanz.aigeny.llm_tool.jira.PendingJiraAction;
 import com.tschanz.aigeny.orchestration.ChatResult;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
@@ -41,6 +42,9 @@ class ChatStreamingServiceTest {
     private ChatSessionService sessionService;
 
     @Mock
+    private JiraWriteExecutor jiraWriteExecutor;
+
+    @Mock
     private HttpSession session;
 
     private ObjectMapper objectMapper;
@@ -49,7 +53,7 @@ class ChatStreamingServiceTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        streamingService = new ChatStreamingService(orchestration, sessionService, objectMapper);
+        streamingService = new ChatStreamingService(orchestration, sessionService, jiraWriteExecutor, objectMapper);
     }
 
     @Nested
@@ -208,6 +212,48 @@ class ChatStreamingServiceTest {
             // Then - cleanup should be called
             verify(sessionService).clearCancelFlag(session);
         }
+
+        @Test
+        @DisplayName("should clear stale pending actions at the start of a new chat turn")
+        void shouldClearStalePendingActionsAtStartOfNewChatTurn() throws Exception {
+            // Given – session already holds pending actions from a previous unanswered confirmation
+            String message = "new message";
+            List<Message> history = new ArrayList<>();
+            AtomicBoolean cancelFlag = new AtomicBoolean(false);
+            ChatResult chatResult = new ChatResult("response", null);
+
+            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(sessionService.hasPendingJiraActions(session)).thenReturn(true);
+            when(orchestration.chat(any(), anyString(), any(), any(), any())).thenReturn(chatResult);
+
+            // When
+            streamingService.streamChat(message, history, session, "token", false, "bb-token");
+            Thread.sleep(100);
+
+            // Then – stale actions must have been cleared before the new turn ran
+            verify(sessionService).clearPendingJiraActions(session);
+        }
+
+        @Test
+        @DisplayName("should not call clearPendingJiraActions when no stale actions exist")
+        void shouldNotClearPendingActionsWhenNoneExist() throws Exception {
+            // Given – no pending actions in session
+            String message = "hello";
+            List<Message> history = new ArrayList<>();
+            AtomicBoolean cancelFlag = new AtomicBoolean(false);
+            ChatResult chatResult = new ChatResult("response", null);
+
+            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(sessionService.hasPendingJiraActions(session)).thenReturn(false);
+            when(orchestration.chat(any(), anyString(), any(), any(), any())).thenReturn(chatResult);
+
+            // When
+            streamingService.streamChat(message, history, session, "token", false, "bb-token");
+            Thread.sleep(100);
+
+            // Then – clearPendingJiraActions must NOT have been called
+            verify(sessionService, never()).clearPendingJiraActions(session);
+        }
     }
 
     @Nested
@@ -343,6 +389,96 @@ class ChatStreamingServiceTest {
                     any(),
                     any()
             );
+        }
+    }
+
+    @Nested
+    @DisplayName("Confirmation Resume (streamAfterConfirmation)")
+    class ConfirmationResumeHandling {
+
+        @Test
+        @DisplayName("should execute pending actions and continue LLM orchestration")
+        void shouldExecutePendingActionsAndContinueLlmOrchestration() throws Exception {
+            // Given
+            List<Message> history = new ArrayList<>();
+            AtomicBoolean cancelFlag = new AtomicBoolean(false);
+            ChatResult chatResult = new ChatResult("Sub-Tasks wurden umbenannt, da!", null);
+
+            PendingJiraAction action = new PendingJiraAction(
+                    PendingJiraAction.ActionType.UPDATE_ISSUE, "NOVA-100",
+                    java.util.Map.of(), "Update NOVA-100");
+            List<PendingJiraAction> actions = List.of(action);
+
+            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(jiraWriteExecutor.execute(eq(action), anyString())).thenReturn("✔ NOVA-100 aktualisiert");
+            when(orchestration.chat(any(), anyString(), any(), any(), any())).thenReturn(chatResult);
+
+            // When
+            SseEmitter emitter = streamingService.streamAfterConfirmation(
+                    actions, history, session, "jira-token", true, "bb-token");
+            Thread.sleep(200);
+
+            // Then – executor was called and LLM was continued
+            verify(jiraWriteExecutor).execute(eq(action), eq("jira-token"));
+            verify(orchestration).chat(any(), anyString(), any(), any(), any());
+            assertThat(emitter).isNotNull();
+        }
+
+        @Test
+        @DisplayName("should pass continuation message containing execution result to LLM")
+        void shouldPassContinuationMessageContainingResultToLlm() throws Exception {
+            // Given
+            List<Message> history = new ArrayList<>();
+            AtomicBoolean cancelFlag = new AtomicBoolean(false);
+            ChatResult chatResult = new ChatResult("Fertig!", null);
+
+            PendingJiraAction action = new PendingJiraAction(
+                    PendingJiraAction.ActionType.CREATE_ISSUE, null,
+                    java.util.Map.of(), "Create issue");
+            List<PendingJiraAction> actions = List.of(action);
+
+            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(jiraWriteExecutor.execute(any(), anyString())).thenReturn("✔ NOVA-200 erstellt");
+            when(orchestration.chat(any(), anyString(), any(), any(), any())).thenReturn(chatResult);
+
+            ArgumentCaptor<String> msgCaptor = ArgumentCaptor.forClass(String.class);
+
+            // When
+            streamingService.streamAfterConfirmation(
+                    actions, history, session, "token", true, "bb-token");
+            Thread.sleep(200);
+
+            // Then – continuation message contains the execution result
+            verify(orchestration).chat(any(), msgCaptor.capture(), any(), any(), any());
+            assertThat(msgCaptor.getValue()).contains("NOVA-200 erstellt");
+        }
+
+        @Test
+        @DisplayName("should cleanup session even when executor throws")
+        void shouldCleanupSessionEvenWhenExecutorThrows() throws Exception {
+            // Given
+            List<Message> history = new ArrayList<>();
+            AtomicBoolean cancelFlag = new AtomicBoolean(false);
+            ChatResult chatResult = new ChatResult("Fertig!", null);
+
+            PendingJiraAction action = new PendingJiraAction(
+                    PendingJiraAction.ActionType.ADD_COMMENT, "NOVA-300",
+                    java.util.Map.of(), "Add comment");
+            List<PendingJiraAction> actions = List.of(action);
+
+            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(jiraWriteExecutor.execute(any(), anyString()))
+                    .thenThrow(new RuntimeException("Jira unavailable"));
+            when(orchestration.chat(any(), anyString(), any(), any(), any())).thenReturn(chatResult);
+
+            // When
+            streamingService.streamAfterConfirmation(
+                    actions, history, session, "token", true, "bb-token");
+            Thread.sleep(200);
+
+            // Then – LLM is still continued (error included in continuation message)
+            verify(orchestration).chat(any(), anyString(), any(), any(), any());
+            verify(sessionService).clearCancelFlag(session);
         }
     }
 

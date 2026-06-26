@@ -6,6 +6,7 @@ import com.tschanz.aigeny.llm.model.Message;
 import com.tschanz.aigeny.llm_tool.bitbucket.BitbucketTokenContext;
 import com.tschanz.aigeny.llm_tool.jira.JiraTokenContext;
 import com.tschanz.aigeny.llm_tool.jira.JiraWriteContext;
+import com.tschanz.aigeny.llm_tool.jira.JiraWriteExecutor;
 import com.tschanz.aigeny.llm_tool.jira.PendingJiraAction;
 import com.tschanz.aigeny.llm_tool.jira.PendingJiraActionContext;
 import com.tschanz.aigeny.orchestration.ChatResult;
@@ -50,16 +51,23 @@ public class ChatStreamingService {
     private static final String KEY_PENDING_ACTION = "pendingAction";
     private static final String KEY_ISSUE_KEY = "issueKey";
 
+    // Message keys
+    private static final String MSG_JIRA_WRITE_ERROR   = "chat.jira.write_error";
+    private static final String MSG_JIRA_CONTINUATION  = "jira.confirm.continuation";
+
     private final OrchestrationService orchestration;
     private final ChatSessionService sessionService;
+    private final JiraWriteExecutor jiraWriteExecutor;
     private final ObjectMapper objectMapper;
 
     public ChatStreamingService(OrchestrationService orchestration,
                                 ChatSessionService sessionService,
+                                JiraWriteExecutor jiraWriteExecutor,
                                 ObjectMapper objectMapper) {
-        this.orchestration = orchestration;
-        this.sessionService = sessionService;
-        this.objectMapper = objectMapper;
+        this.orchestration     = orchestration;
+        this.sessionService    = sessionService;
+        this.jiraWriteExecutor = jiraWriteExecutor;
+        this.objectMapper      = objectMapper;
     }
 
     /**
@@ -103,6 +111,89 @@ public class ChatStreamingService {
     }
 
     /**
+     * After the user confirms pending Jira actions: executes them, sends the result
+     * as an SSE intermediate message, then resumes the LLM so it can continue any
+     * remaining steps (e.g. renaming cloned sub-tasks).
+     *
+     * @param pendingActions actions to execute (already removed from session by caller)
+     * @param history        current conversation history
+     * @param session        HTTP session
+     * @param jiraToken      effective Jira PAT
+     * @param jiraWriteEnabled whether Jira write mode is enabled
+     * @param bitbucketToken effective Bitbucket PAT
+     * @return configured SSE emitter
+     */
+    public SseEmitter streamAfterConfirmation(List<PendingJiraAction> pendingActions,
+                                              List<Message> history,
+                                              HttpSession session,
+                                              String jiraToken,
+                                              boolean jiraWriteEnabled,
+                                              String bitbucketToken) {
+
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+
+        AtomicBoolean cancelFlag = sessionService.createCancelFlag(session);
+        emitter.onCompletion(() -> cancelFlag.set(true));
+        emitter.onTimeout(() -> cancelFlag.set(true));
+        emitter.onError(t -> cancelFlag.set(true));
+
+        CompletableFuture.runAsync(() -> processConfirmationStream(
+                emitter, pendingActions, history, session,
+                jiraToken, jiraWriteEnabled, bitbucketToken, cancelFlag));
+
+        return emitter;
+    }
+
+    /**
+     * Async body of {@link #streamAfterConfirmation}.
+     * 1. Executes all pending Jira actions synchronously in this thread.
+     * 2. Sends the aggregated result as an SSE {@code intermediate} event.
+     * 3. Continues the LLM conversation so it can finish any remaining planned steps.
+     */
+    private void processConfirmationStream(SseEmitter emitter,
+                                           List<PendingJiraAction> pendingActions,
+                                           List<Message> history,
+                                           HttpSession session,
+                                           String jiraToken,
+                                           boolean jiraWriteEnabled,
+                                           String bitbucketToken,
+                                           AtomicBoolean cancelFlag) {
+
+        // Execute Jira actions (write context needed by JiraWriteExecutor)
+        JiraWriteContext.set(jiraWriteEnabled);
+        StringBuilder resultBuilder = new StringBuilder();
+        for (PendingJiraAction action : pendingActions) {
+            try {
+                String res = jiraWriteExecutor.execute(action, jiraToken);
+                resultBuilder.append(res).append("\n");
+            } catch (Exception e) {
+                log.error("Jira write failed for action {}", action.getActionType(), e);
+                resultBuilder.append(Messages.get(MSG_JIRA_WRITE_ERROR, e.getMessage())).append("\n");
+            }
+        }
+        JiraWriteContext.clear();
+        String confirmationResult = resultBuilder.toString().trim();
+
+        // Show execution result in chat before the LLM continuation starts
+        sendIntermediateMessage(emitter, confirmationResult);
+
+        // Build the synthetic user message that resumes the LLM plan
+        String continuationMsg = Messages.get(MSG_JIRA_CONTINUATION, confirmationResult);
+
+        // Continue with a normal LLM orchestration turn
+        JiraTokenContext.set(jiraToken);
+        JiraWriteContext.set(jiraWriteEnabled);
+        BitbucketTokenContext.set(bitbucketToken);
+        PendingJiraActionContext.clear();
+
+        try {
+            runOrchestrationAndComplete(emitter, continuationMsg, history, session, cancelFlag);
+        } finally {
+            cleanup(session);
+        }
+    }
+
+    /**
      * Processes the chat stream asynchronously.
      */
     private void processChatStream(SseEmitter emitter,
@@ -120,8 +211,33 @@ public class ChatStreamingService {
         BitbucketTokenContext.set(bitbucketToken);
         PendingJiraActionContext.clear();
 
+        // Guard (defence-in-depth): if the UI somehow allowed a new turn while a
+        // Jira confirmation was still pending, drop the stale actions so the
+        // session never holds an orphaned batch that can no longer be confirmed.
+        if (sessionService.hasPendingJiraActions(session)) {
+            log.warn("New chat turn started for session {} while Jira confirmation was " +
+                     "still pending – clearing stale pending actions", session.getId());
+            sessionService.clearPendingJiraActions(session);
+        }
+
         try {
-            // Execute chat with streaming callbacks
+            runOrchestrationAndComplete(emitter, message, history, session, cancelFlag);
+        } finally {
+            cleanup(session);
+        }
+    }
+
+    /**
+     * Shared core: runs LLM orchestration and sends the final SSE done event.
+     * ThreadLocal contexts must already be set by the caller.
+     * Does NOT call {@link #cleanup} – that is the caller's responsibility.
+     */
+    private void runOrchestrationAndComplete(SseEmitter emitter,
+                                             String message,
+                                             List<Message> history,
+                                             HttpSession session,
+                                             AtomicBoolean cancelFlag) {
+        try {
             ChatResult result = orchestration.chat(
                     history,
                     message,
@@ -130,12 +246,10 @@ public class ChatStreamingService {
                     cancelFlag::get
             );
 
-            // Store export data if available
             if (result.hasExportData()) {
                 sessionService.setLastQueryResult(session, result.lastToolResult().getQueryResult());
             }
 
-            // Build final response payload
             Map<String, Object> payload = buildDonePayload(result, session);
             sendJson(emitter, payload);
             emitter.complete();
@@ -144,8 +258,6 @@ public class ChatStreamingService {
             handleCancellation(emitter, session);
         } catch (Exception e) {
             handleError(emitter, e);
-        } finally {
-            cleanup(session);
         }
     }
 

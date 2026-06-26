@@ -19,6 +19,9 @@ import {
   finalizeTypingIndicator,
   removeTypingIndicator,
   showJiraConfirmation,
+  hasPendingJiraConfirmation,
+  executeJiraAction,
+  handleJiraConfirmAndResume,
   clearChat,
   sendMessage,
 } from '../../main/resources/static/js/chat.js';
@@ -229,9 +232,9 @@ describe('removeTypingIndicator (chat-renderer)', () => {
 // chat-renderer.js – showJiraConfirmation
 // ════════════════════════════════════════════════════════════════════════════
 describe('showJiraConfirmation (chat-renderer)', () => {
-  it('appends a confirmation block to #chatMessages', () => {
+  it('appends a confirmation block with .jira-confirm-msg class to #chatMessages', () => {
     showJiraConfirmation({ description: 'Create ticket XY-1' });
-    expect(document.getElementById('jiraConfirmBlock')).not.toBeNull();
+    expect(document.querySelector('.jira-confirm-msg')).not.toBeNull();
   });
 
   it('contains a confirm button with text "Da! Ausführen"', () => {
@@ -254,7 +257,40 @@ describe('showJiraConfirmation (chat-renderer)', () => {
 
   it('applies jira-confirm-msg class', () => {
     showJiraConfirmation({ description: 'x' });
-    expect(document.getElementById('jiraConfirmBlock').classList.contains('jira-confirm-msg')).toBe(true);
+    expect(document.querySelector('.jira-confirm-msg')).not.toBeNull();
+  });
+
+  it('does NOT set a fixed id on the confirmation block', () => {
+    showJiraConfirmation({ description: 'x' });
+    // Fixed ids cause duplicate-ID bugs when called multiple times; we use
+    // the class selector instead.
+    expect(document.getElementById('jiraConfirmBlock')).toBeNull();
+  });
+
+  it('multiple calls append multiple independent blocks', () => {
+    showJiraConfirmation({ description: 'Action 1' });
+    showJiraConfirmation({ description: 'Action 2' });
+    expect(document.querySelectorAll('.jira-confirm-msg').length).toBe(2);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// chat-renderer.js – hasPendingJiraConfirmation
+// ════════════════════════════════════════════════════════════════════════════
+describe('hasPendingJiraConfirmation (chat-renderer)', () => {
+  it('returns false when no confirmation block is present', () => {
+    expect(hasPendingJiraConfirmation()).toBe(false);
+  });
+
+  it('returns true after showJiraConfirmation is called', () => {
+    showJiraConfirmation({ description: 'action' });
+    expect(hasPendingJiraConfirmation()).toBe(true);
+  });
+
+  it('returns false after the confirmation block is removed from DOM', () => {
+    showJiraConfirmation({ description: 'action' });
+    document.querySelector('.jira-confirm-msg').remove();
+    expect(hasPendingJiraConfirmation()).toBe(false);
   });
 });
 
@@ -339,4 +375,130 @@ describe('sendMessage (chat-stream, via chat.js re-export)', () => {
     await sendMessage();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it('does not call fetch when a Jira confirmation block is pending', async () => {
+    // Simulate a pending confirmation block
+    showJiraConfirmation({ description: 'Create ticket XY-1' });
+
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    document.getElementById('userInput').value = 'hello';
+
+    await sendMessage();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('appends a warning message when blocked by a pending confirmation', async () => {
+    showJiraConfirmation({ description: 'Create ticket XY-1' });
+    vi.stubGlobal('fetch', vi.fn());
+    document.getElementById('userInput').value = 'hello';
+
+    await sendMessage();
+
+    // At this point the DOM contains: the jira-confirm-msg + the warning
+    const aigenyMessages = document.querySelectorAll('.message.aigeny');
+    const warnText = [...aigenyMessages].map(el => el.textContent).join(' ');
+    expect(warnText).toContain('ausstehende Jira-Aktion');
+  });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// chat-renderer.js – executeJiraAction (delegating to injected handler)
+// ════════════════════════════════════════════════════════════════════════════
+describe('executeJiraAction (chat-renderer – confirm-and-resume delegation)', () => {
+  it('calls the injected confirm handler with the confirmation block', async () => {
+    const handlerSpy = vi.fn().mockResolvedValue(undefined);
+    // Wire the spy as the confirm handler (mimics what initChat does)
+    initChat({
+      isThinkingFn:       () => false,
+      setThinkingFn:      vi.fn(),
+      setExportEnabledFn: vi.fn(),
+    });
+    // Override with a spy by re-wiring via initChat (which calls setConfirmHandler internally)
+    // We test the behaviour by calling executeJiraAction on a block and verifying
+    // the /api/jira/confirm-stream fetch is attempted (the default wired handler).
+    showJiraConfirmation({ description: 'Some action' });
+    const block = document.querySelector('.jira-confirm-msg');
+
+    // Stub fetch to avoid actual network call
+    const fetchSpy = vi.fn().mockResolvedValue({
+      body: {
+        getReader: () => ({
+          read: vi.fn().mockResolvedValue({ done: true }),
+        }),
+      },
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await executeJiraAction(block);
+
+    // The confirm-stream endpoint must be called
+    expect(fetchSpy).toHaveBeenCalledWith('/api/jira/confirm-stream', expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('disables all buttons in the confirmation block before executing', async () => {
+    showJiraConfirmation({ description: 'Some action' });
+    const block = document.querySelector('.jira-confirm-msg');
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      body: { getReader: () => ({ read: vi.fn().mockResolvedValue({ done: true }) }) },
+    }));
+
+    // Start (don't await so we can inspect mid-flight)
+    executeJiraAction(block);
+
+    // Buttons should be disabled immediately
+    block.querySelectorAll('button').forEach(b => expect(b.disabled).toBe(true));
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// chat-stream.js – handleJiraConfirmAndResume
+// ════════════════════════════════════════════════════════════════════════════
+describe('handleJiraConfirmAndResume (chat-stream, via chat.js re-export)', () => {
+  it('removes the confirmation block from DOM', async () => {
+    showJiraConfirmation({ description: 'Some action' });
+    const block = document.querySelector('.jira-confirm-msg');
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      body: { getReader: () => ({ read: vi.fn().mockResolvedValue({ done: true }) }) },
+    }));
+
+    await handleJiraConfirmAndResume(block);
+
+    expect(document.querySelector('.jira-confirm-msg')).toBeNull();
+  });
+
+  it('calls /api/jira/confirm-stream', async () => {
+    showJiraConfirmation({ description: 'Some action' });
+    const block = document.querySelector('.jira-confirm-msg');
+
+    const fetchSpy = vi.fn().mockResolvedValue({
+      body: { getReader: () => ({ read: vi.fn().mockResolvedValue({ done: true }) }) },
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await handleJiraConfirmAndResume(block);
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/jira/confirm-stream',
+      expect.objectContaining({ method: 'POST' })
+    );
+  });
+
+  it('shows a typing indicator during execution', () => {
+    showJiraConfirmation({ description: 'Some action' });
+    const block = document.querySelector('.jira-confirm-msg');
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      body: { getReader: () => ({ read: vi.fn().mockResolvedValue({ done: true }) }) },
+    }));
+
+    // Don't await – inspect DOM during execution
+    handleJiraConfirmAndResume(block);
+
+    expect(document.getElementById('typingIndicator')).not.toBeNull();
+  });
+});
+
