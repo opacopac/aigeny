@@ -1,8 +1,8 @@
-package com.tschanz.aigeny.llm.factory;
+package com.tschanz.aigeny.llm.github;
 
 import com.tschanz.aigeny.config.LlmConfiguration;
-import com.tschanz.aigeny.llm.GitHubCopilotAdapter;
-import com.tschanz.aigeny.llm.GitHubCopilotService;
+import com.tschanz.aigeny.llm.github.GitHubCopilotAdapter;
+import com.tschanz.aigeny.llm.github.GitHubCopilotService;
 import com.tschanz.aigeny.llm.LlmClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

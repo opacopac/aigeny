@@ -1,8 +1,9 @@
-package com.tschanz.aigeny.llm.factory;
+package com.tschanz.aigeny.llm.anthropic;
+import com.tschanz.aigeny.llm.LlmAdapterFactory;
 
 import com.tschanz.aigeny.config.LlmConfiguration;
-import com.tschanz.aigeny.llm.AnthropicAdapter;
-import com.tschanz.aigeny.llm.GitHubCopilotService;
+import com.tschanz.aigeny.llm.anthropic.AnthropicAdapter;
+import com.tschanz.aigeny.llm.github.GitHubCopilotService;
 import com.tschanz.aigeny.llm.LlmClient;
 import org.springframework.stereotype.Component;
 

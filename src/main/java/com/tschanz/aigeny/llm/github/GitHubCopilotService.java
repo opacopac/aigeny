@@ -1,4 +1,4 @@
-package com.tschanz.aigeny.llm;
+package com.tschanz.aigeny.llm.github;
 
 import com.tschanz.aigeny.llm.github.CopilotApiClient;
 import com.tschanz.aigeny.llm.github.CopilotSessionManager;

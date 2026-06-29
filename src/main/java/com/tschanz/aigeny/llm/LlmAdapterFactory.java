@@ -1,7 +1,7 @@
-package com.tschanz.aigeny.llm.factory;
+package com.tschanz.aigeny.llm;
 
 import com.tschanz.aigeny.config.LlmConfiguration;
-import com.tschanz.aigeny.llm.GitHubCopilotService;
+import com.tschanz.aigeny.llm.github.GitHubCopilotService;
 import com.tschanz.aigeny.llm.LlmClient;
 
 /**

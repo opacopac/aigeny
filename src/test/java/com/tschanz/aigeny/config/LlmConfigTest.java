@@ -1,15 +1,15 @@
 package com.tschanz.aigeny.config;
 
 import com.tschanz.aigeny.config.LlmConfiguration;
-import com.tschanz.aigeny.llm.AnthropicAdapter;
-import com.tschanz.aigeny.llm.GitHubCopilotAdapter;
-import com.tschanz.aigeny.llm.GitHubCopilotService;
+import com.tschanz.aigeny.llm.anthropic.AnthropicAdapter;
+import com.tschanz.aigeny.llm.github.GitHubCopilotAdapter;
+import com.tschanz.aigeny.llm.github.GitHubCopilotService;
 import com.tschanz.aigeny.llm.LlmClient;
-import com.tschanz.aigeny.llm.OpenAiCompatibleAdapter;
-import com.tschanz.aigeny.llm.factory.AnthropicAdapterFactory;
-import com.tschanz.aigeny.llm.factory.GitHubCopilotAdapterFactory;
-import com.tschanz.aigeny.llm.factory.LlmAdapterFactory;
-import com.tschanz.aigeny.llm.factory.OpenAiCompatibleAdapterFactory;
+import com.tschanz.aigeny.llm.openai.OpenAiCompatibleAdapter;
+import com.tschanz.aigeny.llm.anthropic.AnthropicAdapterFactory;
+import com.tschanz.aigeny.llm.github.GitHubCopilotAdapterFactory;
+import com.tschanz.aigeny.llm.LlmAdapterFactory;
+import com.tschanz.aigeny.llm.openai.OpenAiCompatibleAdapterFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

@@ -1,4 +1,5 @@
-package com.tschanz.aigeny.llm;
+package com.tschanz.aigeny.llm.github;
+import com.tschanz.aigeny.llm.LlmClient;
 
 import com.tschanz.aigeny.config.LlmConfiguration;
 import com.tschanz.aigeny.llm.model.*;

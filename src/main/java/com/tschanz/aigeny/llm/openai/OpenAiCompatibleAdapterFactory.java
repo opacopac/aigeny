@@ -1,9 +1,10 @@
-package com.tschanz.aigeny.llm.factory;
+package com.tschanz.aigeny.llm.openai;
+import com.tschanz.aigeny.llm.LlmAdapterFactory;
 
 import com.tschanz.aigeny.config.LlmConfiguration;
-import com.tschanz.aigeny.llm.GitHubCopilotService;
+import com.tschanz.aigeny.llm.github.GitHubCopilotService;
 import com.tschanz.aigeny.llm.LlmClient;
-import com.tschanz.aigeny.llm.OpenAiCompatibleAdapter;
+import com.tschanz.aigeny.llm.openai.OpenAiCompatibleAdapter;
 import org.springframework.stereotype.Component;
 
 /**

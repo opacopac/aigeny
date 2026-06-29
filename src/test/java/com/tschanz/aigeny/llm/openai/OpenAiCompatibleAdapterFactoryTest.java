@@ -1,9 +1,9 @@
-package com.tschanz.aigeny.llm.factory;
+package com.tschanz.aigeny.llm.openai;
 
 import com.tschanz.aigeny.config.LlmConfiguration;
-import com.tschanz.aigeny.llm.GitHubCopilotService;
+import com.tschanz.aigeny.llm.github.GitHubCopilotService;
 import com.tschanz.aigeny.llm.LlmClient;
-import com.tschanz.aigeny.llm.OpenAiCompatibleAdapter;
+import com.tschanz.aigeny.llm.openai.OpenAiCompatibleAdapter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

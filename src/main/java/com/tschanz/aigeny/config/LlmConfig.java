@@ -1,8 +1,8 @@
 package com.tschanz.aigeny.config;
 
-import com.tschanz.aigeny.llm.GitHubCopilotService;
+import com.tschanz.aigeny.llm.github.GitHubCopilotService;
 import com.tschanz.aigeny.llm.LlmClient;
-import com.tschanz.aigeny.llm.factory.LlmAdapterFactory;
+import com.tschanz.aigeny.llm.LlmAdapterFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
