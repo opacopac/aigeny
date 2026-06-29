@@ -1,10 +1,8 @@
 package com.tschanz.aigeny.web;
 
-import com.tschanz.aigeny.db.SchemaLoader;
 import com.tschanz.aigeny.llm.model.Message;
 import com.tschanz.aigeny.orchestration.ChatResult;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,11 +12,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -27,16 +25,20 @@ import static org.mockito.Mockito.*;
 /**
  * Unit tests for {@link ChatController}.
  *
- * <p>Focuses on D-3: the non-streaming {@code POST /api/chat} path must delegate
- * ThreadLocal context setup/cleanup to {@link ExecutionContextManager} instead of
- * calling the static context classes directly.
+ * <p>Covers:
+ * <ul>
+ *   <li>POST /api/chat – non-streaming path including D-3 (ExecutionContextManager usage)</li>
+ *   <li>POST /api/chat/stream – delegates to ChatStreamingService</li>
+ *   <li>POST /api/chat/cancel – delegates cancellation to ChatSessionService</li>
+ *   <li>POST /api/chat/clear  – clears history and export data</li>
+ *   <li>GET  /api/status      – delegates to StatusAggregatorService</li>
+ * </ul>
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ChatController")
 class ChatControllerTest {
+
     @Mock private OrchestrationService orchestration;
-    @Mock private SchemaLoader schemaLoader;
-    @Mock private ObjectMapper objectMapper;
     @Mock private TokenService tokenService;
     @Mock private ChatSessionService sessionService;
     @Mock private StatusAggregatorService statusAggregator;
@@ -49,24 +51,21 @@ class ChatControllerTest {
     @BeforeEach
     void setUp() {
         controller = new ChatController(
-                orchestration, schemaLoader, objectMapper,
-                tokenService, sessionService, statusAggregator,
-                streamingService, contextManager);
+                orchestration, tokenService, sessionService,
+                statusAggregator, streamingService, contextManager);
     }
 
-    // ── POST /api/chat (non-streaming) – D-3 ─────────────────────────────────
+    // ── POST /api/chat (non-streaming) ────────────────────────────────────────
 
     @Nested
-    @DisplayName("POST /api/chat – ExecutionContextManager usage (D-3)")
-    class NonStreamingChatContextManagement {
+    @DisplayName("POST /api/chat")
+    class NonStreamingChat {
 
         private List<Message> history;
 
         @BeforeEach
         void setUp() throws Exception {
             history = new ArrayList<>();
-            // Use lenient() so the test for empty message (which doesn't reach these mocks)
-            // does not trigger UnnecessaryStubbingException
             lenient().when(sessionService.getOrCreateHistory(session)).thenReturn(history);
             lenient().when(tokenService.getEffectiveJiraToken(session)).thenReturn("jira-token");
             lenient().when(sessionService.isJiraWriteModeEnabled(session)).thenReturn(false);
@@ -76,7 +75,7 @@ class ChatControllerTest {
         }
 
         @Test
-        @DisplayName("calls setupContexts with tokens from session before orchestration")
+        @DisplayName("calls setupContexts with tokens from session before orchestration (D-3)")
         void callsSetupContextsBeforeOrchestration() throws Exception {
             controller.chat(Map.of("message", "hello"), session).get();
 
@@ -90,7 +89,7 @@ class ChatControllerTest {
         }
 
         @Test
-        @DisplayName("calls cleanupAllContexts after successful orchestration")
+        @DisplayName("calls cleanupAllContexts after successful orchestration (D-3)")
         void callsCleanupAfterSuccess() throws Exception {
             controller.chat(Map.of("message", "hello"), session).get();
 
@@ -98,7 +97,7 @@ class ChatControllerTest {
         }
 
         @Test
-        @DisplayName("calls cleanupAllContexts even when orchestration throws an exception")
+        @DisplayName("calls cleanupAllContexts even when orchestration throws (D-3)")
         void callsCleanupAfterException() throws Exception {
             when(orchestration.chat(any(), anyString()))
                     .thenThrow(new RuntimeException("LLM failure"));
@@ -109,8 +108,8 @@ class ChatControllerTest {
         }
 
         @Test
-        @DisplayName("calls setupContexts with jiraWriteEnabled=true when session has write mode on")
-        void callsSetupContextsWithWriteModeEnabled() throws Exception {
+        @DisplayName("passes jiraWriteEnabled=true when session write-mode is on")
+        void passesWriteModeEnabled() throws Exception {
             when(sessionService.isJiraWriteModeEnabled(session)).thenReturn(true);
 
             controller.chat(Map.of("message", "hello"), session).get();
@@ -120,7 +119,7 @@ class ChatControllerTest {
         }
 
         @Test
-        @DisplayName("returns bad request for empty message (no context setup needed)")
+        @DisplayName("returns 400 for empty message – no context setup called")
         void returnsBadRequestForEmptyMessage() throws Exception {
             ResponseEntity<Map<String, Object>> response =
                     controller.chat(Map.of("message", ""), session).get();
@@ -130,7 +129,7 @@ class ChatControllerTest {
         }
 
         @Test
-        @DisplayName("returns ok response containing the orchestration result text")
+        @DisplayName("returns 200 with response text on success")
         void returnsOkWithResponseText() throws Exception {
             ResponseEntity<Map<String, Object>> response =
                     controller.chat(Map.of("message", "hello"), session).get();
@@ -141,7 +140,7 @@ class ChatControllerTest {
         }
 
         @Test
-        @DisplayName("returns error response (not exception) when orchestration throws")
+        @DisplayName("returns 200 error-response (not exception) when orchestration throws")
         void returnsErrorResponseOnException() throws Exception {
             when(orchestration.chat(any(), anyString()))
                     .thenThrow(new RuntimeException("oops"));
@@ -151,6 +150,89 @@ class ChatControllerTest {
 
             assertThat(response.getStatusCode().value()).isEqualTo(200);
             assertThat(response.getBody()).containsKey("response");
+        }
+    }
+
+    // ── POST /api/chat/stream ─────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /api/chat/stream")
+    class StreamingChat {
+
+        @Test
+        @DisplayName("delegates to ChatStreamingService with tokens resolved from session")
+        void delegatesToStreamingService() {
+            List<Message> history = new ArrayList<>();
+            SseEmitter emitter = new SseEmitter();
+
+            when(sessionService.getOrCreateHistory(session)).thenReturn(history);
+            when(tokenService.getEffectiveJiraToken(session)).thenReturn("jira-tok");
+            when(sessionService.isJiraWriteModeEnabled(session)).thenReturn(true);
+            when(tokenService.getEffectiveBitbucketToken(session)).thenReturn("bb-tok");
+            when(streamingService.streamChat(
+                    eq("hi"), same(history), same(session),
+                    eq("jira-tok"), eq(true), eq("bb-tok")))
+                    .thenReturn(emitter);
+
+            SseEmitter result = controller.chatStream(Map.of("message", "hi"), session);
+
+            assertThat(result).isSameAs(emitter);
+        }
+    }
+
+    // ── POST /api/chat/cancel ─────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /api/chat/cancel")
+    class CancelChat {
+
+        @Test
+        @DisplayName("triggers cancellation on the session and returns status ok")
+        void triggersCancellation() {
+            when(session.getId()).thenReturn("sess-1");
+
+            ResponseEntity<Map<String, String>> response = controller.cancelChat(session);
+
+            verify(sessionService).triggerCancellation(session);
+            assertThat(response.getStatusCode().value()).isEqualTo(200);
+            assertThat(response.getBody()).containsEntry("status", "ok");
+        }
+    }
+
+    // ── POST /api/chat/clear ──────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /api/chat/clear")
+    class ClearChat {
+
+        @Test
+        @DisplayName("clears chat history and last query result")
+        void clearsHistoryAndExportData() {
+            ResponseEntity<Map<String, String>> response = controller.clear(session);
+
+            verify(sessionService).clearHistory(session);
+            verify(sessionService).clearLastQueryResult(session);
+            assertThat(response.getStatusCode().value()).isEqualTo(200);
+            assertThat(response.getBody()).containsKey("status");
+        }
+    }
+
+    // ── GET /api/status ───────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("GET /api/status")
+    class GetStatus {
+
+        @Test
+        @DisplayName("returns status map from StatusAggregatorService")
+        void returnsAggregatedStatus() {
+            Map<String, Object> statusMap = Map.of("llmProvider", "claude");
+            when(statusAggregator.aggregateStatus(session)).thenReturn(statusMap);
+
+            ResponseEntity<Map<String, Object>> response = controller.status(session);
+
+            assertThat(response.getStatusCode().value()).isEqualTo(200);
+            assertThat(response.getBody()).containsEntry("llmProvider", "claude");
         }
     }
 }

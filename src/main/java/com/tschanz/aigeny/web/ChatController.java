@@ -1,11 +1,8 @@
 package com.tschanz.aigeny.web;
 
-import com.tschanz.aigeny.db.SchemaLoader;
 import com.tschanz.aigeny.llm.model.Message;
 import com.tschanz.aigeny.orchestration.ChatResult;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
-import com.tschanz.aigeny.llm_tool.QueryResult;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
@@ -20,7 +17,14 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * REST controller for the chat interface and status endpoints.
+ * REST controller for chat conversation endpoints and system status.
+ *
+ * <p>Owns: POST /api/chat, POST /api/chat/stream, POST /api/chat/cancel,
+ * POST /api/chat/clear, GET /api/status
+ *
+ * <p>Token management → {@link TokenController}
+ * <p>Jira confirmations → {@link ConfirmationController}
+ * <p>Schema operations → {@link SchemaController}
  */
 @RestController
 @RequestMapping("/api")
@@ -29,30 +33,23 @@ public class ChatController {
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
 
     // ── JSON request body keys ───────────────────────────────────────────────
-    private static final String REQ_MESSAGE       = "message";
-    private static final String REQ_TOKEN         = "token";
+    private static final String REQ_MESSAGE = "message";
 
     // ── JSON response keys ───────────────────────────────────────────────────
-    private static final String KEY_ERROR         = "error";
-    private static final String KEY_RESPONSE      = "response";
-    private static final String KEY_HAS_EXPORT    = "hasExport";
-    private static final String KEY_STATUS        = "status";
-    private static final String KEY_TABLES        = "tables";
+    private static final String KEY_ERROR      = "error";
+    private static final String KEY_RESPONSE   = "response";
+    private static final String KEY_HAS_EXPORT = "hasExport";
+    private static final String KEY_STATUS     = "status";
 
     // ── JSON response values ─────────────────────────────────────────────────
-    private static final String VAL_OK    = "ok";
-    private static final String VAL_ERROR = "error";
+    private static final String VAL_OK = "ok";
 
     // ── Message keys ─────────────────────────────────────────────────────────
-    private static final String MSG_ERROR_EMPTY_MESSAGE  = "chat.error.empty_message";
-    private static final String MSG_ERROR_GENERIC        = "chat.error.generic";
-    private static final String MSG_STATUS_CANCELLED     = "chat.status.cancelled";
-    private static final String MSG_STATUS_CLEARED       = "chat.status.cleared";
-    private static final String MSG_NO_PENDING           = "chat.jira.no_pending_action";
+    private static final String MSG_ERROR_EMPTY_MESSAGE = "chat.error.empty_message";
+    private static final String MSG_ERROR_GENERIC       = "chat.error.generic";
+    private static final String MSG_STATUS_CLEARED      = "chat.status.cleared";
 
     private final OrchestrationService orchestration;
-    private final SchemaLoader schemaLoader;
-    private final ObjectMapper objectMapper;
     private final TokenService tokenService;
     private final ChatSessionService sessionService;
     private final StatusAggregatorService statusAggregator;
@@ -60,21 +57,17 @@ public class ChatController {
     private final ExecutionContextManager contextManager;
 
     public ChatController(OrchestrationService orchestration,
-                          SchemaLoader schemaLoader,
-                          ObjectMapper objectMapper,
                           TokenService tokenService,
                           ChatSessionService sessionService,
                           StatusAggregatorService statusAggregator,
                           ChatStreamingService streamingService,
                           ExecutionContextManager contextManager) {
-        this.orchestration     = orchestration;
-        this.schemaLoader      = schemaLoader;
-        this.objectMapper      = objectMapper;
-        this.tokenService      = tokenService;
-        this.sessionService    = sessionService;
-        this.statusAggregator  = statusAggregator;
-        this.streamingService  = streamingService;
-        this.contextManager    = contextManager;
+        this.orchestration    = orchestration;
+        this.tokenService     = tokenService;
+        this.sessionService   = sessionService;
+        this.statusAggregator = statusAggregator;
+        this.streamingService = streamingService;
+        this.contextManager   = contextManager;
     }
 
     // ── POST /api/chat ──────────────────────────────────────────────────────
@@ -92,22 +85,18 @@ public class ChatController {
 
         List<Message> history = sessionService.getOrCreateHistory(session);
 
-        final String jiraToken       = tokenService.getEffectiveJiraToken(session);
+        final String jiraToken        = tokenService.getEffectiveJiraToken(session);
         final boolean jiraWriteEnabled = sessionService.isJiraWriteModeEnabled(session);
-        final String bitbucketToken  = tokenService.getEffectiveBitbucketToken(session);
+        final String bitbucketToken   = tokenService.getEffectiveBitbucketToken(session);
 
         return CompletableFuture.supplyAsync(() -> {
-            // D-3: use ExecutionContextManager (consistent with the streaming path)
             // Confirmation handlers are null because write tools require SSE streaming.
             contextManager.setupContexts(jiraToken, jiraWriteEnabled, bitbucketToken, null, null);
-
             try {
                 ChatResult result = orchestration.chat(history, message);
-
                 if (result.hasExportData()) {
                     sessionService.setLastQueryResult(session, result.lastToolResult().getQueryResult());
                 }
-
                 return ResponseEntity.ok(Map.of(
                         KEY_RESPONSE,   result.response(),
                         KEY_HAS_EXPORT, result.hasExportData()
@@ -143,68 +132,6 @@ public class ChatController {
         );
     }
 
-    // ── POST /api/jira/confirm-decision ──────────────────────────────────────
-
-    /**
-     * Resolves a pending synchronous Jira confirmation.
-     * Called by the frontend when the user clicks "Confirm" or "Decline" in the dialog.
-     * The SSE stream remains open; the orchestration thread unblocks and continues.
-     *
-     * @param body JSON with {@code {"confirmed": true}} or {@code {"confirmed": false}}
-     */
-    @PostMapping("/jira/confirm-decision")
-    public ResponseEntity<Map<String, String>> jiraConfirmDecision(
-            @RequestBody Map<String, Object> body,
-            HttpSession session) {
-        boolean confirmed = Boolean.parseBoolean(String.valueOf(body.getOrDefault("confirmed", "false")));
-        boolean resolved = sessionService.resolveConfirmation(session, confirmed);
-        if (!resolved) {
-            log.warn("confirm-decision called but no pending confirmation for session {}", session.getId());
-            return ResponseEntity.ok(Map.of(KEY_STATUS, "no_pending"));
-        }
-        log.info("Jira confirmation {} for session {}", confirmed ? "accepted" : "declined", session.getId());
-        return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
-    }
-
-    // ── POST /api/jira/batch-confirm-decision ─────────────────────────────────
-
-    /**
-     * Resolves a pending batch Jira confirmation for multiple write tool calls.
-     * Called by the frontend when the user confirms or declines multiple actions at once.
-     * The SSE stream remains open; the orchestration thread unblocks and continues.
-     *
-     * @param body JSON with {@code {"decisions": {"toolCallId1": true, "toolCallId2": false}}}
-     *             or {@code {"confirmAll": true}} / {@code {"confirmAll": false}} as a shortcut
-     */
-    @SuppressWarnings("unchecked")
-    @PostMapping("/jira/batch-confirm-decision")
-    public ResponseEntity<Map<String, String>> jiraBatchConfirmDecision(
-            @RequestBody Map<String, Object> body,
-            HttpSession session) {
-        Map<String, Boolean> decisions;
-        if (body.containsKey("decisions")) {
-            decisions = (Map<String, Boolean>) body.get("decisions");
-        } else {
-            // Shortcut: confirmAll true/false applies to all pending actions
-            boolean confirmAll = Boolean.parseBoolean(String.valueOf(body.getOrDefault("confirmAll", "false")));
-            // The batch future will be resolved with whatever is provided; an empty map means all declined
-            // For confirmAll we pass a sentinel handled by the session service, but since we don't know
-            // the tool call IDs here we resolve with a special entry. The batch handler in
-            // ChatStreamingService already stores the IDs, so we re-use resolveBatchConfirmation
-            // with a single-entry map that ChatStreamingService interprets as "apply to all".
-            // For simplicity, we require the frontend to send per-ID decisions or use confirmAll
-            // with the tool call IDs embedded.
-            decisions = Map.of("__confirmAll__", confirmAll);
-        }
-        boolean resolved = sessionService.resolveBatchConfirmation(session, decisions);
-        if (!resolved) {
-            log.warn("batch-confirm-decision called but no pending batch future for session {}", session.getId());
-            return ResponseEntity.ok(Map.of(KEY_STATUS, "no_pending"));
-        }
-        log.info("Batch Jira confirmation resolved ({} decisions) for session {}", decisions.size(), session.getId());
-        return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
-    }
-
     // ── POST /api/chat/cancel ────────────────────────────────────────────────
 
     @PostMapping("/chat/cancel")
@@ -220,25 +147,7 @@ public class ChatController {
     public ResponseEntity<Map<String, String>> clear(HttpSession session) {
         sessionService.clearHistory(session);
         sessionService.clearLastQueryResult(session);
-        return ResponseEntity.ok(Map.of("status", Messages.get(MSG_STATUS_CLEARED)));
-    }
-
-    // ── POST /api/schema/reload ──────────────────────────────────────────────
-
-    @PostMapping("/schema/reload")
-    public CompletableFuture<ResponseEntity<Map<String, Object>>> reloadSchema() {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                schemaLoader.reload();
-                return ResponseEntity.ok(Map.of(
-                        KEY_STATUS, VAL_OK,
-                        KEY_TABLES, schemaLoader.getTableCount()
-                ));
-            } catch (Exception e) {
-                log.error("Schema reload failed", e);
-                return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_ERROR, KEY_ERROR, e.getMessage()));
-            }
-        });
+        return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CLEARED)));
     }
 
     // ── GET /api/status ──────────────────────────────────────────────────────
@@ -246,52 +155,5 @@ public class ChatController {
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> status(HttpSession session) {
         return ResponseEntity.ok(statusAggregator.aggregateStatus(session));
-    }
-
-    // ── POST /api/jira/token ─────────────────────────────────────────────────
-
-    @PostMapping("/jira/token")
-    public ResponseEntity<Map<String, String>> setJiraToken(
-            @RequestBody Map<String, String> body,
-            HttpSession session) {
-        String token = body.getOrDefault(REQ_TOKEN, "").strip();
-        tokenService.setUserJiraToken(session, token);
-        if (token.isEmpty()) {
-            return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CLEARED)));
-        }
-        return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
-    }
-
-    // ── POST /api/jira/write-mode ────────────────────────────────────────────
-
-    @PostMapping("/jira/write-mode")
-    public ResponseEntity<Map<String, String>> setJiraWriteMode(
-            @RequestBody Map<String, Object> body,
-            HttpSession session) {
-        boolean enabled = Boolean.parseBoolean(String.valueOf(body.getOrDefault("enabled", "false")));
-        sessionService.setJiraWriteMode(session, enabled);
-        return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
-    }
-
-    // ── DELETE /api/jira/token ───────────────────────────────────────────────
-
-    @DeleteMapping("/jira/token")
-    public ResponseEntity<Map<String, String>> clearJiraToken(HttpSession session) {
-        tokenService.clearUserJiraToken(session);
-        return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CLEARED)));
-    }
-
-    // ── POST /api/bitbucket/token ────────────────────────────────────────────
-
-    @PostMapping("/bitbucket/token")
-    public ResponseEntity<Map<String, String>> setBitbucketToken(
-            @RequestBody Map<String, String> body,
-            HttpSession session) {
-        String token = body.getOrDefault(REQ_TOKEN, "").strip();
-        tokenService.setUserBitbucketToken(session, token);
-        if (token.isEmpty()) {
-            return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CLEARED)));
-        }
-        return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
     }
 }
