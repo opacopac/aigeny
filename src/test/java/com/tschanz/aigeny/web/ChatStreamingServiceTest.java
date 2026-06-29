@@ -164,9 +164,9 @@ class ChatStreamingServiceTest {
             Thread.sleep(100);
 
             verify(contextManager).setupContexts(
-                    eq("jira-token"),
+                    argThat(tokens -> "jira-token".equals(tokens.get(JiraContextProvider.KEY))
+                                   && "bb-token".equals(tokens.get(BitbucketContextProvider.KEY))),
                     eq(true),
-                    eq("bb-token"),
                     any(),
                     any()
             );

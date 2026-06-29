@@ -84,9 +84,9 @@ class ChatControllerTest {
             controller.chat(Map.of("message", "hello"), session).get();
 
             verify(contextManager).setupContexts(
-                    eq("jira-token"),
+                    argThat(tokens -> "jira-token".equals(tokens.get(JiraContextProvider.KEY))
+                                   && "bb-token".equals(tokens.get(BitbucketContextProvider.KEY))),
                     eq(false),
-                    eq("bb-token"),
                     isNull(),   // no confirmation handler in non-streaming path
                     isNull()    // no batch handler in non-streaming path
             );
@@ -119,7 +119,7 @@ class ChatControllerTest {
             controller.chat(Map.of("message", "hello"), session).get();
 
             verify(contextManager).setupContexts(
-                    anyString(), eq(true), anyString(), isNull(), isNull());
+                    anyMap(), eq(true), isNull(), isNull());
         }
 
         @Test

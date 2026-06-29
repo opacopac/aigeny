@@ -8,7 +8,10 @@ import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.HashMap;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -87,10 +90,12 @@ public class ChatStreamingService {
                                     AtomicBoolean cancelFlag) {
 
         // Setup all ThreadLocal contexts via ExecutionContextManager
+        Map<String, String> tokens = new HashMap<>();
+        tokens.put(JiraContextProvider.KEY, jiraToken);
+        tokens.put(BitbucketContextProvider.KEY, bitbucketToken);
         contextManager.setupContexts(
-                jiraToken,
+                tokens,
                 jiraWriteEnabled,
-                bitbucketToken,
                 (humanDescription, action) -> confirmationOrchestrator.handleSingleConfirmation(
                         emitter, session, jiraToken, jiraWriteEnabled, humanDescription, action),
                 writeToolInfos -> confirmationOrchestrator.handleBatchConfirmation(emitter, session, writeToolInfos)

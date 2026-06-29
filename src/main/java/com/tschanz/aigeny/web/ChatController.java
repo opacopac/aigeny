@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -100,7 +101,10 @@ public class ChatController {
 
         return CompletableFuture.supplyAsync(() -> {
             // Confirmation handlers are null because write tools require SSE streaming.
-            contextManager.setupContexts(jiraToken, jiraWriteEnabled, bitbucketToken, null, null);
+            Map<String, String> tokens = new HashMap<>();
+            tokens.put(JiraContextProvider.KEY, jiraToken);
+            tokens.put(BitbucketContextProvider.KEY, bitbucketToken);
+            contextManager.setupContexts(tokens, jiraWriteEnabled, null, null);
             try {
                 ChatResult result = orchestration.chat(history, message);
                 if (result.hasExportData()) {

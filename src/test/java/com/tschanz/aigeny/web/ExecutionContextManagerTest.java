@@ -27,21 +27,34 @@ class ExecutionContextManagerTest {
 
     private ExecutionContextManager contextManager;
     private ConfirmationContext.Handler mockConfirmationHandler;
-    private java.util.function.Function<java.util.List<com.tschanz.aigeny.orchestration.WriteToolCallInfo>, 
+    private java.util.function.Function<java.util.List<com.tschanz.aigeny.orchestration.WriteToolCallInfo>,
                                         java.util.Map<String, Boolean>> mockBatchHandler;
 
     @BeforeEach
     void setUp() {
-        contextManager = new ExecutionContextManager();
+        // Use real providers so the manager tests the full delegation chain
+        contextManager = new ExecutionContextManager(
+                List.of(new JiraContextProvider(), new BitbucketContextProvider()));
         mockConfirmationHandler = (desc, action) -> new ToolResult("mocked");
         mockBatchHandler = infos -> new HashMap<>();
     }
 
     @AfterEach
     void cleanup() {
-        // Ensure all contexts are clean after each test
         contextManager.cleanupAllContexts();
     }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    /** Builds a mutable token map (allows null values, unlike Map.of). */
+    private static Map<String, String> tokens(String jiraToken, String bitbucketToken) {
+        Map<String, String> map = new HashMap<>();
+        map.put(JiraContextProvider.KEY, jiraToken);
+        map.put(BitbucketContextProvider.KEY, bitbucketToken);
+        return map;
+    }
+
+    // ── Context Setup ─────────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("Context Setup")
@@ -50,80 +63,45 @@ class ExecutionContextManagerTest {
         @Test
         @DisplayName("should set Jira token context")
         void shouldSetJiraTokenContext() {
-            // Act
-            contextManager.setupContexts(
-                    "jira-token-123",
-                    false,
-                    null,
-                    mockConfirmationHandler,
-                    mockBatchHandler
-            );
+            contextManager.setupContexts(tokens("jira-token-123", null), false,
+                    mockConfirmationHandler, mockBatchHandler);
 
-            // Assert
             assertThat(JiraTokenContext.get()).isEqualTo("jira-token-123");
         }
 
         @Test
         @DisplayName("should set Jira write enabled context")
         void shouldSetJiraWriteEnabledContext() {
-            // Act
-            contextManager.setupContexts(
-                    "token",
-                    true,
-                    null,
-                    mockConfirmationHandler,
-                    mockBatchHandler
-            );
+            contextManager.setupContexts(tokens("token", null), true,
+                    mockConfirmationHandler, mockBatchHandler);
 
-            // Assert
             assertThat(JiraWriteContext.isEnabled()).isTrue();
         }
 
         @Test
         @DisplayName("should set Jira write disabled context")
         void shouldSetJiraWriteDisabledContext() {
-            // Act
-            contextManager.setupContexts(
-                    "token",
-                    false,
-                    null,
-                    mockConfirmationHandler,
-                    mockBatchHandler
-            );
+            contextManager.setupContexts(tokens("token", null), false,
+                    mockConfirmationHandler, mockBatchHandler);
 
-            // Assert
             assertThat(JiraWriteContext.isEnabled()).isFalse();
         }
 
         @Test
         @DisplayName("should set Bitbucket token context")
         void shouldSetBitbucketTokenContext() {
-            // Act
-            contextManager.setupContexts(
-                    null,
-                    false,
-                    "bitbucket-token-456",
-                    mockConfirmationHandler,
-                    mockBatchHandler
-            );
+            contextManager.setupContexts(tokens(null, "bitbucket-token-456"), false,
+                    mockConfirmationHandler, mockBatchHandler);
 
-            // Assert
             assertThat(BitbucketTokenContext.get()).isEqualTo("bitbucket-token-456");
         }
 
         @Test
         @DisplayName("should set confirmation handler")
         void shouldSetConfirmationHandler() {
-            // Act
-            contextManager.setupContexts(
-                    "token",
-                    false,
-                    null,
-                    mockConfirmationHandler,
-                    mockBatchHandler
-            );
+            contextManager.setupContexts(tokens("token", null), false,
+                    mockConfirmationHandler, mockBatchHandler);
 
-            // Assert
             assertThat(ConfirmationContext.isAvailable()).isTrue();
             assertThat(ConfirmationContext.get()).isNotNull();
         }
@@ -131,16 +109,9 @@ class ExecutionContextManagerTest {
         @Test
         @DisplayName("should set batch confirmation handler")
         void shouldSetBatchConfirmationHandler() {
-            // Act
-            contextManager.setupContexts(
-                    "token",
-                    false,
-                    null,
-                    mockConfirmationHandler,
-                    mockBatchHandler
-            );
+            contextManager.setupContexts(tokens("token", null), false,
+                    mockConfirmationHandler, mockBatchHandler);
 
-            // Assert
             assertThat(BatchConfirmationContext.isAvailable()).isTrue();
             assertThat(BatchConfirmationContext.get()).isNotNull();
         }
@@ -148,16 +119,9 @@ class ExecutionContextManagerTest {
         @Test
         @DisplayName("should handle null tokens gracefully")
         void shouldHandleNullTokensGracefully() {
-            // Act
-            contextManager.setupContexts(
-                    null,
-                    false,
-                    null,
-                    mockConfirmationHandler,
-                    mockBatchHandler
-            );
+            contextManager.setupContexts(tokens(null, null), false,
+                    mockConfirmationHandler, mockBatchHandler);
 
-            // Assert - should not throw, contexts should be set to null
             assertThat(JiraTokenContext.get()).isNull();
             assertThat(BitbucketTokenContext.get()).isNull();
         }
@@ -165,48 +129,46 @@ class ExecutionContextManagerTest {
         @Test
         @DisplayName("should clear PendingJiraActionContext on setup")
         void shouldClearPendingJiraActionContextOnSetup() {
-            // Arrange - add a pending action first
             PendingJiraAction mockAction = mock(PendingJiraAction.class);
             PendingJiraActionContext.add(mockAction);
-            List<PendingJiraAction> actions = PendingJiraActionContext.get();
-            assertThat(actions).isNotNull().isNotEmpty();
+            assertThat(PendingJiraActionContext.get()).isNotNull().isNotEmpty();
 
-            // Act
-            contextManager.setupContexts(
-                    "token",
-                    false,
-                    null,
-                    mockConfirmationHandler,
-                    mockBatchHandler
-            );
+            contextManager.setupContexts(tokens("token", null), false,
+                    mockConfirmationHandler, mockBatchHandler);
 
-            // Assert - should be cleared (returns null when empty)
-            List<PendingJiraAction> clearedActions = PendingJiraActionContext.get();
-            assertThat(clearedActions).isNullOrEmpty();
+            assertThat(PendingJiraActionContext.get()).isNullOrEmpty();
         }
 
         @Test
         @DisplayName("should set all contexts in a single call")
         void shouldSetAllContextsInSingleCall() {
-            // Act
-            contextManager.setupContexts(
-                    "jira-token",
-                    true,
-                    "bb-token",
-                    mockConfirmationHandler,
-                    mockBatchHandler
-            );
+            contextManager.setupContexts(tokens("jira-token", "bb-token"), true,
+                    mockConfirmationHandler, mockBatchHandler);
 
-            // Assert - all contexts should be set
             assertThat(JiraTokenContext.get()).isEqualTo("jira-token");
             assertThat(JiraWriteContext.isEnabled()).isTrue();
             assertThat(BitbucketTokenContext.get()).isEqualTo("bb-token");
             assertThat(ConfirmationContext.isAvailable()).isTrue();
             assertThat(BatchConfirmationContext.isAvailable()).isTrue();
-            List<PendingJiraAction> actions = PendingJiraActionContext.get();
-            assertThat(actions).isNullOrEmpty();
+            assertThat(PendingJiraActionContext.get()).isNullOrEmpty();
+        }
+
+        @Test
+        @DisplayName("unknown provider key in map is silently ignored")
+        void unknownKeyInMapIsIgnored() {
+            Map<String, String> tokensWithExtra = tokens("jira-token", "bb-token");
+            tokensWithExtra.put("confluence", "confluence-token"); // no provider registered
+
+            contextManager.setupContexts(tokensWithExtra, false,
+                    mockConfirmationHandler, mockBatchHandler);
+
+            // Existing providers still set correctly
+            assertThat(JiraTokenContext.get()).isEqualTo("jira-token");
+            assertThat(BitbucketTokenContext.get()).isEqualTo("bb-token");
         }
     }
+
+    // ── Context Cleanup ───────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("Context Cleanup")
@@ -215,144 +177,104 @@ class ExecutionContextManagerTest {
         @Test
         @DisplayName("should clear Jira token context")
         void shouldClearJiraTokenContext() {
-            // Arrange
             JiraTokenContext.set("token");
-            assertThat(JiraTokenContext.get()).isNotNull();
 
-            // Act
             contextManager.cleanupAllContexts();
 
-            // Assert
             assertThat(JiraTokenContext.get()).isNull();
         }
 
         @Test
         @DisplayName("should clear Jira write context")
         void shouldClearJiraWriteContext() {
-            // Arrange
             JiraWriteContext.set(true);
-            assertThat(JiraWriteContext.isEnabled()).isTrue();
 
-            // Act
             contextManager.cleanupAllContexts();
 
-            // Assert
             assertThat(JiraWriteContext.isEnabled()).isFalse();
         }
 
         @Test
         @DisplayName("should clear Bitbucket token context")
         void shouldClearBitbucketTokenContext() {
-            // Arrange
             BitbucketTokenContext.set("token");
-            assertThat(BitbucketTokenContext.get()).isNotNull();
 
-            // Act
             contextManager.cleanupAllContexts();
 
-            // Assert
             assertThat(BitbucketTokenContext.get()).isNull();
         }
 
         @Test
         @DisplayName("should clear confirmation handler")
         void shouldClearConfirmationHandler() {
-            // Arrange
             ConfirmationContext.set(mockConfirmationHandler);
-            assertThat(ConfirmationContext.isAvailable()).isTrue();
 
-            // Act
             contextManager.cleanupAllContexts();
 
-            // Assert
             assertThat(ConfirmationContext.isAvailable()).isFalse();
         }
 
         @Test
         @DisplayName("should clear batch confirmation handler")
         void shouldClearBatchConfirmationHandler() {
-            // Arrange
             BatchConfirmationContext.set(mockBatchHandler);
-            assertThat(BatchConfirmationContext.isAvailable()).isTrue();
 
-            // Act
             contextManager.cleanupAllContexts();
 
-            // Assert
             assertThat(BatchConfirmationContext.isAvailable()).isFalse();
         }
 
         @Test
         @DisplayName("should clear pending Jira actions")
         void shouldClearPendingJiraActions() {
-            // Arrange
             PendingJiraAction mockAction = mock(PendingJiraAction.class);
             PendingJiraActionContext.add(mockAction);
-            List<PendingJiraAction> actions = PendingJiraActionContext.get();
-            assertThat(actions).isNotNull().isNotEmpty();
 
-            // Act
             contextManager.cleanupAllContexts();
 
-            // Assert
-            List<PendingJiraAction> clearedActions = PendingJiraActionContext.get();
-            assertThat(clearedActions).isNull();
+            assertThat(PendingJiraActionContext.get()).isNull();
         }
 
         @Test
         @DisplayName("should clear pre-approved confirmations")
         void shouldClearPreApprovedConfirmations() {
-            // Arrange
             Map<String, Boolean> preApprovals = new HashMap<>();
             preApprovals.put("call-1", true);
             ConfirmationContext.setPreApprovedDecisions(preApprovals);
-            assertThat(ConfirmationContext.hasPreApproved("call-1")).isTrue();
 
-            // Act
             contextManager.cleanupAllContexts();
 
-            // Assert
             assertThat(ConfirmationContext.hasPreApproved("call-1")).isFalse();
         }
 
         @Test
         @DisplayName("should clear all contexts in a single call")
         void shouldClearAllContextsInSingleCall() {
-            // Arrange - setup all contexts
-            contextManager.setupContexts(
-                    "jira-token",
-                    true,
-                    "bb-token",
-                    mockConfirmationHandler,
-                    mockBatchHandler
-            );
+            contextManager.setupContexts(tokens("jira-token", "bb-token"), true,
+                    mockConfirmationHandler, mockBatchHandler);
             Map<String, Boolean> preApprovals = new HashMap<>();
             preApprovals.put("call-1", true);
             ConfirmationContext.setPreApprovedDecisions(preApprovals);
 
-            // Act
             contextManager.cleanupAllContexts();
 
-            // Assert - all contexts should be cleared
             assertThat(JiraTokenContext.get()).isNull();
             assertThat(JiraWriteContext.isEnabled()).isFalse();
             assertThat(BitbucketTokenContext.get()).isNull();
             assertThat(ConfirmationContext.isAvailable()).isFalse();
             assertThat(BatchConfirmationContext.isAvailable()).isFalse();
-            List<PendingJiraAction> actions = PendingJiraActionContext.get();
-            assertThat(actions).isNull();
+            assertThat(PendingJiraActionContext.get()).isNull();
             assertThat(ConfirmationContext.hasPreApproved("call-1")).isFalse();
         }
 
         @Test
         @DisplayName("should not throw when cleaning already clean contexts")
         void shouldNotThrowWhenCleaningAlreadyCleanContexts() {
-            // Arrange - no contexts set
-
-            // Act & Assert - should not throw
-            contextManager.cleanupAllContexts();
+            contextManager.cleanupAllContexts(); // nothing set – must not throw
         }
     }
+
+    // ── Handler Integration ───────────────────────────────────────────────────
 
     @Nested
     @DisplayName("Handler Integration")
@@ -361,26 +283,18 @@ class ExecutionContextManagerTest {
         @Test
         @DisplayName("should invoke confirmation handler when called via context")
         void shouldInvokeConfirmationHandlerWhenCalledViaContext() {
-            // Arrange
             final boolean[] handlerCalled = {false};
             ConfirmationContext.Handler testHandler = (desc, action) -> {
                 handlerCalled[0] = true;
                 return new ToolResult("handler invoked");
             };
 
-            contextManager.setupContexts(
-                    "token",
-                    false,
-                    null,
-                    testHandler,
-                    mockBatchHandler
-            );
+            contextManager.setupContexts(tokens("token", null), false,
+                    testHandler, mockBatchHandler);
 
-            // Act
             PendingJiraAction mockAction = mock(PendingJiraAction.class);
             ToolResult result = ConfirmationContext.get().requestConfirmation("test", mockAction);
 
-            // Assert
             assertThat(handlerCalled[0]).isTrue();
             assertThat(result.getText()).isEqualTo("handler invoked");
         }
@@ -388,9 +302,8 @@ class ExecutionContextManagerTest {
         @Test
         @DisplayName("should invoke batch confirmation handler when called via context")
         void shouldInvokeBatchConfirmationHandlerWhenCalledViaContext() {
-            // Arrange
             final boolean[] handlerCalled = {false};
-            java.util.function.Function<java.util.List<com.tschanz.aigeny.orchestration.WriteToolCallInfo>, 
+            java.util.function.Function<java.util.List<WriteToolCallInfo>,
                                         java.util.Map<String, Boolean>> testHandler = infos -> {
                 handlerCalled[0] = true;
                 Map<String, Boolean> decisions = new HashMap<>();
@@ -398,25 +311,19 @@ class ExecutionContextManagerTest {
                 return decisions;
             };
 
-            contextManager.setupContexts(
-                    "token",
-                    false,
-                    null,
-                    mockConfirmationHandler,
-                    testHandler
-            );
+            contextManager.setupContexts(tokens("token", null), false,
+                    mockConfirmationHandler, testHandler);
 
-            // Act
             List<WriteToolCallInfo> toolInfos = List.of(
-                    new WriteToolCallInfo("call-1", "create_issue", "Create issue")
-            );
+                    new WriteToolCallInfo("call-1", "create_issue", "Create issue"));
             Map<String, Boolean> result = BatchConfirmationContext.get().apply(toolInfos);
 
-            // Assert
             assertThat(handlerCalled[0]).isTrue();
             assertThat(result).containsEntry("call-1", true);
         }
     }
+
+    // ── Memory Leak Prevention ────────────────────────────────────────────────
 
     @Nested
     @DisplayName("Memory Leak Prevention")
@@ -426,25 +333,15 @@ class ExecutionContextManagerTest {
         @DisplayName("should prevent memory leak by cleaning up after exception")
         void shouldPreventMemoryLeakByCleaningUpAfterException() {
             try {
-                // Arrange
-                contextManager.setupContexts(
-                        "token",
-                        true,
-                        "bb-token",
-                        mockConfirmationHandler,
-                        mockBatchHandler
-                );
-
-                // Simulate exception
+                contextManager.setupContexts(tokens("token", "bb-token"), true,
+                        mockConfirmationHandler, mockBatchHandler);
                 throw new RuntimeException("Simulated error");
             } catch (RuntimeException e) {
-                // Expected
+                // expected
             } finally {
-                // Act - cleanup in finally block
                 contextManager.cleanupAllContexts();
             }
 
-            // Assert - contexts should be clean
             assertThat(JiraTokenContext.get()).isNull();
             assertThat(BitbucketTokenContext.get()).isNull();
             assertThat(ConfirmationContext.isAvailable()).isFalse();
@@ -453,25 +350,79 @@ class ExecutionContextManagerTest {
         @Test
         @DisplayName("should allow multiple setup-cleanup cycles")
         void shouldAllowMultipleSetupCleanupCycles() {
-            // First cycle
-            contextManager.setupContexts("token1", true, "bb1", mockConfirmationHandler, mockBatchHandler);
+            contextManager.setupContexts(tokens("token1", "bb1"), true, mockConfirmationHandler, mockBatchHandler);
             assertThat(JiraTokenContext.get()).isEqualTo("token1");
             contextManager.cleanupAllContexts();
             assertThat(JiraTokenContext.get()).isNull();
 
-            // Second cycle
-            contextManager.setupContexts("token2", false, "bb2", mockConfirmationHandler, mockBatchHandler);
+            contextManager.setupContexts(tokens("token2", "bb2"), false, mockConfirmationHandler, mockBatchHandler);
             assertThat(JiraTokenContext.get()).isEqualTo("token2");
             assertThat(JiraWriteContext.isEnabled()).isFalse();
             contextManager.cleanupAllContexts();
             assertThat(JiraTokenContext.get()).isNull();
 
-            // Third cycle
-            contextManager.setupContexts("token3", true, "bb3", mockConfirmationHandler, mockBatchHandler);
+            contextManager.setupContexts(tokens("token3", "bb3"), true, mockConfirmationHandler, mockBatchHandler);
             assertThat(JiraTokenContext.get()).isEqualTo("token3");
             assertThat(JiraWriteContext.isEnabled()).isTrue();
             contextManager.cleanupAllContexts();
             assertThat(JiraTokenContext.get()).isNull();
+        }
+    }
+
+    // ── OCP: provider extensibility ───────────────────────────────────────────
+
+    @Nested
+    @DisplayName("ContextProvider extensibility (OCP)")
+    class ProviderExtensibility {
+
+        @Test
+        @DisplayName("manager with zero providers still sets up confirmation contexts")
+        void emptyProviderList_stillSetsConfirmationContexts() {
+            ExecutionContextManager managerWithNoProviders = new ExecutionContextManager(List.of());
+            try {
+                managerWithNoProviders.setupContexts(tokens("jira-token", "bb-token"), true,
+                        mockConfirmationHandler, mockBatchHandler);
+
+                assertThat(ConfirmationContext.isAvailable()).isTrue();
+                assertThat(BatchConfirmationContext.isAvailable()).isTrue();
+                // Token contexts are NOT set because no providers are registered
+                assertThat(JiraTokenContext.get()).isNull();
+                assertThat(BitbucketTokenContext.get()).isNull();
+            } finally {
+                managerWithNoProviders.cleanupAllContexts();
+            }
+        }
+
+        @Test
+        @DisplayName("custom provider is called by manager and can set its own ThreadLocal")
+        void customProvider_isInvokedByManager() {
+            // Simulate adding a third integration without modifying ExecutionContextManager
+            final String[] capturedToken = {null};
+            final boolean[] capturedWrite = {false};
+            ContextProvider customProvider = new ContextProvider() {
+                @Override public String getKey() { return "custom"; }
+                @Override public void setup(String token, boolean writeEnabled) {
+                    capturedToken[0] = token;
+                    capturedWrite[0] = writeEnabled;
+                }
+                @Override public void cleanup() { capturedToken[0] = null; }
+            };
+
+            ExecutionContextManager extendedManager = new ExecutionContextManager(
+                    List.of(new JiraContextProvider(), new BitbucketContextProvider(), customProvider));
+
+            Map<String, String> tokensWithCustom = tokens("jira", "bb");
+            tokensWithCustom.put("custom", "custom-secret");
+
+            try {
+                extendedManager.setupContexts(tokensWithCustom, false,
+                        mockConfirmationHandler, mockBatchHandler);
+
+                assertThat(capturedToken[0]).isEqualTo("custom-secret");
+                assertThat(capturedWrite[0]).isFalse();
+            } finally {
+                extendedManager.cleanupAllContexts();
+            }
         }
     }
 }
