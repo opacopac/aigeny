@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.net.http.HttpResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.*;
@@ -28,6 +29,8 @@ import static org.mockito.Mockito.when;
  * <ul>
  *   <li>The tool uses the injected {@link JiraHttpClient} (D-4 fix – no longer creates
  *       its own {@code java.net.http.HttpClient})</li>
+ *   <li>The tool uses the injected {@link ConfirmationService} instead of the static
+ *       {@link ConfirmationContext} (D-1 fix)</li>
  *   <li>Configuration and authorisation guards work correctly</li>
  *   <li>Write-mode guard blocks execution when Jira write mode is disabled</li>
  * </ul>
@@ -38,6 +41,7 @@ class CloneJiraIssueToolTest {
 
     @Mock private JiraConfiguration jiraConfig;
     @Mock private JiraHttpClient jiraHttpClient;
+    @Mock private ConfirmationService confirmationService;
     @Mock private HttpResponse<String> httpResponse;
 
     private CloneJiraIssueTool tool;
@@ -59,7 +63,7 @@ class CloneJiraIssueToolTest {
 
     @BeforeEach
     void setUp() {
-        tool = new CloneJiraIssueTool(jiraConfig, objectMapper, jiraHttpClient);
+        tool = new CloneJiraIssueTool(jiraConfig, objectMapper, jiraHttpClient, confirmationService);
         // lenient: tests that check write-mode guard never reach getBaseUrl()
         lenient().when(jiraConfig.getBaseUrl()).thenReturn("https://jira.example.com");
         JiraTokenContext.set("test-token");
@@ -134,8 +138,8 @@ class CloneJiraIssueToolTest {
             when(httpResponse.statusCode()).thenReturn(200);
             when(httpResponse.body()).thenReturn(SOURCE_ISSUE_JSON);
             when(jiraHttpClient.get(anyString(), anyString())).thenReturn(httpResponse);
-            // ConfirmationContext not set → tool returns "no_streaming_context" after HTTP call
-            ConfirmationContext.clear();
+            // confirmationService not available → tool returns "no_streaming_context" after HTTP call
+            when(confirmationService.isAvailable()).thenReturn(false);
 
             tool.execute("{\"sourceIssueKey\":\"NOVA-100\"}");
 
@@ -148,7 +152,7 @@ class CloneJiraIssueToolTest {
             when(httpResponse.statusCode()).thenReturn(200);
             when(httpResponse.body()).thenReturn(SOURCE_ISSUE_JSON);
             when(jiraHttpClient.get(anyString(), anyString())).thenReturn(httpResponse);
-            ConfirmationContext.clear();
+            when(confirmationService.isAvailable()).thenReturn(false);
 
             tool.execute("{\"sourceIssueKey\":\"NOVA-100\"}");
 
@@ -179,7 +183,41 @@ class CloneJiraIssueToolTest {
             assertThat(result.getText()).isNotBlank();
         }
     }
+
+    // ── Injected ConfirmationService usage (D-1) ──────────────────────────────
+
+    @Nested
+    @DisplayName("Uses injected ConfirmationService (D-1)")
+    class UsesInjectedConfirmationService {
+
+        @Test
+        @DisplayName("returns no-streaming error when confirmationService.isAvailable() is false")
+        void returnsErrorWhenConfirmationServiceNotAvailable() throws Exception {
+            when(httpResponse.statusCode()).thenReturn(200);
+            when(httpResponse.body()).thenReturn(SOURCE_ISSUE_JSON);
+            when(jiraHttpClient.get(anyString(), anyString())).thenReturn(httpResponse);
+            when(confirmationService.isAvailable()).thenReturn(false);
+
+            ToolResult result = tool.execute("{\"sourceIssueKey\":\"NOVA-100\"}");
+
+            assertThat(result.getText()).isNotBlank();
+            verify(confirmationService, never()).requestConfirmation(anyString(), any());
+        }
+
+        @Test
+        @DisplayName("delegates to confirmationService.requestConfirmation() when available")
+        void delegatesToConfirmationServiceWhenAvailable() throws Exception {
+            when(httpResponse.statusCode()).thenReturn(200);
+            when(httpResponse.body()).thenReturn(SOURCE_ISSUE_JSON);
+            when(jiraHttpClient.get(anyString(), anyString())).thenReturn(httpResponse);
+            when(confirmationService.isAvailable()).thenReturn(true);
+            ToolResult expected = new ToolResult("confirmed!");
+            when(confirmationService.requestConfirmation(anyString(), any())).thenReturn(expected);
+
+            ToolResult result = tool.execute("{\"sourceIssueKey\":\"NOVA-100\"}");
+
+            assertThat(result).isSameAs(expected);
+            verify(confirmationService).requestConfirmation(contains("NOVA-100"), any(PendingJiraAction.class));
+        }
+    }
 }
-
-
-

@@ -36,6 +36,7 @@ class ToolGetCallDescriptionTest {
     @Mock private BitbucketConfiguration bitbucketConfig;
     @Mock private OracleConnectionPool oracleConnectionPool;
     @Mock private JiraHttpClient jiraHttpClient;
+    @Mock private ConfirmationService confirmationService;
 
     @BeforeEach
     void setUp() {
@@ -107,7 +108,7 @@ class ToolGetCallDescriptionTest {
 
         private AddJiraCommentTool tool;
 
-        @BeforeEach void init() { tool = new AddJiraCommentTool(jiraConfig, objectMapper); }
+        @BeforeEach void init() { tool = new AddJiraCommentTool(jiraConfig, objectMapper, confirmationService); }
 
         @Test
         @DisplayName("includes issue key in description")
@@ -131,7 +132,7 @@ class ToolGetCallDescriptionTest {
 
         private UpdateJiraIssueTool tool;
 
-        @BeforeEach void init() { tool = new UpdateJiraIssueTool(jiraConfig, objectMapper); }
+        @BeforeEach void init() { tool = new UpdateJiraIssueTool(jiraConfig, objectMapper, confirmationService); }
 
         @Test
         @DisplayName("includes issue key and field name in description")
@@ -155,7 +156,7 @@ class ToolGetCallDescriptionTest {
 
         private CreateJiraIssueTool tool;
 
-        @BeforeEach void init() { tool = new CreateJiraIssueTool(jiraConfig, objectMapper); }
+        @BeforeEach void init() { tool = new CreateJiraIssueTool(jiraConfig, objectMapper, confirmationService); }
 
         @Test
         @DisplayName("includes project and summary in description")
@@ -179,7 +180,7 @@ class ToolGetCallDescriptionTest {
 
         private CloneJiraIssueTool tool;
 
-        @BeforeEach void init() { tool = new CloneJiraIssueTool(jiraConfig, objectMapper, jiraHttpClient); }
+        @BeforeEach void init() { tool = new CloneJiraIssueTool(jiraConfig, objectMapper, jiraHttpClient, confirmationService); }
 
         @Test
         @DisplayName("includes source and target project in description")

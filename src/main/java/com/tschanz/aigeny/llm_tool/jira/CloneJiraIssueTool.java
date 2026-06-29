@@ -45,11 +45,16 @@ public class CloneJiraIssueTool extends AbstractTool {
 
     private final JiraConfiguration jiraConfig;
     private final JiraHttpClient jiraHttpClient;
+    private final ConfirmationService confirmationService;
 
-    public CloneJiraIssueTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper, JiraHttpClient jiraHttpClient) {
+    public CloneJiraIssueTool(JiraConfiguration jiraConfig,
+                              ObjectMapper objectMapper,
+                              JiraHttpClient jiraHttpClient,
+                              ConfirmationService confirmationService) {
         super(objectMapper);
-        this.jiraConfig = jiraConfig;
-        this.jiraHttpClient = jiraHttpClient;
+        this.jiraConfig          = jiraConfig;
+        this.jiraHttpClient      = jiraHttpClient;
+        this.confirmationService = confirmationService;
     }
 
     @Override public String getName() { return "clone_jira_issue"; }
@@ -201,13 +206,13 @@ public class CloneJiraIssueTool extends AbstractTool {
             humanDesc.append("- **Sub-Tasks**: ").append(subtaskList.size()).append(" werden ebenfalls geklont\n");
         }
 
-        if (!ConfirmationContext.isAvailable()) {
+        if (!confirmationService.isAvailable()) {
             return new ToolResult(Messages.get(MSG_NO_STREAMING));
         }
 
         log.info("Requesting confirmation for clone_jira_issue {} → project={} subtasks={}",
                 sourceKey, projectKey, subtaskList.size());
-        return ConfirmationContext.get().requestConfirmation(
+        return confirmationService.requestConfirmation(
                 humanDesc.toString(),
                 new PendingJiraAction(PendingJiraAction.ActionType.CREATE_ISSUE, null, params, humanDesc.toString()));
     }

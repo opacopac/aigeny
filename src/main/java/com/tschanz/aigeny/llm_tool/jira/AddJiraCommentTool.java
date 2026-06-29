@@ -36,10 +36,14 @@ public class AddJiraCommentTool extends AbstractTool {
     private static final String MSG_NO_STREAMING   = "jira.error.no_streaming_context";
 
     private final JiraConfiguration jiraConfig;
+    private final ConfirmationService confirmationService;
 
-    public AddJiraCommentTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper) {
+    public AddJiraCommentTool(JiraConfiguration jiraConfig,
+                              ObjectMapper objectMapper,
+                              ConfirmationService confirmationService) {
         super(objectMapper);
-        this.jiraConfig = jiraConfig;
+        this.jiraConfig          = jiraConfig;
+        this.confirmationService = confirmationService;
     }
 
     @Override public String getName() { return TOOL_NAME; }
@@ -94,14 +98,14 @@ public class AddJiraCommentTool extends AbstractTool {
             return new ToolResult(Messages.get(MSG_MISSING_ARGS));
         }
 
-        if (!ConfirmationContext.isAvailable()) {
+        if (!confirmationService.isAvailable()) {
             return new ToolResult(Messages.get(MSG_NO_STREAMING));
         }
 
         String humanDesc = "Kommentar zu Jira-Ticket **" + issueKey + "** hinzufügen:\n> " + comment;
 
         log.info("Requesting confirmation for add_jira_comment on {}", issueKey);
-        return ConfirmationContext.get().requestConfirmation(
+        return confirmationService.requestConfirmation(
                 humanDesc,
                 new PendingJiraAction(PendingJiraAction.ActionType.ADD_COMMENT, issueKey,
                         Map.of(ARG_COMMENT, comment), humanDesc));

@@ -47,10 +47,14 @@ public class UpdateJiraIssueTool extends AbstractTool {
     private static final String MSG_NO_STREAMING    = "jira.error.no_streaming_context";
 
     private final JiraConfiguration jiraConfig;
+    private final ConfirmationService confirmationService;
 
-    public UpdateJiraIssueTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper) {
+    public UpdateJiraIssueTool(JiraConfiguration jiraConfig,
+                               ObjectMapper objectMapper,
+                               ConfirmationService confirmationService) {
         super(objectMapper);
-        this.jiraConfig = jiraConfig;
+        this.jiraConfig          = jiraConfig;
+        this.confirmationService = confirmationService;
     }
 
     @Override public String getName() { return TOOL_NAME; }
@@ -120,12 +124,12 @@ public class UpdateJiraIssueTool extends AbstractTool {
         if (!summary.isBlank())     desc.append(Messages.get(MSG_DESC_SUMMARY,  summary));
         if (!description.isBlank()) desc.append(Messages.get(MSG_DESC_DESC, description));
 
-        if (!ConfirmationContext.isAvailable()) {
+        if (!confirmationService.isAvailable()) {
             return new ToolResult(Messages.get(MSG_NO_STREAMING));
         }
 
         log.info("Requesting confirmation for update_jira_issue on {}", issueKey);
-        return ConfirmationContext.get().requestConfirmation(
+        return confirmationService.requestConfirmation(
                 desc.toString(),
                 new PendingJiraAction(PendingJiraAction.ActionType.UPDATE_ISSUE, issueKey, params, desc.toString()));
     }

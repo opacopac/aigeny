@@ -30,10 +30,14 @@ public class CreateJiraIssueTool extends AbstractTool {
     private static final String MSG_NO_STREAMING     = "jira.error.no_streaming_context";
 
     private final JiraConfiguration jiraConfig;
+    private final ConfirmationService confirmationService;
 
-    public CreateJiraIssueTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper) {
+    public CreateJiraIssueTool(JiraConfiguration jiraConfig,
+                               ObjectMapper objectMapper,
+                               ConfirmationService confirmationService) {
         super(objectMapper);
-        this.jiraConfig = jiraConfig;
+        this.jiraConfig          = jiraConfig;
+        this.confirmationService = confirmationService;
     }
 
     @Override public String getName() { return "create_jira_issue"; }
@@ -94,7 +98,7 @@ public class CreateJiraIssueTool extends AbstractTool {
             return new ToolResult(Messages.get(MSG_MISSING_ARGS));
         }
 
-        if (!ConfirmationContext.isAvailable()) {
+        if (!confirmationService.isAvailable()) {
             return new ToolResult(Messages.get(MSG_NO_STREAMING));
         }
 
@@ -114,7 +118,7 @@ public class CreateJiraIssueTool extends AbstractTool {
         if (!assignee.isBlank()) humanDesc.append("- **Assignee**: ").append(assignee).append("\n");
 
         log.info("Requesting confirmation for create_jira_issue in project={}", projectKey);
-        return ConfirmationContext.get().requestConfirmation(
+        return confirmationService.requestConfirmation(
                 humanDesc.toString(),
                 new PendingJiraAction(PendingJiraAction.ActionType.CREATE_ISSUE, null, params, humanDesc.toString()));
     }
