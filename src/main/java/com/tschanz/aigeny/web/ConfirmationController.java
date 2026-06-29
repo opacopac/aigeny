@@ -26,10 +26,10 @@ public class ConfirmationController {
     private static final String VAL_OK        = "ok";
     private static final String VAL_NO_PENDING = "no_pending";
 
-    private final ChatSessionService sessionService;
+    private final SessionConfirmationService confirmationService;
 
-    public ConfirmationController(ChatSessionService sessionService) {
-        this.sessionService = sessionService;
+    public ConfirmationController(SessionConfirmationService confirmationService) {
+        this.confirmationService = confirmationService;
     }
 
     // ── POST /api/jira/confirm-decision ──────────────────────────────────────
@@ -46,7 +46,7 @@ public class ConfirmationController {
             @RequestBody Map<String, Object> body,
             HttpSession session) {
         boolean confirmed = Boolean.parseBoolean(String.valueOf(body.getOrDefault("confirmed", "false")));
-        boolean resolved = sessionService.resolveConfirmation(session, confirmed);
+        boolean resolved = confirmationService.resolveConfirmation(session, confirmed);
         if (!resolved) {
             log.warn("confirm-decision called but no pending confirmation for session {}", session.getId());
             return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_NO_PENDING));
@@ -80,7 +80,7 @@ public class ConfirmationController {
             boolean confirmAll = Boolean.parseBoolean(String.valueOf(body.getOrDefault("confirmAll", "false")));
             decisions = Map.of("__confirmAll__", confirmAll);
         }
-        boolean resolved = sessionService.resolveBatchConfirmation(session, decisions);
+        boolean resolved = confirmationService.resolveBatchConfirmation(session, decisions);
         if (!resolved) {
             log.warn("batch-confirm-decision called but no pending batch future for session {}", session.getId());
             return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_NO_PENDING));

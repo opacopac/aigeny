@@ -36,7 +36,7 @@ import static org.mockito.Mockito.*;
 @DisplayName("ConfirmationOrchestrator")
 class ConfirmationOrchestratorTest {
 
-    @Mock private ChatSessionService sessionService;
+    @Mock private SessionConfirmationService sessionService;
     @Mock private JiraWriteExecutor jiraWriteExecutor;
     @Mock private HttpSession session;
     @Mock private SseEmitter emitter;

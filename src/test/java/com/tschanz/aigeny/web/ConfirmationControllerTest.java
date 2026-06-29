@@ -28,7 +28,7 @@ import static org.mockito.Mockito.*;
 @DisplayName("ConfirmationController")
 class ConfirmationControllerTest {
 
-    @Mock private ChatSessionService sessionService;
+    @Mock private SessionConfirmationService sessionService;
     @Mock private HttpSession session;
 
     private ConfirmationController controller;

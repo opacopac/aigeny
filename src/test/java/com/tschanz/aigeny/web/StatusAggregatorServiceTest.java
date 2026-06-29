@@ -37,7 +37,10 @@ class StatusAggregatorServiceTest {
     private TokenService tokenService;
 
     @Mock
-    private ChatSessionService sessionService;
+    private SessionJiraWriteService jiraWriteService;
+
+    @Mock
+    private SessionExportService exportService;
 
     @Mock
     private SchemaLoader schemaLoader;
@@ -61,7 +64,8 @@ class StatusAggregatorServiceTest {
             bitbucketConfig,
             configValidator,
             tokenService,
-            sessionService,
+            jiraWriteService,
+            exportService,
             schemaLoader
         );
     }
@@ -82,8 +86,8 @@ class StatusAggregatorServiceTest {
 
             when(tokenService.hasJiraToken(session)).thenReturn(true);
             when(tokenService.hasBitbucketToken(session)).thenReturn(true);
-            when(sessionService.isJiraWriteModeEnabled(session)).thenReturn(true);
-            when(sessionService.hasQueryResult(session)).thenReturn(true);
+            when(jiraWriteService.isJiraWriteModeEnabled(session)).thenReturn(true);
+            when(exportService.hasQueryResult(session)).thenReturn(true);
             when(schemaLoader.getTableCount()).thenReturn(42);
             when(configValidator.isDbConfigured(dbConfig)).thenReturn(true);
 
@@ -117,8 +121,8 @@ class StatusAggregatorServiceTest {
 
             when(tokenService.hasJiraToken(session)).thenReturn(false);
             when(tokenService.hasBitbucketToken(session)).thenReturn(false);
-            when(sessionService.isJiraWriteModeEnabled(session)).thenReturn(false);
-            when(sessionService.hasQueryResult(session)).thenReturn(false);
+            when(jiraWriteService.isJiraWriteModeEnabled(session)).thenReturn(false);
+            when(exportService.hasQueryResult(session)).thenReturn(false);
             when(schemaLoader.getTableCount()).thenReturn(0);
             when(configValidator.isDbConfigured(dbConfig)).thenReturn(false);
 
@@ -153,8 +157,8 @@ class StatusAggregatorServiceTest {
             // Then
             verify(tokenService).hasJiraToken(session);
             verify(tokenService).hasBitbucketToken(session);
-            verify(sessionService).isJiraWriteModeEnabled(session);
-            verify(sessionService).hasQueryResult(session);
+            verify(jiraWriteService).isJiraWriteModeEnabled(session);
+            verify(exportService).hasQueryResult(session);
             verify(schemaLoader).getTableCount();
             verify(configValidator, atLeastOnce()).isDbConfigured(dbConfig);
         }
@@ -378,7 +382,7 @@ class StatusAggregatorServiceTest {
             // Given
             llmConfig.setProvider("test");
             llmConfig.setModel("test");
-            when(sessionService.isJiraWriteModeEnabled(session)).thenReturn(true);
+            when(jiraWriteService.isJiraWriteModeEnabled(session)).thenReturn(true);
 
             // When
             Map<String, Object> status = statusAggregator.aggregateStatus(session);
@@ -393,7 +397,7 @@ class StatusAggregatorServiceTest {
             // Given
             llmConfig.setProvider("test");
             llmConfig.setModel("test");
-            when(sessionService.hasQueryResult(session)).thenReturn(true);
+            when(exportService.hasQueryResult(session)).thenReturn(true);
 
             // When
             Map<String, Object> status = statusAggregator.aggregateStatus(session);

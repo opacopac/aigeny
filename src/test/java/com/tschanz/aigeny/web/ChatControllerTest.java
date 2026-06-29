@@ -40,7 +40,10 @@ class ChatControllerTest {
 
     @Mock private OrchestrationService orchestration;
     @Mock private TokenService tokenService;
-    @Mock private ChatSessionService sessionService;
+    @Mock private SessionHistoryService historyService;
+    @Mock private SessionExportService exportService;
+    @Mock private SessionCancellationService cancellationService;
+    @Mock private SessionJiraWriteService jiraWriteService;
     @Mock private StatusAggregatorService statusAggregator;
     @Mock private ChatStreamingService streamingService;
     @Mock private ExecutionContextManager contextManager;
@@ -51,7 +54,8 @@ class ChatControllerTest {
     @BeforeEach
     void setUp() {
         controller = new ChatController(
-                orchestration, tokenService, sessionService,
+                orchestration, tokenService,
+                historyService, exportService, cancellationService, jiraWriteService,
                 statusAggregator, streamingService, contextManager);
     }
 
@@ -66,9 +70,9 @@ class ChatControllerTest {
         @BeforeEach
         void setUp() throws Exception {
             history = new ArrayList<>();
-            lenient().when(sessionService.getOrCreateHistory(session)).thenReturn(history);
+            lenient().when(historyService.getOrCreateHistory(session)).thenReturn(history);
             lenient().when(tokenService.getEffectiveJiraToken(session)).thenReturn("jira-token");
-            lenient().when(sessionService.isJiraWriteModeEnabled(session)).thenReturn(false);
+            lenient().when(jiraWriteService.isJiraWriteModeEnabled(session)).thenReturn(false);
             lenient().when(tokenService.getEffectiveBitbucketToken(session)).thenReturn("bb-token");
             lenient().when(orchestration.chat(any(), anyString()))
                     .thenReturn(new ChatResult("response text", null));
@@ -110,7 +114,7 @@ class ChatControllerTest {
         @Test
         @DisplayName("passes jiraWriteEnabled=true when session write-mode is on")
         void passesWriteModeEnabled() throws Exception {
-            when(sessionService.isJiraWriteModeEnabled(session)).thenReturn(true);
+            when(jiraWriteService.isJiraWriteModeEnabled(session)).thenReturn(true);
 
             controller.chat(Map.of("message", "hello"), session).get();
 
@@ -165,9 +169,9 @@ class ChatControllerTest {
             List<Message> history = new ArrayList<>();
             SseEmitter emitter = new SseEmitter();
 
-            when(sessionService.getOrCreateHistory(session)).thenReturn(history);
+            when(historyService.getOrCreateHistory(session)).thenReturn(history);
             when(tokenService.getEffectiveJiraToken(session)).thenReturn("jira-tok");
-            when(sessionService.isJiraWriteModeEnabled(session)).thenReturn(true);
+            when(jiraWriteService.isJiraWriteModeEnabled(session)).thenReturn(true);
             when(tokenService.getEffectiveBitbucketToken(session)).thenReturn("bb-tok");
             when(streamingService.streamChat(
                     eq("hi"), same(history), same(session),
@@ -193,7 +197,7 @@ class ChatControllerTest {
 
             ResponseEntity<Map<String, String>> response = controller.cancelChat(session);
 
-            verify(sessionService).triggerCancellation(session);
+            verify(cancellationService).triggerCancellation(session);
             assertThat(response.getStatusCode().value()).isEqualTo(200);
             assertThat(response.getBody()).containsEntry("status", "ok");
         }
@@ -210,8 +214,8 @@ class ChatControllerTest {
         void clearsHistoryAndExportData() {
             ResponseEntity<Map<String, String>> response = controller.clear(session);
 
-            verify(sessionService).clearHistory(session);
-            verify(sessionService).clearLastQueryResult(session);
+            verify(historyService).clearHistory(session);
+            verify(exportService).clearLastQueryResult(session);
             assertThat(response.getStatusCode().value()).isEqualTo(200);
             assertThat(response.getBody()).containsKey("status");
         }
@@ -236,6 +240,3 @@ class ChatControllerTest {
         }
     }
 }
-
-
-

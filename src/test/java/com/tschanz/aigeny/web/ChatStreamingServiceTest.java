@@ -32,7 +32,8 @@ import static org.mockito.Mockito.*;
 class ChatStreamingServiceTest {
 
     @Mock private OrchestrationService orchestration;
-    @Mock private ChatSessionService sessionService;
+    @Mock private SessionCancellationService cancellationService;
+    @Mock private SessionExportService exportService;
     @Mock private ConfirmationOrchestrator confirmationOrchestrator;
     @Mock private ExecutionContextManager contextManager;
     @Mock private SseStreamManager sseManager;
@@ -42,8 +43,8 @@ class ChatStreamingServiceTest {
 
     @BeforeEach
     void setUp() {
-        streamingService = new ChatStreamingService(orchestration, sessionService, confirmationOrchestrator, contextManager, sseManager);
-        
+        streamingService = new ChatStreamingService(orchestration, cancellationService, exportService, confirmationOrchestrator, contextManager, sseManager);
+
         // Default: sseManager creates a new emitter
         when(sseManager.createEmitter()).thenReturn(new SseEmitter(300_000L));
     }
@@ -57,7 +58,7 @@ class ChatStreamingServiceTest {
         void shouldCreateEmitterViaSseStreamManager() {
             List<Message> history  = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
-            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
 
             SseEmitter emitter = streamingService.streamChat(
                     "test message", history, session, "token", false, "bb-token");
@@ -71,11 +72,11 @@ class ChatStreamingServiceTest {
         void shouldSetupCancelFlagOnEmitterLifecycleEvents() {
             List<Message> history  = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
-            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
 
             streamingService.streamChat("test message", history, session, "token", false, "bb-token");
 
-            verify(sessionService).createCancelFlag(session);
+            verify(cancellationService).createCancelFlag(session);
         }
 
         @Test
@@ -86,7 +87,7 @@ class ChatStreamingServiceTest {
 
             assertThat(emitter).isNotNull();
             verify(sseManager).sendErrorAndComplete(any(SseEmitter.class), anyString());
-            verify(sessionService, never()).createCancelFlag(any());
+            verify(cancellationService, never()).createCancelFlag(any());
         }
 
         @Test
@@ -97,7 +98,7 @@ class ChatStreamingServiceTest {
 
             assertThat(emitter).isNotNull();
             verify(sseManager).sendErrorAndComplete(any(SseEmitter.class), anyString());
-            verify(sessionService, never()).createCancelFlag(any());
+            verify(cancellationService, never()).createCancelFlag(any());
         }
     }
 
@@ -117,13 +118,13 @@ class ChatStreamingServiceTest {
             when(toolResult.hasQueryResult()).thenReturn(true);
 
             ChatResult chatResult = new ChatResult("response", toolResult);
-            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
             when(orchestration.chat(any(), anyString(), any(), any(), any())).thenReturn(chatResult);
 
             streamingService.streamChat("show me data", history, session, "token", false, "bb-token");
             Thread.sleep(100);
 
-            verify(sessionService).setLastQueryResult(session, queryResult);
+            verify(exportService).setLastQueryResult(session, queryResult);
             verify(sseManager).sendCompletionAndClose(any(SseEmitter.class), eq(chatResult));
         }
 
@@ -134,13 +135,13 @@ class ChatStreamingServiceTest {
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
             ChatResult chatResult = new ChatResult("response", null);
-            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
             when(orchestration.chat(any(), anyString(), any(), any(), any())).thenReturn(chatResult);
 
             streamingService.streamChat("hello", history, session, "token", false, "bb-token");
             Thread.sleep(100);
 
-            verify(sessionService, never()).setLastQueryResult(any(), any());
+            verify(exportService, never()).setLastQueryResult(any(), any());
             verify(sseManager).sendCompletionAndClose(any(SseEmitter.class), eq(chatResult));
         }
     }
@@ -155,7 +156,7 @@ class ChatStreamingServiceTest {
             List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
-            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
             when(orchestration.chat(any(), anyString(), any(), any(), any()))
                     .thenReturn(new ChatResult("response", null));
 
@@ -178,7 +179,7 @@ class ChatStreamingServiceTest {
             List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
-            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
             when(orchestration.chat(any(), anyString(), any(), any(), any()))
                     .thenThrow(new RuntimeException("Test error"));
 
@@ -199,7 +200,7 @@ class ChatStreamingServiceTest {
             List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
-            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
             when(orchestration.chat(any(), anyString(), any(), any(), any()))
                     .thenThrow(new InterruptedException("Cancelled"));
 
@@ -207,7 +208,7 @@ class ChatStreamingServiceTest {
             Thread.sleep(100);
 
             verify(sseManager).handleCancellation(any(SseEmitter.class), eq(session));
-            verify(sessionService).clearCancelFlag(session);
+            verify(cancellationService).clearCancelFlag(session);
         }
     }
 
@@ -221,7 +222,7 @@ class ChatStreamingServiceTest {
             List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
-            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
             when(orchestration.chat(any(), anyString(), any(), any(), any()))
                     .thenReturn(new ChatResult("response", null));
 
@@ -251,7 +252,7 @@ class ChatStreamingServiceTest {
             List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
-            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
             when(orchestration.chat(any(), anyString(), any(), any(), any()))
                     .thenReturn(new ChatResult("response", null));
 
@@ -272,7 +273,7 @@ class ChatStreamingServiceTest {
             List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
-            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
             when(orchestration.chat(any(), anyString(), any(), any(), any()))
                     .thenThrow(new RuntimeException("Test error"));
 
@@ -282,7 +283,7 @@ class ChatStreamingServiceTest {
 
             assertThat(emitter).isNotNull();
             verify(sseManager).handleError(any(SseEmitter.class), any(RuntimeException.class));
-            verify(sessionService).clearCancelFlag(session);
+            verify(cancellationService).clearCancelFlag(session);
         }
 
         @Test
@@ -291,15 +292,14 @@ class ChatStreamingServiceTest {
             List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
-            when(sessionService.createCancelFlag(session)).thenReturn(cancelFlag);
+            when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
             when(orchestration.chat(any(), anyString(), any(), any(), any()))
                     .thenThrow(new RuntimeException("Orchestration failed"));
 
             streamingService.streamChat("test", history, session, "token", true, "bb-token");
             Thread.sleep(100);
 
-            verify(sessionService).clearCancelFlag(session);
+            verify(cancellationService).clearCancelFlag(session);
         }
     }
 }
-

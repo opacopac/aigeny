@@ -51,23 +51,32 @@ public class ChatController {
 
     private final OrchestrationService orchestration;
     private final TokenService tokenService;
-    private final ChatSessionService sessionService;
+    private final SessionHistoryService historyService;
+    private final SessionExportService exportService;
+    private final SessionCancellationService cancellationService;
+    private final SessionJiraWriteService jiraWriteService;
     private final StatusAggregatorService statusAggregator;
     private final ChatStreamingService streamingService;
     private final ExecutionContextManager contextManager;
 
     public ChatController(OrchestrationService orchestration,
                           TokenService tokenService,
-                          ChatSessionService sessionService,
+                          SessionHistoryService historyService,
+                          SessionExportService exportService,
+                          SessionCancellationService cancellationService,
+                          SessionJiraWriteService jiraWriteService,
                           StatusAggregatorService statusAggregator,
                           ChatStreamingService streamingService,
                           ExecutionContextManager contextManager) {
-        this.orchestration    = orchestration;
-        this.tokenService     = tokenService;
-        this.sessionService   = sessionService;
-        this.statusAggregator = statusAggregator;
-        this.streamingService = streamingService;
-        this.contextManager   = contextManager;
+        this.orchestration      = orchestration;
+        this.tokenService       = tokenService;
+        this.historyService     = historyService;
+        this.exportService      = exportService;
+        this.cancellationService = cancellationService;
+        this.jiraWriteService   = jiraWriteService;
+        this.statusAggregator   = statusAggregator;
+        this.streamingService   = streamingService;
+        this.contextManager     = contextManager;
     }
 
     // ── POST /api/chat ──────────────────────────────────────────────────────
@@ -83,10 +92,10 @@ public class ChatController {
                     ResponseEntity.badRequest().body(Map.of(KEY_ERROR, Messages.get(MSG_ERROR_EMPTY_MESSAGE))));
         }
 
-        List<Message> history = sessionService.getOrCreateHistory(session);
+        List<Message> history = historyService.getOrCreateHistory(session);
 
         final String jiraToken        = tokenService.getEffectiveJiraToken(session);
-        final boolean jiraWriteEnabled = sessionService.isJiraWriteModeEnabled(session);
+        final boolean jiraWriteEnabled = jiraWriteService.isJiraWriteModeEnabled(session);
         final String bitbucketToken   = tokenService.getEffectiveBitbucketToken(session);
 
         return CompletableFuture.supplyAsync(() -> {
@@ -95,7 +104,7 @@ public class ChatController {
             try {
                 ChatResult result = orchestration.chat(history, message);
                 if (result.hasExportData()) {
-                    sessionService.setLastQueryResult(session, result.lastToolResult().getQueryResult());
+                    exportService.setLastQueryResult(session, result.lastToolResult().getQueryResult());
                 }
                 return ResponseEntity.ok(Map.of(
                         KEY_RESPONSE,   result.response(),
@@ -121,10 +130,10 @@ public class ChatController {
             HttpSession session) {
 
         String message = body.getOrDefault(REQ_MESSAGE, "").trim();
-        List<Message> history = sessionService.getOrCreateHistory(session);
+        List<Message> history = historyService.getOrCreateHistory(session);
 
         String jiraToken = tokenService.getEffectiveJiraToken(session);
-        boolean jiraWriteEnabled = sessionService.isJiraWriteModeEnabled(session);
+        boolean jiraWriteEnabled = jiraWriteService.isJiraWriteModeEnabled(session);
         String bitbucketToken = tokenService.getEffectiveBitbucketToken(session);
 
         return streamingService.streamChat(
@@ -136,7 +145,7 @@ public class ChatController {
 
     @PostMapping("/chat/cancel")
     public ResponseEntity<Map<String, String>> cancelChat(HttpSession session) {
-        sessionService.triggerCancellation(session);
+        cancellationService.triggerCancellation(session);
         log.info("Chat cancelled via /api/chat/cancel for session {}", session.getId());
         return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
     }
@@ -145,8 +154,8 @@ public class ChatController {
 
     @PostMapping("/chat/clear")
     public ResponseEntity<Map<String, String>> clear(HttpSession session) {
-        sessionService.clearHistory(session);
-        sessionService.clearLastQueryResult(session);
+        historyService.clearHistory(session);
+        exportService.clearLastQueryResult(session);
         return ResponseEntity.ok(Map.of(KEY_STATUS, Messages.get(MSG_STATUS_CLEARED)));
     }
 

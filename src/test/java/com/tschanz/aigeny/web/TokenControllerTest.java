@@ -32,14 +32,14 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 class TokenControllerTest {
 
     @Mock private TokenService tokenService;
-    @Mock private ChatSessionService sessionService;
+    @Mock private SessionJiraWriteService jiraWriteService;
     @Mock private HttpSession session;
 
     private TokenController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new TokenController(tokenService, sessionService);
+        controller = new TokenController(tokenService, jiraWriteService);
     }
 
     // ── POST /api/jira/token ──────────────────────────────────────────────────
@@ -93,7 +93,7 @@ class TokenControllerTest {
             verify(tokenService).clearUserJiraToken(session);
             assertThat(response.getStatusCode().value()).isEqualTo(200);
             assertThat(response.getBody()).containsKey("status");
-            verifyNoMoreInteractions(sessionService);
+            verifyNoMoreInteractions(jiraWriteService);
         }
     }
 
@@ -109,7 +109,7 @@ class TokenControllerTest {
             ResponseEntity<Map<String, String>> response =
                     controller.setJiraWriteMode(Map.of("enabled", "true"), session);
 
-            verify(sessionService).setJiraWriteMode(session, true);
+            verify(jiraWriteService).setJiraWriteMode(session, true);
             assertThat(response.getBody()).containsEntry("status", "ok");
         }
 
@@ -118,7 +118,7 @@ class TokenControllerTest {
         void disablesWriteMode() {
             controller.setJiraWriteMode(Map.of("enabled", "false"), session);
 
-            verify(sessionService).setJiraWriteMode(session, false);
+            verify(jiraWriteService).setJiraWriteMode(session, false);
         }
 
         @Test
@@ -126,7 +126,7 @@ class TokenControllerTest {
         void defaultsToFalse() {
             controller.setJiraWriteMode(Map.of(), session);
 
-            verify(sessionService).setJiraWriteMode(session, false);
+            verify(jiraWriteService).setJiraWriteMode(session, false);
         }
     }
 
@@ -165,4 +165,3 @@ class TokenControllerTest {
         }
     }
 }
-

@@ -25,18 +25,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class ChatStreamingService {
 
     private final OrchestrationService orchestration;
-    private final ChatSessionService sessionService;
+    private final SessionCancellationService cancellationService;
+    private final SessionExportService exportService;
     private final ConfirmationOrchestrator confirmationOrchestrator;
     private final ExecutionContextManager contextManager;
     private final SseStreamManager sseManager;
 
     public ChatStreamingService(OrchestrationService orchestration,
-                                ChatSessionService sessionService,
+                                SessionCancellationService cancellationService,
+                                SessionExportService exportService,
                                 ConfirmationOrchestrator confirmationOrchestrator,
                                 ExecutionContextManager contextManager,
                                 SseStreamManager sseManager) {
         this.orchestration            = orchestration;
-        this.sessionService           = sessionService;
+        this.cancellationService      = cancellationService;
+        this.exportService            = exportService;
         this.confirmationOrchestrator = confirmationOrchestrator;
         this.contextManager           = contextManager;
         this.sseManager               = sseManager;
@@ -59,7 +62,7 @@ public class ChatStreamingService {
             return emitter;
         }
 
-        AtomicBoolean cancelFlag = sessionService.createCancelFlag(session);
+        AtomicBoolean cancelFlag = cancellationService.createCancelFlag(session);
         emitter.onCompletion(() -> cancelFlag.set(true));
         emitter.onTimeout(() -> cancelFlag.set(true));
         emitter.onError(t -> cancelFlag.set(true));
@@ -120,7 +123,7 @@ public class ChatStreamingService {
             );
 
             if (result.hasExportData()) {
-                sessionService.setLastQueryResult(session, result.lastToolResult().getQueryResult());
+                exportService.setLastQueryResult(session, result.lastToolResult().getQueryResult());
             }
 
             sseManager.sendCompletionAndClose(emitter, result);
@@ -133,7 +136,7 @@ public class ChatStreamingService {
     }
 
     private void cleanup(HttpSession session) {
-        sessionService.clearCancelFlag(session);
+        cancellationService.clearCancelFlag(session);
         contextManager.cleanupAllContexts();
     }
 }

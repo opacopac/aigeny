@@ -33,11 +33,11 @@ public class TokenController {
     private static final String MSG_STATUS_CLEARED = "chat.status.cleared";
 
     private final TokenService tokenService;
-    private final ChatSessionService sessionService;
+    private final SessionJiraWriteService jiraWriteService;
 
-    public TokenController(TokenService tokenService, ChatSessionService sessionService) {
-        this.tokenService   = tokenService;
-        this.sessionService = sessionService;
+    public TokenController(TokenService tokenService, SessionJiraWriteService jiraWriteService) {
+        this.tokenService    = tokenService;
+        this.jiraWriteService = jiraWriteService;
     }
 
     // ── POST /api/jira/token ─────────────────────────────────────────────────
@@ -69,7 +69,7 @@ public class TokenController {
             @RequestBody Map<String, Object> body,
             HttpSession session) {
         boolean enabled = Boolean.parseBoolean(String.valueOf(body.getOrDefault("enabled", "false")));
-        sessionService.setJiraWriteMode(session, enabled);
+        jiraWriteService.setJiraWriteMode(session, enabled);
         return ResponseEntity.ok(Map.of(KEY_STATUS, VAL_OK));
     }
 

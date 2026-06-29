@@ -61,16 +61,16 @@ public class ConfirmationOrchestrator {
     private static final String MSG_CONFIRMATION_DECLINED = "jira.confirmation.declined";
     private static final String MSG_CONFIRMATION_TIMEOUT  = "jira.confirmation.timeout";
 
-    private final ChatSessionService sessionService;
+    private final SessionConfirmationService confirmationService;
     private final JiraWriteExecutor jiraWriteExecutor;
     private final ObjectMapper objectMapper;
 
-    public ConfirmationOrchestrator(ChatSessionService sessionService,
+    public ConfirmationOrchestrator(SessionConfirmationService confirmationService,
                                    JiraWriteExecutor jiraWriteExecutor,
                                    ObjectMapper objectMapper) {
-        this.sessionService    = sessionService;
-        this.jiraWriteExecutor = jiraWriteExecutor;
-        this.objectMapper      = objectMapper;
+        this.confirmationService = confirmationService;
+        this.jiraWriteExecutor   = jiraWriteExecutor;
+        this.objectMapper        = objectMapper;
     }
 
     /**
@@ -110,7 +110,7 @@ public class ConfirmationOrchestrator {
         // No pre-approval: show individual confirmation dialog
         sendConfirmationRequired(emitter, humanDescription);
 
-        CompletableFuture<Boolean> future = sessionService.createConfirmationFuture(session);
+        CompletableFuture<Boolean> future = confirmationService.createConfirmationFuture(session);
         try {
             boolean confirmed = future.get(CONFIRMATION_TIMEOUT_MIN, TimeUnit.MINUTES);
             return executeOrDecline(confirmed, emitter, jiraToken, jiraWriteEnabled, action);
@@ -139,7 +139,7 @@ public class ConfirmationOrchestrator {
                                                         List<WriteToolCallInfo> writeToolInfos) {
         sendBatchConfirmationRequired(emitter, writeToolInfos);
 
-        CompletableFuture<Map<String, Boolean>> future = sessionService.createBatchConfirmationFuture(session);
+        CompletableFuture<Map<String, Boolean>> future = confirmationService.createBatchConfirmationFuture(session);
         try {
             Map<String, Boolean> result = future.get(CONFIRMATION_TIMEOUT_MIN, TimeUnit.MINUTES);
             

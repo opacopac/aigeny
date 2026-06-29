@@ -38,7 +38,8 @@ public class StatusAggregatorService {
     private final BitbucketConfiguration bitbucketConfig;
     private final ConfigurationValidator configValidator;
     private final TokenService tokenService;
-    private final ChatSessionService sessionService;
+    private final SessionJiraWriteService jiraWriteService;
+    private final SessionExportService exportService;
     private final SchemaLoader schemaLoader;
 
     public StatusAggregatorService(LlmConfiguration llmConfig,
@@ -47,7 +48,8 @@ public class StatusAggregatorService {
                                    BitbucketConfiguration bitbucketConfig,
                                    ConfigurationValidator configValidator,
                                    TokenService tokenService,
-                                   ChatSessionService sessionService,
+                                   SessionJiraWriteService jiraWriteService,
+                                   SessionExportService exportService,
                                    SchemaLoader schemaLoader) {
         this.llmConfig = llmConfig;
         this.dbConfig = dbConfig;
@@ -55,7 +57,8 @@ public class StatusAggregatorService {
         this.bitbucketConfig = bitbucketConfig;
         this.configValidator = configValidator;
         this.tokenService = tokenService;
-        this.sessionService = sessionService;
+        this.jiraWriteService = jiraWriteService;
+        this.exportService = exportService;
         this.schemaLoader = schemaLoader;
     }
 
@@ -81,14 +84,14 @@ public class StatusAggregatorService {
         // Jira configuration and session state
         status.put(KEY_JIRA_CONFIGURED, tokenService.hasJiraToken(session));
         status.put(KEY_JIRA_BASEURL_CONFIGURED, isJiraBaseUrlConfigured());
-        status.put(KEY_JIRA_WRITE_ENABLED, sessionService.isJiraWriteModeEnabled(session));
+        status.put(KEY_JIRA_WRITE_ENABLED, jiraWriteService.isJiraWriteModeEnabled(session));
 
         // Bitbucket configuration
         status.put(KEY_BITBUCKET_CONFIGURED, tokenService.hasBitbucketToken(session));
         status.put(KEY_BITBUCKET_BASEURL_CONFIGURED, isBitbucketBaseUrlConfigured());
 
         // Export data availability
-        status.put(KEY_HAS_EXPORT, sessionService.hasQueryResult(session));
+        status.put(KEY_HAS_EXPORT, exportService.hasQueryResult(session));
 
         return status;
     }

@@ -21,16 +21,16 @@ public class ExportController {
     private static final String CSV_CONTENT_TYPE        = "text/csv;charset=UTF-8";
 
     private final ExportService exportService;
-    private final ChatSessionService sessionService;
+    private final SessionExportService sessionExportService;
 
-    public ExportController(ExportService exportService, ChatSessionService sessionService) {
+    public ExportController(ExportService exportService, SessionExportService sessionExportService) {
         this.exportService = exportService;
-        this.sessionService = sessionService;
+        this.sessionExportService = sessionExportService;
     }
 
     @GetMapping("/csv")
     public ResponseEntity<byte[]> downloadCsv(HttpSession session) {
-        QueryResult result = sessionService.getLastQueryResult(session);
+        QueryResult result = sessionExportService.getLastQueryResult(session);
         if (result == null || result.isEmpty()) {
             return ResponseEntity.noContent().build();
         }

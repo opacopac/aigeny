@@ -17,9 +17,24 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Manages chat session state including conversation history, query results,
  * pending actions, and cancellation flags.
+ *
+ * <p>Implements five narrow ISP interfaces so that each consumer can depend
+ * only on the subset of session operations it actually needs (I-1 refactoring):
+ * <ul>
+ *   <li>{@link SessionHistoryService}     – history read / clear</li>
+ *   <li>{@link SessionExportService}      – query-result export</li>
+ *   <li>{@link SessionCancellationService}– cancel flag lifecycle</li>
+ *   <li>{@link SessionConfirmationService}– single and batch confirmation futures</li>
+ *   <li>{@link SessionJiraWriteService}   – Jira write-mode flag</li>
+ * </ul>
  */
 @Service
-public class ChatSessionService {
+public class ChatSessionService implements
+        SessionHistoryService,
+        SessionExportService,
+        SessionCancellationService,
+        SessionConfirmationService,
+        SessionJiraWriteService {
 
     private static final Logger log = LoggerFactory.getLogger(ChatSessionService.class);
 
