@@ -2,9 +2,8 @@ package com.tschanz.aigeny.llm_tool;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.config.BitbucketConfiguration;
-import com.tschanz.aigeny.config.DbConfiguration;
-import com.tschanz.aigeny.config.ConfigurationValidator;
 import com.tschanz.aigeny.config.JiraConfiguration;
+import com.tschanz.aigeny.llm_tool.db.OracleConnectionPool;
 import com.tschanz.aigeny.llm_tool.bitbucket.ReadBitbucketFileTool;
 import com.tschanz.aigeny.llm_tool.bitbucket.SearchBitbucketTool;
 import com.tschanz.aigeny.llm_tool.db.OracleDbTool;
@@ -35,8 +34,7 @@ class ToolGetCallDescriptionTest {
 
     @Mock private JiraConfiguration jiraConfig;
     @Mock private BitbucketConfiguration bitbucketConfig;
-    @Mock private DbConfiguration dbConfig;
-    @Mock private ConfigurationValidator configValidator;
+    @Mock private OracleConnectionPool oracleConnectionPool;
     @Mock private JiraHttpClient jiraHttpClient;
 
     @BeforeEach
@@ -53,7 +51,7 @@ class ToolGetCallDescriptionTest {
 
         private OracleDbTool tool;
 
-        @BeforeEach void init() { tool = new OracleDbTool(dbConfig, configValidator, objectMapper); }
+        @BeforeEach void init() { tool = new OracleDbTool(oracleConnectionPool, objectMapper); }
 
         @Test
         @DisplayName("returns 'description' field from JSON")

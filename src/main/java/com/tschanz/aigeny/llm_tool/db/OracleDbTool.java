@@ -1,27 +1,30 @@
 package com.tschanz.aigeny.llm_tool.db;
 
-import com.tschanz.aigeny.config.ConfigurationValidator;
-import com.tschanz.aigeny.config.DbConfiguration;
+import com.tschanz.aigeny.Messages;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.llm_tool.AbstractTool;
 import com.tschanz.aigeny.llm_tool.QueryResult;
 import com.tschanz.aigeny.llm_tool.ToolResult;
-import com.tschanz.aigeny.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import javax.sql.DataSource;
 import java.sql.*;
 import java.util.*;
 import java.util.regex.Pattern;
 
 /**
  * Tool that executes read-only SQL SELECT queries against Oracle DB.
- * The generated SQL is logged and included in the tool result so it appears in the chat.
+ *
+ * <p>The connection pool lifecycle is delegated to {@link OracleConnectionPool}
+ * (S-4 fix). This class is now solely responsible for SQL validation and query
+ * execution.
+ *
+ * <p>The generated SQL is logged and included in the tool result so it appears
+ * in the chat.
  */
 @Service
 public class OracleDbTool extends AbstractTool {
@@ -42,41 +45,11 @@ public class OracleDbTool extends AbstractTool {
             "\\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|MERGE|EXEC|EXECUTE|GRANT|REVOKE)\\b",
             Pattern.CASE_INSENSITIVE);
 
-    private final DbConfiguration dbConfig;
-    private final ConfigurationValidator configValidator;
-    private HikariDataSource pool;
+    private final OracleConnectionPool connectionPool;
 
-    public OracleDbTool(DbConfiguration dbConfig, ConfigurationValidator configValidator, ObjectMapper objectMapper) {
+    public OracleDbTool(OracleConnectionPool connectionPool, ObjectMapper objectMapper) {
         super(objectMapper);
-        this.dbConfig = dbConfig;
-        this.configValidator = configValidator;
-    }
-
-    private synchronized HikariDataSource getPool() {
-        if (pool == null && configValidator.isDbConfigured(dbConfig)) {
-            try {
-                HikariConfig hc = new HikariConfig();
-                hc.setJdbcUrl(dbConfig.getUrl());
-                hc.setUsername(dbConfig.getUsername());
-                hc.setPassword(dbConfig.getPassword());
-                hc.setMaximumPoolSize(3);
-                hc.setConnectionTimeout(15_000);
-                hc.setReadOnly(true);
-                hc.setPoolName("AIgeny-Oracle");
-                // If a dedicated schema is configured (different from the login user),
-                // switch the Oracle session schema so unqualified table references work.
-                String effectiveSchema = dbConfig.getEffectiveSchema();
-                if (!effectiveSchema.isBlank() && !effectiveSchema.equalsIgnoreCase(dbConfig.getUsername())) {
-                    hc.setConnectionInitSql("ALTER SESSION SET CURRENT_SCHEMA = " + effectiveSchema);
-                    log.info("Oracle pool: CURRENT_SCHEMA will be set to {}", effectiveSchema);
-                }
-                pool = new HikariDataSource(hc);
-                log.info("Oracle connection pool created");
-            } catch (Exception e) {
-                log.error("Failed to create Oracle pool: {}", e.getMessage());
-            }
-        }
-        return pool;
+        this.connectionPool = connectionPool;
     }
 
     @Override public String getName() { return "query_oracle_db"; }
@@ -102,7 +75,7 @@ public class OracleDbTool extends AbstractTool {
 
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
-        if (!configValidator.isDbConfigured(dbConfig)) {
+        if (!connectionPool.isConfigured()) {
             return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
         }
 
@@ -120,7 +93,7 @@ public class OracleDbTool extends AbstractTool {
         log.info("  DB REQUEST  desc=\"{}\"", description);
         log.info("  SQL: {}", sql);
 
-        HikariDataSource ds = getPool();
+        DataSource ds = connectionPool.getDataSource();
         if (ds == null) {
             log.error("  DB REQUEST  FAILED - connection pool unavailable");
             return new ToolResult(Messages.get(MSG_NO_CONNECTION));
@@ -160,4 +133,3 @@ public class OracleDbTool extends AbstractTool {
         }
     }
 }
-
