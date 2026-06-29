@@ -1,7 +1,7 @@
 package com.tschanz.aigeny.llm.anthropic;
 import com.tschanz.aigeny.llm.LlmClient;
 
-import com.tschanz.aigeny.config.LlmConfiguration;
+import com.tschanz.aigeny.llm.LlmConfiguration;
 import com.tschanz.aigeny.llm.model.*;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

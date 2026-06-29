@@ -1,4 +1,6 @@
 package com.tschanz.aigeny.orchestration;
+import com.tschanz.aigeny.confirmation.BatchConfirmationService;
+import com.tschanz.aigeny.chat.ChatResult;
 
 import com.tschanz.aigeny.Messages;
 import com.tschanz.aigeny.llm.LlmClient;

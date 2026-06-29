@@ -1,7 +1,7 @@
 package com.tschanz.aigeny.llm.openai;
 import com.tschanz.aigeny.llm.LlmAdapterFactory;
 
-import com.tschanz.aigeny.config.LlmConfiguration;
+import com.tschanz.aigeny.llm.LlmConfiguration;
 import com.tschanz.aigeny.llm.github.GitHubCopilotService;
 import com.tschanz.aigeny.llm.LlmClient;
 import com.tschanz.aigeny.llm.openai.OpenAiCompatibleAdapter;

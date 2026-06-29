@@ -1,4 +1,8 @@
 package com.tschanz.aigeny.config;
+import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
+import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.jira.JiraConfiguration;
+import com.tschanz.aigeny.llm.LlmConfiguration;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

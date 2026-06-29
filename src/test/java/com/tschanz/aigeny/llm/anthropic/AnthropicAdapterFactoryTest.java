@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.llm.anthropic;
 
-import com.tschanz.aigeny.config.LlmConfiguration;
+import com.tschanz.aigeny.llm.LlmConfiguration;
 import com.tschanz.aigeny.llm.anthropic.AnthropicAdapter;
 import com.tschanz.aigeny.llm.github.GitHubCopilotService;
 import com.tschanz.aigeny.llm.LlmClient;
