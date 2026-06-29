@@ -11,6 +11,7 @@ import { GithubConnector } from './github-connect.js';
 import { TokenModal } from './token-modal.js';
 import { JiraWriteMode } from './jira-write-mode.js';
 import { StatusPanel } from './status-panel.js';
+import { SchemaPanel } from './schema-panel.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let isThinking = false;
@@ -119,27 +120,13 @@ async function refreshGithubInfoBox()   { await _githubConnector.refreshInfoBox(
 
 // ── Controls ───────────────────────────────────────────────────────────────
 
+const _schemaPanel = new SchemaPanel({
+  btn:        document.querySelector('button[onclick="reloadSchema()"]'),
+  infoTables: document.getElementById('infoTables'),
+});
 
 async function reloadSchema() {
-  const btn = event.target;
-  btn.disabled = true;
-    btn.textContent = '⌛ Lade...';
-  try {
-    const res = await fetch('/api/schema/reload', { method: 'POST' });
-    const data = await res.json();
-    if (data.status === 'ok') {
-      document.getElementById('infoTables').textContent = data.tables;
-      appendMessage('aigeny',
-        `Da! Schema neu geladen, Towarischtsch. Ich kenne jetzt **${data.tables}** Tabellen in Datenbank. Otschen choroscho!`);
-    } else {
-      appendMessage('aigeny', 'Njet! Schema-Neuladen fehlgeschlagen: ' + (data.message || 'unbekannter Fehler'));
-    }
-  } catch (err) {
-    appendMessage('aigeny', 'Njet! Schema konnte nicht geladen werden: ' + err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '↻ Schema neu laden';
-  }
+  await _schemaPanel.reload(appendMessage);
 }
 
 
