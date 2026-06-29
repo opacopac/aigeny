@@ -1,12 +1,12 @@
 package com.tschanz.aigeny.web;
 
-import com.tschanz.aigeny.llm_tool.ToolResult;
-import com.tschanz.aigeny.llm_tool.bitbucket.BitbucketTokenContext;
-import com.tschanz.aigeny.llm_tool.jira.ConfirmationContext;
-import com.tschanz.aigeny.llm_tool.jira.JiraTokenContext;
-import com.tschanz.aigeny.llm_tool.jira.JiraWriteContext;
-import com.tschanz.aigeny.llm_tool.jira.PendingJiraAction;
-import com.tschanz.aigeny.llm_tool.jira.PendingJiraActionContext;
+import com.tschanz.aigeny.tool.ToolResult;
+import com.tschanz.aigeny.tool.bitbucket.BitbucketTokenContext;
+import com.tschanz.aigeny.tool.jira.ConfirmationContext;
+import com.tschanz.aigeny.tool.jira.JiraTokenContext;
+import com.tschanz.aigeny.tool.jira.JiraWriteContext;
+import com.tschanz.aigeny.tool.jira.PendingJiraAction;
+import com.tschanz.aigeny.tool.jira.PendingJiraActionContext;
 import com.tschanz.aigeny.orchestration.BatchConfirmationContext;
 import com.tschanz.aigeny.orchestration.WriteToolCallInfo;
 import org.junit.jupiter.api.AfterEach;

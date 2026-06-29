@@ -2,11 +2,11 @@ package com.tschanz.aigeny.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;
-import com.tschanz.aigeny.llm_tool.ToolResult;
-import com.tschanz.aigeny.llm_tool.jira.ConfirmationContext;
-import com.tschanz.aigeny.llm_tool.jira.JiraWriteContext;
-import com.tschanz.aigeny.llm_tool.jira.JiraWriteExecutor;
-import com.tschanz.aigeny.llm_tool.jira.PendingJiraAction;
+import com.tschanz.aigeny.tool.ToolResult;
+import com.tschanz.aigeny.tool.jira.ConfirmationContext;
+import com.tschanz.aigeny.tool.jira.JiraWriteContext;
+import com.tschanz.aigeny.tool.jira.JiraWriteExecutor;
+import com.tschanz.aigeny.tool.jira.PendingJiraAction;
 import com.tschanz.aigeny.orchestration.CurrentToolCallContext;
 import com.tschanz.aigeny.orchestration.WriteToolCallInfo;
 import jakarta.servlet.http.HttpSession;

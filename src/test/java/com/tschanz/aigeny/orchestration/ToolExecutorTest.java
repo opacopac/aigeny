@@ -2,8 +2,8 @@ package com.tschanz.aigeny.orchestration;
 
 import com.tschanz.aigeny.llm.model.ToolCall;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
-import com.tschanz.aigeny.llm_tool.Tool;
-import com.tschanz.aigeny.llm_tool.ToolResult;
+import com.tschanz.aigeny.tool.Tool;
+import com.tschanz.aigeny.tool.ToolResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

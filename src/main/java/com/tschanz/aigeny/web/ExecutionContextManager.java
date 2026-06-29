@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.web;
 
-import com.tschanz.aigeny.llm_tool.jira.ConfirmationContext;
+import com.tschanz.aigeny.tool.jira.ConfirmationContext;
 import com.tschanz.aigeny.orchestration.BatchConfirmationContext;
 import com.tschanz.aigeny.orchestration.WriteToolCallInfo;
 import org.slf4j.Logger;

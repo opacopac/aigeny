@@ -1,8 +1,8 @@
 package com.tschanz.aigeny.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tschanz.aigeny.llm_tool.QueryResult;
-import com.tschanz.aigeny.llm_tool.ToolResult;
+import com.tschanz.aigeny.tool.QueryResult;
+import com.tschanz.aigeny.tool.ToolResult;
 import com.tschanz.aigeny.orchestration.ChatResult;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;

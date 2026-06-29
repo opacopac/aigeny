@@ -1,8 +1,8 @@
 package com.tschanz.aigeny.web;
 
 import com.tschanz.aigeny.llm.model.Message;
-import com.tschanz.aigeny.llm_tool.QueryResult;
-import com.tschanz.aigeny.llm_tool.jira.PendingJiraAction;
+import com.tschanz.aigeny.tool.QueryResult;
+import com.tschanz.aigeny.tool.jira.PendingJiraAction;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

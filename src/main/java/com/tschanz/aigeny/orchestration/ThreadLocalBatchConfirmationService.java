@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.orchestration;
 
-import com.tschanz.aigeny.llm_tool.jira.ConfirmationContext;
+import com.tschanz.aigeny.tool.jira.ConfirmationContext;
 import org.springframework.stereotype.Service;
 
 import java.util.List;

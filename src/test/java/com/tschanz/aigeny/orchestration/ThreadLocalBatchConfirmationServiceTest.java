@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.orchestration;
 
-import com.tschanz.aigeny.llm_tool.jira.ConfirmationContext;
+import com.tschanz.aigeny.tool.jira.ConfirmationContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

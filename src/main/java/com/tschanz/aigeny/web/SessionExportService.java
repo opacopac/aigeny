@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.web;
 
-import com.tschanz.aigeny.llm_tool.QueryResult;
+import com.tschanz.aigeny.tool.QueryResult;
 import jakarta.servlet.http.HttpSession;
 
 /**

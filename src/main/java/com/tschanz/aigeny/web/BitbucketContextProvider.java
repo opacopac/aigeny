@@ -1,6 +1,6 @@
 package com.tschanz.aigeny.web;
 
-import com.tschanz.aigeny.llm_tool.bitbucket.BitbucketTokenContext;
+import com.tschanz.aigeny.tool.bitbucket.BitbucketTokenContext;
 import org.springframework.stereotype.Service;
 
 /**

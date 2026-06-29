@@ -1,8 +1,8 @@
 package com.tschanz.aigeny.web;
 
-import com.tschanz.aigeny.llm_tool.jira.JiraTokenContext;
-import com.tschanz.aigeny.llm_tool.jira.JiraWriteContext;
-import com.tschanz.aigeny.llm_tool.jira.PendingJiraActionContext;
+import com.tschanz.aigeny.tool.jira.JiraTokenContext;
+import com.tschanz.aigeny.tool.jira.JiraWriteContext;
+import com.tschanz.aigeny.tool.jira.PendingJiraActionContext;
 import org.springframework.stereotype.Service;
 
 /**
