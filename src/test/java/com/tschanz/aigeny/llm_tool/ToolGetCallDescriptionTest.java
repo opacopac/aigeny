@@ -77,7 +77,7 @@ class ToolGetCallDescriptionTest {
 
         private QueryJiraTool tool;
 
-        @BeforeEach void init() { tool = new QueryJiraTool(jiraConfig, objectMapper, jiraHttpClient); }
+        @BeforeEach void init() { tool = new QueryJiraTool(jiraConfig, objectMapper, jiraHttpClient, new JiraIssueFormatter(objectMapper)); }
 
         @Test
         @DisplayName("returns 'Jira-Ticket lesen: KEY' when issueKey is given")

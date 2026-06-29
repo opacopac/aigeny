@@ -22,6 +22,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.spy;
 
 /**
  * Unit tests for {@link QueryJiraTool}.
@@ -42,6 +43,7 @@ class QueryJiraToolTest {
     @Mock private HttpResponse<String> httpResponse;
 
     private QueryJiraTool tool;
+    private JiraIssueFormatter formatter;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // Minimal Jira issue JSON for single-issue responses
@@ -79,7 +81,8 @@ class QueryJiraToolTest {
 
     @BeforeEach
     void setUp() {
-        tool = new QueryJiraTool(jiraConfig, objectMapper, jiraHttpClient);
+        formatter = spy(new JiraIssueFormatter(objectMapper));
+        tool = new QueryJiraTool(jiraConfig, objectMapper, jiraHttpClient, formatter);
         when(jiraConfig.getBaseUrl()).thenReturn("https://jira.example.com");
         JiraTokenContext.set("test-token");
     }
@@ -237,6 +240,35 @@ class QueryJiraToolTest {
             assertThat(result.getText()).contains("NOVA-1");
         }
     }
+
+    // ── Delegation to JiraIssueFormatter (S-2) ───────────────────────────────
+
+    @Nested
+    @DisplayName("Delegates formatting to JiraIssueFormatter (S-2)")
+    class DelegatesFormatting {
+
+        @Test
+        @DisplayName("single-issue path delegates to formatter.formatSingleIssue()")
+        void issueByKey_delegatesToFormatter() throws Exception {
+            when(httpResponse.statusCode()).thenReturn(200);
+            when(httpResponse.body()).thenReturn(SINGLE_ISSUE_JSON);
+            when(jiraHttpClient.get(anyString(), anyString())).thenReturn(httpResponse);
+
+            tool.execute("{\"issueKey\":\"NOVA-1\"}");
+
+            verify(formatter).formatSingleIssue(SINGLE_ISSUE_JSON);
+        }
+
+        @Test
+        @DisplayName("JQL search path delegates to formatter.formatSearchResponse()")
+        void jqlSearch_delegatesToFormatter() throws Exception {
+            when(httpResponse.statusCode()).thenReturn(200);
+            when(httpResponse.body()).thenReturn(SEARCH_RESPONSE_JSON);
+            when(jiraHttpClient.get(anyString(), anyString())).thenReturn(httpResponse);
+
+            tool.execute("{\"jql\":\"project = NOVA\"}");
+
+            verify(formatter).formatSearchResponse(SEARCH_RESPONSE_JSON);
+        }
+    }
 }
-
-
