@@ -27,12 +27,13 @@ import static org.mockito.Mockito.when;
  *
  * <p>Verifies that:
  * <ul>
- *   <li>The tool uses the injected {@link JiraHttpClient} (D-4 fix – no longer creates
- *       its own {@code java.net.http.HttpClient})</li>
+ *   <li>The tool uses the injected {@link JiraHttpClient} – no own {@code java.net.http.HttpClient}
+ *       and no sentinel-node pattern (S-3 / D-4 fix)</li>
  *   <li>The tool uses the injected {@link ConfirmationService} instead of the static
  *       {@link ConfirmationContext} (D-1 fix)</li>
  *   <li>Configuration and authorisation guards work correctly</li>
  *   <li>Write-mode guard blocks execution when Jira write mode is disabled</li>
+ *   <li>Subtask cloning fetches each sub-task via the injected HTTP client</li>
  * </ul>
  */
 @ExtendWith(MockitoExtension.class)
@@ -163,7 +164,6 @@ class CloneJiraIssueToolTest {
         @DisplayName("returns error result when source issue is not found (404)")
         void returnsErrorOn404() throws Exception {
             when(httpResponse.statusCode()).thenReturn(404);
-            when(httpResponse.body()).thenReturn("Not Found");
             when(jiraHttpClient.get(anyString(), anyString())).thenReturn(httpResponse);
 
             ToolResult result = tool.execute("{\"sourceIssueKey\":\"NOVA-MISSING\"}");
@@ -175,7 +175,6 @@ class CloneJiraIssueToolTest {
         @DisplayName("returns error result when Jira returns 401")
         void returnsErrorOn401() throws Exception {
             when(httpResponse.statusCode()).thenReturn(401);
-            when(httpResponse.body()).thenReturn("Unauthorized");
             when(jiraHttpClient.get(anyString(), anyString())).thenReturn(httpResponse);
 
             ToolResult result = tool.execute("{\"sourceIssueKey\":\"NOVA-100\"}");
@@ -218,6 +217,115 @@ class CloneJiraIssueToolTest {
 
             assertThat(result).isSameAs(expected);
             verify(confirmationService).requestConfirmation(contains("NOVA-100"), any(PendingJiraAction.class));
+        }
+    }
+
+    // ── Subtask cloning ───────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Subtask cloning")
+    class SubtaskCloning {
+
+        private static final String SOURCE_WITH_SUBTASKS_JSON = """
+                {
+                  "key": "NOVA-100",
+                  "fields": {
+                    "summary":     "Parent Issue",
+                    "description": "",
+                    "issuetype":   { "name": "Story" },
+                    "assignee":    { "name": "u123456", "displayName": "Alice" },
+                    "project":     { "key": "NOVA" },
+                    "subtasks": [
+                      { "key": "NOVA-101" },
+                      { "key": "NOVA-102" }
+                    ]
+                  }
+                }""";
+
+        private static final String SUBTASK_JSON = """
+                {
+                  "key": "NOVA-101",
+                  "fields": {
+                    "summary":   "Sub-task A",
+                    "issuetype": { "name": "Sub-task" },
+                    "assignee":  { "name": "u123456" },
+                    "description": ""
+                  }
+                }""";
+
+        @Test
+        @DisplayName("fetches each subtask via jiraHttpClient when cloneSubtasks=true")
+        void fetchesEachSubtaskViaHttpClient() throws Exception {
+            HttpResponse<String> parentResp   = mockResponseWith(200, SOURCE_WITH_SUBTASKS_JSON);
+            HttpResponse<String> subtaskResp  = mockResponseWith(200, SUBTASK_JSON);
+
+            when(jiraHttpClient.get(contains("NOVA-100"), anyString())).thenReturn(parentResp);
+            when(jiraHttpClient.get(contains("NOVA-101"), anyString())).thenReturn(subtaskResp);
+            when(jiraHttpClient.get(contains("NOVA-102"), anyString())).thenReturn(subtaskResp);
+            when(confirmationService.isAvailable()).thenReturn(true);
+            when(confirmationService.requestConfirmation(anyString(), any())).thenReturn(new ToolResult("ok"));
+
+            tool.execute("{\"sourceIssueKey\":\"NOVA-100\",\"cloneSubtasks\":true}");
+
+            verify(jiraHttpClient).get(contains("NOVA-101"), anyString());
+            verify(jiraHttpClient).get(contains("NOVA-102"), anyString());
+        }
+
+        @Test
+        @DisplayName("confirmation description mentions subtask count when cloneSubtasks=true")
+        void confirmationMentionsSubtaskCount() throws Exception {
+            HttpResponse<String> parentResp   = mockResponseWith(200, SOURCE_WITH_SUBTASKS_JSON);
+            HttpResponse<String> subtaskResp  = mockResponseWith(200, SUBTASK_JSON);
+
+            when(jiraHttpClient.get(contains("NOVA-100"), anyString())).thenReturn(parentResp);
+            when(jiraHttpClient.get(contains("NOVA-101"), anyString())).thenReturn(subtaskResp);
+            when(jiraHttpClient.get(contains("NOVA-102"), anyString())).thenReturn(subtaskResp);
+            when(confirmationService.isAvailable()).thenReturn(true);
+            when(confirmationService.requestConfirmation(anyString(), any())).thenReturn(new ToolResult("ok"));
+
+            tool.execute("{\"sourceIssueKey\":\"NOVA-100\",\"cloneSubtasks\":true}");
+
+            verify(confirmationService).requestConfirmation(contains("Sub-Tasks"), any());
+        }
+
+        @Test
+        @DisplayName("skips subtask when HTTP fetch returns non-200 and continues with rest")
+        void skipsFailedSubtaskAndContinues() throws Exception {
+            HttpResponse<String> parentResp  = mockResponseWith(200, SOURCE_WITH_SUBTASKS_JSON);
+            HttpResponse<String> failResp    = mockResponseWith(500, "Internal Error");
+            HttpResponse<String> subtaskResp = mockResponseWith(200, SUBTASK_JSON);
+
+            when(jiraHttpClient.get(contains("NOVA-100"), anyString())).thenReturn(parentResp);
+            when(jiraHttpClient.get(contains("NOVA-101"), anyString())).thenReturn(failResp);
+            when(jiraHttpClient.get(contains("NOVA-102"), anyString())).thenReturn(subtaskResp);
+            when(confirmationService.isAvailable()).thenReturn(true);
+            when(confirmationService.requestConfirmation(anyString(), any())).thenReturn(new ToolResult("ok"));
+
+            // Should not throw – failed subtask is skipped
+            ToolResult result = tool.execute("{\"sourceIssueKey\":\"NOVA-100\",\"cloneSubtasks\":true}");
+
+            assertThat(result.getText()).isEqualTo("ok");
+        }
+
+        @Test
+        @DisplayName("does not fetch subtasks when cloneSubtasks is false (default)")
+        void doesNotFetchSubtasksWhenDisabled() throws Exception {
+            HttpResponse<String> parentResp = mockResponseWith(200, SOURCE_WITH_SUBTASKS_JSON);
+            when(jiraHttpClient.get(anyString(), anyString())).thenReturn(parentResp);
+            when(confirmationService.isAvailable()).thenReturn(false);
+
+            tool.execute("{\"sourceIssueKey\":\"NOVA-100\"}");
+
+            // Only the parent issue fetch, no subtask URLs
+            verify(jiraHttpClient, times(1)).get(anyString(), anyString());
+        }
+
+        @SuppressWarnings("unchecked")
+        private HttpResponse<String> mockResponseWith(int status, String body) {
+            HttpResponse<String> resp = mock(HttpResponse.class);
+            when(resp.statusCode()).thenReturn(status);
+            lenient().when(resp.body()).thenReturn(body);
+            return resp;
         }
     }
 }

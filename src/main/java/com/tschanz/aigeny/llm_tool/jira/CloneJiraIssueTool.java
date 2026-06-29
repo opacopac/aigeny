@@ -38,8 +38,6 @@ public class CloneJiraIssueTool extends AbstractTool {
     private static final String MSG_SOURCE_NOT_FOUND = "jira.error.issue_not_found";
     private static final String MSG_AUTH_FAILED      = "jira.error.auth_failed_en";
     private static final String MSG_HTTP_ERROR       = "jira.error.http_en";
-    private static final String MSG_QUEUED           = "jira.clone.queued";
-    private static final String MSG_QUEUED_SUBTASKS  = "jira.clone.queued_with_subtasks";
     private static final String MSG_WRITE_DISABLED   = "jira.write.mode_disabled";
     private static final String MSG_NO_STREAMING     = "jira.error.no_streaming_context";
 
@@ -103,7 +101,7 @@ public class CloneJiraIssueTool extends AbstractTool {
             return new ToolResult(Messages.get(MSG_WRITE_DISABLED));
         }
 
-                String baseUrl = jiraConfig.getBaseUrl() == null ? "" : jiraConfig.getBaseUrl().replaceAll("/$", "");
+        String baseUrl = jiraConfig.getBaseUrl() == null ? "" : jiraConfig.getBaseUrl().replaceAll("/$", "");
         if (baseUrl.isBlank()) {
             return new ToolResult(Messages.get(MSG_NOT_CONFIGURED));
         }
@@ -132,18 +130,14 @@ public class CloneJiraIssueTool extends AbstractTool {
                 + "?fields=summary,description,issuetype,priority,assignee,project,subtasks";
         log.info(">> JIRA GET (clone source) {}", fetchUrl);
 
-        JsonNode source = getJson(fetchUrl, auth);
-        if (source == null) return new ToolResult(Messages.get(MSG_HTTP_ERROR, "?", "Request failed"));
-
-        // handle error nodes set via sentinel
-        if (source.has("_error")) {
-            int status = source.path("_status").asInt(0);
-            if (status == 404) return new ToolResult(Messages.get(MSG_SOURCE_NOT_FOUND, sourceKey));
-            if (status == 401) return new ToolResult(Messages.get(MSG_AUTH_FAILED));
-            return new ToolResult(Messages.get(MSG_HTTP_ERROR, status, source.path("_body").asText("")));
+        HttpResponse<String> sourceResp = jiraHttpClient.get(fetchUrl, auth);
+        if (sourceResp.statusCode() == 404) return new ToolResult(Messages.get(MSG_SOURCE_NOT_FOUND, sourceKey));
+        if (sourceResp.statusCode() == 401) return new ToolResult(Messages.get(MSG_AUTH_FAILED));
+        if (sourceResp.statusCode() != 200) {
+            return new ToolResult(Messages.get(MSG_HTTP_ERROR, sourceResp.statusCode(), sourceResp.body()));
         }
 
-        JsonNode fields = source.path("fields");
+        JsonNode fields = objectMapper.readTree(sourceResp.body()).path("fields");
 
         // ── Derive clone fields ─────────────────────────────────────────────
         String srcProjectKey = fields.path("project").path("key").asText("");
@@ -166,20 +160,24 @@ public class CloneJiraIssueTool extends AbstractTool {
                 String stFetchUrl = baseUrl + "/rest/api/2/issue/"
                         + URLEncoder.encode(stKey, StandardCharsets.UTF_8)
                         + "?fields=summary,description,issuetype,assignee";
-                JsonNode stNode = getJson(stFetchUrl, auth);
-                if (stNode == null || stNode.has("_error")) {
-                    log.warn("   Could not fetch subtask {}, skipping", stKey);
-                    continue;
+                try {
+                    HttpResponse<String> stResp = jiraHttpClient.get(stFetchUrl, auth);
+                    if (stResp.statusCode() != 200) {
+                        log.warn("   Could not fetch subtask {} (status {}), skipping", stKey, stResp.statusCode());
+                        continue;
+                    }
+                    JsonNode stFields = objectMapper.readTree(stResp.body()).path("fields");
+                    Map<String, String> st = new LinkedHashMap<>();
+                    st.put("summary",     stFields.path("summary").asText(""));
+                    st.put("issuetype",   stFields.path("issuetype").path("name").asText("Sub-task"));
+                    st.put("description", stFields.path("description").asText("").trim());
+                    st.put("assignee",    assigneeOverride.isBlank()
+                            ? stFields.path("assignee").path("name").asText("")
+                            : assigneeOverride);
+                    subtaskList.add(st);
+                } catch (Exception e) {
+                    log.warn("   Error fetching subtask {}, skipping: {}", stKey, e.getMessage());
                 }
-                JsonNode stFields = stNode.path("fields");
-                Map<String, String> st = new LinkedHashMap<>();
-                st.put("summary",     stFields.path("summary").asText(""));
-                st.put("issuetype",   stFields.path("issuetype").path("name").asText("Sub-task"));
-                st.put("description", stFields.path("description").asText("").trim());
-                st.put("assignee",    assigneeOverride.isBlank()
-                        ? stFields.path("assignee").path("name").asText("")
-                        : assigneeOverride);
-                subtaskList.add(st);
             }
         }
 
@@ -215,23 +213,5 @@ public class CloneJiraIssueTool extends AbstractTool {
         return confirmationService.requestConfirmation(
                 humanDesc.toString(),
                 new PendingJiraAction(PendingJiraAction.ActionType.CREATE_ISSUE, null, params, humanDesc.toString()));
-    }
-
-    /** Fetches a URL and returns the parsed JSON, or a sentinel node with _error/_status/_body on failure. */
-    private JsonNode getJson(String url, String auth) {
-        try {
-            HttpResponse<String> resp = jiraHttpClient.get(url, auth);
-            if (resp.statusCode() == 200) {
-                return objectMapper.readTree(resp.body());
-            }
-            // Return sentinel error node
-            return objectMapper.createObjectNode()
-                    .put("_error", true)
-                    .put("_status", resp.statusCode())
-                    .put("_body", resp.body());
-        } catch (Exception e) {
-            log.error("Error fetching {}: {}", url, e.getMessage());
-            return null;
-        }
     }
 }
