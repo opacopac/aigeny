@@ -5,7 +5,6 @@ import com.tschanz.aigeny.llm.LlmClient;
 import com.tschanz.aigeny.llm.model.*;
 import com.tschanz.aigeny.llm_tool.Tool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
-import com.tschanz.aigeny.llm_tool.jira.ConfirmationContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -34,12 +33,16 @@ public class OrchestrationService {
     private final LlmClient llmClient;
     private final ToolExecutor toolExecutor;
     private final PromptBuilder promptBuilder;
+    private final BatchConfirmationService batchConfirmationService;
 
-    /** Spring auto-collects all Tool beans into the list. */
-    public OrchestrationService(LlmClient llmClient, ToolExecutor toolExecutor, PromptBuilder promptBuilder) {
+    public OrchestrationService(LlmClient llmClient,
+                                ToolExecutor toolExecutor,
+                                PromptBuilder promptBuilder,
+                                BatchConfirmationService batchConfirmationService) {
         this.llmClient = llmClient;
         this.toolExecutor = toolExecutor;
         this.promptBuilder = promptBuilder;
+        this.batchConfirmationService = batchConfirmationService;
         log.info("OrchestrationService initialized with {} tools",
                 toolExecutor.getToolCount());
     }
@@ -153,7 +156,7 @@ public class OrchestrationService {
      * tools skip their own blocking confirmation flow.
      */
     private void preScanAndBatchConfirm(List<ToolCall> toolCalls) {
-        if (!BatchConfirmationContext.isAvailable()) return;
+        if (!batchConfirmationService.isAvailable()) return;
 
         List<WriteToolCallInfo> writeCalls = toolCalls.stream()
                 .filter(tc -> toolExecutor.findTool(tc.getFunction().getName())
@@ -170,7 +173,7 @@ public class OrchestrationService {
         if (writeCalls.size() <= 1) return;
 
         log.info("Batch confirmation: {} write tool calls detected, requesting combined dialog", writeCalls.size());
-        Map<String, Boolean> decisions = BatchConfirmationContext.get().apply(writeCalls);
-        ConfirmationContext.setPreApprovedDecisions(decisions);
+        Map<String, Boolean> decisions = batchConfirmationService.requestBatchConfirmation(writeCalls);
+        batchConfirmationService.applyPreApprovedDecisions(decisions);
     }
 }
