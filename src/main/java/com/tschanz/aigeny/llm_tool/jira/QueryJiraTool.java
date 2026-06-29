@@ -5,6 +5,7 @@ import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.llm_tool.AbstractTool;
 import com.tschanz.aigeny.llm_tool.QueryResult;
 import com.tschanz.aigeny.llm_tool.ToolResult;
+import com.tschanz.aigeny.llm_tool.jira.http.JiraHttpClient;
 import com.tschanz.aigeny.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,13 +13,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.*;
 
 /**
@@ -41,14 +38,12 @@ public class QueryJiraTool extends AbstractTool {
     private static final String MSG_ISSUES_FOUND     = "jira.issues_found";
 
     private final JiraConfiguration jiraConfig;
-    private final HttpClient http;
+    private final JiraHttpClient jiraHttpClient;
 
-    public QueryJiraTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper) {
+    public QueryJiraTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper, JiraHttpClient jiraHttpClient) {
         super(objectMapper);
         this.jiraConfig = jiraConfig;
-        this.http = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(15))
-                .build();
+        this.jiraHttpClient = jiraHttpClient;
     }
 
     @Override public String getName() { return "search_jira"; }
@@ -170,13 +165,7 @@ public class QueryJiraTool extends AbstractTool {
     }
 
     private HttpResponse<String> sendRequest(String url, String authHeader) throws Exception {
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(Duration.ofSeconds(30))
-                .header("Authorization", authHeader)
-                .header("Accept", "application/json")
-                .GET().build();
-        return http.send(req, HttpResponse.BodyHandlers.ofString());
+        return jiraHttpClient.get(url, authHeader);
     }
 
     private ToolResult parseSingleIssue(String json) throws Exception {

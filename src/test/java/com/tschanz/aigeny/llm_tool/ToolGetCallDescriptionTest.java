@@ -9,6 +9,7 @@ import com.tschanz.aigeny.llm_tool.bitbucket.ReadBitbucketFileTool;
 import com.tschanz.aigeny.llm_tool.bitbucket.SearchBitbucketTool;
 import com.tschanz.aigeny.llm_tool.db.OracleDbTool;
 import com.tschanz.aigeny.llm_tool.jira.*;
+import com.tschanz.aigeny.llm_tool.jira.http.JiraHttpClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -36,6 +37,7 @@ class ToolGetCallDescriptionTest {
     @Mock private BitbucketConfiguration bitbucketConfig;
     @Mock private DbConfiguration dbConfig;
     @Mock private ConfigurationValidator configValidator;
+    @Mock private JiraHttpClient jiraHttpClient;
 
     @BeforeEach
     void setUp() {
@@ -76,7 +78,7 @@ class ToolGetCallDescriptionTest {
 
         private QueryJiraTool tool;
 
-        @BeforeEach void init() { tool = new QueryJiraTool(jiraConfig, objectMapper); }
+        @BeforeEach void init() { tool = new QueryJiraTool(jiraConfig, objectMapper, jiraHttpClient); }
 
         @Test
         @DisplayName("returns 'Jira-Ticket lesen: KEY' when issueKey is given")
@@ -179,7 +181,7 @@ class ToolGetCallDescriptionTest {
 
         private CloneJiraIssueTool tool;
 
-        @BeforeEach void init() { tool = new CloneJiraIssueTool(jiraConfig, objectMapper); }
+        @BeforeEach void init() { tool = new CloneJiraIssueTool(jiraConfig, objectMapper, jiraHttpClient); }
 
         @Test
         @DisplayName("includes source and target project in description")

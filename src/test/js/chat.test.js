@@ -659,3 +659,167 @@ describe('batch_confirmation_required SSE event handling (chat-stream)', () => {
   });
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// chat-stream.js – SSE handler-map dispatch (O-2)
+// Verifies that the refactored handler map (replacing the if-else chain) still
+// processes each event type correctly.  Uses a mock SSE stream helper.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Builds a mock ReadableStream that yields the given SSE events in sequence.
+ * @param {Object[]} events – array of event objects (will be JSON-stringified as SSE data lines)
+ */
+function mockSseStream(events) {
+  const encoder = new TextEncoder();
+  const chunks = events.map(e => encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
+  let index = 0;
+  return {
+    getReader: () => ({
+      read: vi.fn().mockImplementation(() => {
+        if (index < chunks.length) {
+          return Promise.resolve({ done: false, value: chunks[index++] });
+        }
+        return Promise.resolve({ done: true, value: undefined });
+      }),
+    }),
+  };
+}
+
+describe('SSE handler-map dispatch (O-2 – chat-stream)', () => {
+  beforeEach(() => {
+    // Reset DOM and re-init chat so state is clean
+    setupDom();
+    initChat({
+      isThinkingFn:       () => false,
+      setThinkingFn:      vi.fn(),
+      setExportEnabledFn: vi.fn(),
+    });
+  });
+
+  it('"done" event appends the response text as an AI message', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      body: mockSseStream([
+        { type: 'done', response: 'Final response text', hasExport: false },
+      ]),
+    }));
+
+    document.getElementById('userInput').value = 'test';
+    await sendMessage();
+
+    const messages = [...document.querySelectorAll('.message.aigeny .message-bubble')];
+    expect(messages.some(m => m.textContent.includes('Final response text'))).toBe(true);
+  });
+
+  it('"tool_call" event adds an entry to the typing indicator', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      body: mockSseStream([
+        { type: 'tool_call', toolName: 'query_oracle_db', description: 'DB-Abfrage läuft…' },
+        { type: 'done', response: 'Result', hasExport: false },
+      ]),
+    }));
+
+    document.getElementById('userInput').value = 'test';
+    await sendMessage();
+
+    // After "done" the tool-call list stays in the DOM (finalized)
+    const html = document.getElementById('chatMessages').innerHTML;
+    expect(html).toContain('query_oracle_db');
+  });
+
+  it('"error" event appends an error message', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      body: mockSseStream([
+        { type: 'error', message: 'Something went wrong' },
+      ]),
+    }));
+
+    document.getElementById('userInput').value = 'test';
+    await sendMessage();
+
+    const html = document.getElementById('chatMessages').innerHTML;
+    expect(html).toContain('Something went wrong');
+  });
+
+  it('"cancelled" event appends a cancellation message', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      body: mockSseStream([
+        { type: 'cancelled' },
+      ]),
+    }));
+
+    document.getElementById('userInput').value = 'test';
+    await sendMessage();
+
+    const html = document.getElementById('chatMessages').innerHTML;
+    expect(html).toContain('Abgebrochen');
+  });
+
+  it('"confirmation_required" event shows a Jira confirmation block', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      body: mockSseStream([
+        { type: 'confirmation_required', description: 'Update NOVA-1 summary' },
+      ]),
+    }));
+
+    document.getElementById('userInput').value = 'test';
+    await sendMessage();
+
+    expect(document.querySelector('.jira-confirm-msg')).not.toBeNull();
+  });
+
+  it('"batch_confirmation_required" event shows a batch Jira confirmation block', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      body: mockSseStream([
+        {
+          type: 'batch_confirmation_required',
+          actions: [
+            { toolCallId: 'c1', toolName: 'create_jira_issue', description: 'Erstelle NOVA-Ticket' },
+            { toolCallId: 'c2', toolName: 'add_jira_comment',  description: 'Kommentar zu NOVA-2' },
+          ],
+        },
+      ]),
+    }));
+
+    document.getElementById('userInput').value = 'test';
+    await sendMessage();
+
+    expect(document.querySelector('.jira-batch-confirm-msg')).not.toBeNull();
+  });
+
+  it('unknown event type is silently ignored (no throw)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      body: mockSseStream([
+        { type: 'totally_unknown_event_type_xyz', data: 'irrelevant' },
+        { type: 'done', response: 'After unknown event', hasExport: false },
+      ]),
+    }));
+
+    document.getElementById('userInput').value = 'test';
+
+    // Should not throw and should still process the "done" event
+    await expect(sendMessage()).resolves.not.toThrow();
+    const html = document.getElementById('chatMessages').innerHTML;
+    expect(html).toContain('After unknown event');
+  });
+
+  it('"done" event with hasExport=true calls setExportEnabled(true)', async () => {
+    const exportSpy = vi.fn();
+    initChat({
+      isThinkingFn:       () => false,
+      setThinkingFn:      vi.fn(),
+      setExportEnabledFn: exportSpy,
+    });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      body: mockSseStream([
+        { type: 'done', response: 'Data retrieved', hasExport: true },
+      ]),
+    }));
+
+    document.getElementById('userInput').value = 'test';
+    await sendMessage();
+
+    expect(exportSpy).toHaveBeenCalledWith(true);
+  });
+});
+

@@ -4,6 +4,7 @@ import com.tschanz.aigeny.config.JiraConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.llm_tool.AbstractTool;
 import com.tschanz.aigeny.llm_tool.ToolResult;
+import com.tschanz.aigeny.llm_tool.jira.http.JiraHttpClient;
 import com.tschanz.aigeny.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,13 +12,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,14 +44,12 @@ public class CloneJiraIssueTool extends AbstractTool {
     private static final String MSG_NO_STREAMING     = "jira.error.no_streaming_context";
 
     private final JiraConfiguration jiraConfig;
-    private final HttpClient http;
+    private final JiraHttpClient jiraHttpClient;
 
-    public CloneJiraIssueTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper) {
+    public CloneJiraIssueTool(JiraConfiguration jiraConfig, ObjectMapper objectMapper, JiraHttpClient jiraHttpClient) {
         super(objectMapper);
         this.jiraConfig = jiraConfig;
-        this.http  = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(15))
-                .build();
+        this.jiraHttpClient = jiraHttpClient;
     }
 
     @Override public String getName() { return "clone_jira_issue"; }
@@ -220,14 +215,7 @@ public class CloneJiraIssueTool extends AbstractTool {
     /** Fetches a URL and returns the parsed JSON, or a sentinel node with _error/_status/_body on failure. */
     private JsonNode getJson(String url, String auth) {
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .timeout(Duration.ofSeconds(30))
-                    .header("Authorization", auth)
-                    .header("Accept", "application/json")
-                    .GET().build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-            log.info("<< JIRA GET {} status={}", url, resp.statusCode());
+            HttpResponse<String> resp = jiraHttpClient.get(url, auth);
             if (resp.statusCode() == 200) {
                 return objectMapper.readTree(resp.body());
             }

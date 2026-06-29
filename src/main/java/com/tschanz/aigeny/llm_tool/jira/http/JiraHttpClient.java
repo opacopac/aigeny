@@ -13,6 +13,10 @@ import java.time.Duration;
 /**
  * HTTP client for Jira API communication.
  * Encapsulates common HTTP request/response handling.
+ *
+ * <p>The default no-arg constructor creates a production-ready {@link HttpClient}.
+ * A package-private constructor accepting an {@link HttpClient} is provided for
+ * unit testing without a real network connection.
  */
 @Component
 public class JiraHttpClient {
@@ -27,6 +31,31 @@ public class JiraHttpClient {
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(CONNECT_TIMEOUT)
                 .build();
+    }
+
+    /** Package-private constructor for unit testing – allows injection of a mock {@link HttpClient}. */
+    JiraHttpClient(HttpClient httpClient) {
+        this.httpClient = httpClient;
+    }
+
+    /**
+     * Send a GET request to Jira API.
+     */
+    public HttpResponse<String> get(String url, String authHeader) throws Exception {
+        log.info(">> JIRA GET {}", url);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(REQUEST_TIMEOUT)
+                .header("Authorization", authHeader)
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        log.info("<< JIRA GET status={} url={}", response.statusCode(), url);
+
+        return response;
     }
 
     /**

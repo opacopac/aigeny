@@ -36,13 +36,58 @@ export function initStream({ isThinkingFn, setThinkingFn, setExportEnabledFn, re
   _renderer           = renderer;
 }
 
+// ── SSE event handler map ─────────────────────────────────────────────────────
+// O-2: Replace if-else chain with a handler map.  Adding a new SSE event type only
+// requires registering a new entry here – no modification of processStream() needed.
+function buildSseHandlers() {
+  return {
+    tool_call: (data) => {
+      _renderer.updateTypingIndicator(data.toolName, data.description);
+    },
+    intermediate: (data) => {
+      _renderer.finalizeTypingIndicator();
+      _renderer.appendMessage('aigeny', data.response);
+      _renderer.showTypingIndicator();
+    },
+    confirmation_required: (data) => {
+      // Pause visual: finalize the current tool-call list, show the confirmation dialog.
+      // The SSE stream stays open – the orchestration thread is blocked waiting for the
+      // user's decision via POST /api/jira/confirm-decision.
+      _renderer.finalizeTypingIndicator();
+      _renderer.showJiraConfirmation(data.description);
+    },
+    batch_confirmation_required: (data) => {
+      // Multiple write actions in one LLM response: show one combined dialog.
+      // The SSE stream stays open – the orchestration thread is blocked waiting for the
+      // user's decisions via POST /api/jira/batch-confirm-decision.
+      _renderer.finalizeTypingIndicator();
+      _renderer.showJiraBatchConfirmation(data.actions);
+    },
+    done: (data) => {
+      _renderer.finalizeTypingIndicator();
+      if (data.response)  _renderer.appendMessage('aigeny', data.response);
+      if (data.hasExport) _setExportEnabledFn(true);
+    },
+    cancelled: () => {
+      _renderer.removeTypingIndicator();
+      _renderer.appendMessage('aigeny', '_Abgebrochen, Towarischtsch. AIgeny steht wieder bereit._');
+    },
+    error: (data) => {
+      _renderer.removeTypingIndicator();
+      _renderer.appendMessage('aigeny', 'Njet! Fehler, Towarischtsch: ' + (data.message || '?'));
+    },
+  };
+}
+
 // ── Communication ─────────────────────────────────────────────────────────────
 
 /**
- * Process a readable SSE stream, delegating each event to the renderer.
+ * Process a readable SSE stream, delegating each event to the registered handler.
+ * Unknown event types are silently ignored (optional-chaining on the handler map).
  * @param {ReadableStream} responseBody
  */
 async function processStream(responseBody) {
+  const handlers = buildSseHandlers();
   const reader  = responseBody.getReader();
   const decoder = new TextDecoder();
   let buffer    = '';
@@ -61,35 +106,7 @@ async function processStream(responseBody) {
       let data;
       try { data = JSON.parse(dataLine.slice(5).trim()); } catch { continue; }
 
-      if (data.type === 'tool_call') {
-        _renderer.updateTypingIndicator(data.toolName, data.description);
-      } else if (data.type === 'intermediate') {
-        _renderer.finalizeTypingIndicator();
-        _renderer.appendMessage('aigeny', data.response);
-        _renderer.showTypingIndicator();
-      } else if (data.type === 'confirmation_required') {
-        // Pause visual: finalize the current tool-call list, show the confirmation dialog.
-        // The SSE stream stays open – the orchestration thread is blocked waiting for the
-        // user's decision via POST /api/jira/confirm-decision.
-        _renderer.finalizeTypingIndicator();
-        _renderer.showJiraConfirmation(data.description);
-      } else if (data.type === 'batch_confirmation_required') {
-        // Multiple write actions in one LLM response: show one combined dialog.
-        // The SSE stream stays open – the orchestration thread is blocked waiting for the
-        // user's decisions via POST /api/jira/batch-confirm-decision.
-        _renderer.finalizeTypingIndicator();
-        _renderer.showJiraBatchConfirmation(data.actions);
-      } else if (data.type === 'done') {
-        _renderer.finalizeTypingIndicator();
-        if (data.response)  _renderer.appendMessage('aigeny', data.response);
-        if (data.hasExport) _setExportEnabledFn(true);
-      } else if (data.type === 'cancelled') {
-        _renderer.removeTypingIndicator();
-        _renderer.appendMessage('aigeny', '_Abgebrochen, Towarischtsch. AIgeny steht wieder bereit._');
-      } else if (data.type === 'error') {
-        _renderer.removeTypingIndicator();
-        _renderer.appendMessage('aigeny', 'Njet! Fehler, Towarischtsch: ' + (data.message || '?'));
-      }
+      handlers[data.type]?.(data);
     }
   }
 }

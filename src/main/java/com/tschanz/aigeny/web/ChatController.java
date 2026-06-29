@@ -4,10 +4,6 @@ import com.tschanz.aigeny.db.SchemaLoader;
 import com.tschanz.aigeny.llm.model.Message;
 import com.tschanz.aigeny.orchestration.ChatResult;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
-import com.tschanz.aigeny.llm_tool.jira.JiraTokenContext;
-import com.tschanz.aigeny.llm_tool.jira.JiraWriteContext;
-import com.tschanz.aigeny.llm_tool.jira.PendingJiraActionContext;
-import com.tschanz.aigeny.llm_tool.bitbucket.BitbucketTokenContext;
 import com.tschanz.aigeny.llm_tool.QueryResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;
@@ -61,6 +57,7 @@ public class ChatController {
     private final ChatSessionService sessionService;
     private final StatusAggregatorService statusAggregator;
     private final ChatStreamingService streamingService;
+    private final ExecutionContextManager contextManager;
 
     public ChatController(OrchestrationService orchestration,
                           SchemaLoader schemaLoader,
@@ -68,7 +65,8 @@ public class ChatController {
                           TokenService tokenService,
                           ChatSessionService sessionService,
                           StatusAggregatorService statusAggregator,
-                          ChatStreamingService streamingService) {
+                          ChatStreamingService streamingService,
+                          ExecutionContextManager contextManager) {
         this.orchestration     = orchestration;
         this.schemaLoader      = schemaLoader;
         this.objectMapper      = objectMapper;
@@ -76,6 +74,7 @@ public class ChatController {
         this.sessionService    = sessionService;
         this.statusAggregator  = statusAggregator;
         this.streamingService  = streamingService;
+        this.contextManager    = contextManager;
     }
 
     // ── POST /api/chat ──────────────────────────────────────────────────────
@@ -98,10 +97,9 @@ public class ChatController {
         final String bitbucketToken  = tokenService.getEffectiveBitbucketToken(session);
 
         return CompletableFuture.supplyAsync(() -> {
-            JiraTokenContext.set(jiraToken);
-            JiraWriteContext.set(jiraWriteEnabled);
-            BitbucketTokenContext.set(bitbucketToken);
-            PendingJiraActionContext.clear();
+            // D-3: use ExecutionContextManager (consistent with the streaming path)
+            // Confirmation handlers are null because write tools require SSE streaming.
+            contextManager.setupContexts(jiraToken, jiraWriteEnabled, bitbucketToken, null, null);
 
             try {
                 ChatResult result = orchestration.chat(history, message);
@@ -121,10 +119,7 @@ public class ChatController {
                         KEY_HAS_EXPORT, false
                 ));
             } finally {
-                JiraTokenContext.clear();
-                JiraWriteContext.clear();
-                BitbucketTokenContext.clear();
-                PendingJiraActionContext.clear();
+                contextManager.cleanupAllContexts();
             }
         });
     }
