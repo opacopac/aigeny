@@ -121,7 +121,7 @@ public class QueryJiraTool extends AbstractTool {
 
     private ToolResult fetchIssueByKey(String issueKey, String baseUrl, String authHeader) throws Exception {
         String url = baseUrl + "/rest/api/2/issue/" + URLEncoder.encode(issueKey, StandardCharsets.UTF_8)
-                + "?fields=summary,status,assignee,priority,issuetype,created,updated,description,comment,attachment,issuelinks,subtasks";
+                + "?fields=summary,status,assignee,priority,issuetype,created,updated,duedate,description,comment,attachment,issuelinks,subtasks";
         log.info(">> JIRA REQUEST  issueKey={}", issueKey);
         log.info("   URL: {}", url);
 

@@ -54,6 +54,10 @@ public class JiraIssueFormatter {
         sb.append("| Assignee | ").append(fields.path("assignee").path("displayName").asText("Unassigned")).append(" |\n");
         sb.append("| Created | ").append(fields.path("created").asText("-")).append(" |\n");
         sb.append("| Updated | ").append(fields.path("updated").asText("-")).append(" |\n");
+        String dueDate = fields.path("duedate").asText("").trim();
+        if (!dueDate.isBlank()) {
+            sb.append("| Due Date | ").append(dueDate).append(" |\n");
+        }
 
         String description = fields.path("description").asText("").trim();
         if (!description.isBlank()) {
