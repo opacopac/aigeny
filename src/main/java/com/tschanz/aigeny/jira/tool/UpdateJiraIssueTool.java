@@ -33,6 +33,7 @@ public class UpdateJiraIssueTool extends AbstractTool {
     private static final String ARG_ISSUE_KEY   = "issueKey";
     private static final String ARG_SUMMARY     = "summary";
     private static final String ARG_DESCRIPTION = "description";
+    private static final String ARG_DUEDATE     = "duedate";
 
     // ── Message keys ─────────────────────────────────────────────────────────
     private static final String MSG_NOT_CONFIGURED  = "jira.error.not_configured_de";
@@ -46,6 +47,8 @@ public class UpdateJiraIssueTool extends AbstractTool {
     private static final String MSG_ARG_ISSUE_KEY   = "jira.update.arg_issue_key_desc";
     private static final String MSG_ARG_SUMMARY     = "jira.update.arg_summary_desc";
     private static final String MSG_ARG_DESCRIPTION = "jira.update.arg_description_desc";
+    private static final String MSG_ARG_DUEDATE     = "jira.update.arg_duedate_desc";
+    private static final String MSG_DESC_DUEDATE    = "jira.update.desc_duedate";
     private static final String MSG_WRITE_DISABLED  = "jira.write.mode_disabled";
     private static final String MSG_NO_STREAMING    = "jira.error.no_streaming_context";
 
@@ -70,10 +73,12 @@ public class UpdateJiraIssueTool extends AbstractTool {
             String issueKey    = args.path(ARG_ISSUE_KEY).asText("").trim();
             boolean hasSummary = !args.path(ARG_SUMMARY).asText("").isBlank();
             boolean hasDesc    = !args.path(ARG_DESCRIPTION).asText("").isBlank();
-            String fields = hasSummary && hasDesc ? "Summary & Beschreibung"
-                          : hasSummary ? "Summary"
-                          : hasDesc    ? "Beschreibung"
-                          : "Felder";
+            boolean hasDuedate = !args.path(ARG_DUEDATE).asText("").isBlank();
+            java.util.List<String> fieldNames = new java.util.ArrayList<>();
+            if (hasSummary)  fieldNames.add("Summary");
+            if (hasDesc)     fieldNames.add("Beschreibung");
+            if (hasDuedate)  fieldNames.add("Fälligkeitsdatum");
+            String fields = fieldNames.isEmpty() ? "Felder" : String.join(" & ", fieldNames);
             return "Jira-Ticket aktualisieren: " + (issueKey.isBlank() ? "?" : issueKey) + " (" + fields + ")";
         } catch (Exception ignored) {}
         return "Jira-Ticket aktualisieren";
@@ -89,7 +94,8 @@ public class UpdateJiraIssueTool extends AbstractTool {
         Map<String, Object> propsMap = Map.of(
             ARG_ISSUE_KEY,   Map.of("type", "string", "description", Messages.get(MSG_ARG_ISSUE_KEY)),
             ARG_SUMMARY,     Map.of("type", "string", "description", Messages.get(MSG_ARG_SUMMARY)),
-            ARG_DESCRIPTION, Map.of("type", "string", "description", Messages.get(MSG_ARG_DESCRIPTION))
+            ARG_DESCRIPTION, Map.of("type", "string", "description", Messages.get(MSG_ARG_DESCRIPTION)),
+            ARG_DUEDATE,     Map.of("type", "string", "description", Messages.get(MSG_ARG_DUEDATE))
         );
         return new ToolDefinition(getName(), getDescription(),
                 Map.of("type", "object",
@@ -111,21 +117,24 @@ public class UpdateJiraIssueTool extends AbstractTool {
         String issueKey    = args.path(ARG_ISSUE_KEY).asText("").trim();
         String summary     = args.path(ARG_SUMMARY).asText("").trim();
         String description = args.path(ARG_DESCRIPTION).asText("").trim();
+        String duedate     = args.path(ARG_DUEDATE).asText("").trim();
 
         if (issueKey.isBlank()) {
             return new ToolResult(Messages.get(MSG_MISSING_KEY));
         }
-        if (summary.isBlank() && description.isBlank()) {
+        if (summary.isBlank() && description.isBlank() && duedate.isBlank()) {
             return new ToolResult(Messages.get(MSG_MISSING_FIELDS));
         }
 
         Map<String, Object> params = new LinkedHashMap<>();
         if (!summary.isBlank())     params.put(ARG_SUMMARY,     summary);
         if (!description.isBlank()) params.put(ARG_DESCRIPTION, description);
+        if (!duedate.isBlank())     params.put(ARG_DUEDATE,     duedate);
 
         StringBuilder desc = new StringBuilder(Messages.get(MSG_DESC_HEADER, issueKey));
         if (!summary.isBlank())     desc.append(Messages.get(MSG_DESC_SUMMARY,  summary));
         if (!description.isBlank()) desc.append(Messages.get(MSG_DESC_DESC, description));
+        if (!duedate.isBlank())     desc.append(Messages.get(MSG_DESC_DUEDATE, duedate));
 
         if (!confirmationService.isAvailable()) {
             return new ToolResult(Messages.get(MSG_NO_STREAMING));
