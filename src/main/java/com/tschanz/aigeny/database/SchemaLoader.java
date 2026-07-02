@@ -29,7 +29,9 @@ public class SchemaLoader {
     private final ConfigurationValidator configValidator;
     private final Environment env;
     private volatile int tableCount = 0;
-    private boolean dbReachable = false;
+    /** null = not yet checked, true = last connection attempt succeeded, false = last attempt failed. */
+    private volatile Boolean dbReachable = null;
+    private volatile String lastError = null;
 
     public SchemaLoader(DbConfiguration dbConfig, ConfigurationValidator configValidator, Environment env) {
         this.dbConfig = dbConfig;
@@ -64,7 +66,8 @@ public class SchemaLoader {
     public void reload() throws Exception {
         if (!configValidator.isDbConfigured(dbConfig)) {
             tableCount = 0;
-            dbReachable = false;
+            dbReachable = null;
+            lastError = null;
             return;
         }
         HikariConfig hc = new HikariConfig();
@@ -87,11 +90,22 @@ public class SchemaLoader {
              Connection conn = ds.getConnection()) {
             tableCount = countTables(conn, effectiveSchema);
             dbReachable = true;
+            lastError = null;
             log.info("DB reachable - {} accessible tables found", tableCount);
+        } catch (Exception e) {
+            dbReachable = false;
+            lastError = e.getMessage();
+            throw e;
         }
     }
 
     public int getTableCount() { return tableCount; }
+
+    /** @return null if never checked, true if the last connection attempt succeeded, false if it failed. */
+    public Boolean isDbReachable() { return dbReachable; }
+
+    /** @return the error message of the last failed connection attempt, or null if none / last attempt succeeded. */
+    public String getLastError() { return lastError; }
 
     private int countTables(Connection conn, String schema) {
         // Filter by owner when a schema is known, so the count reflects only that schema.

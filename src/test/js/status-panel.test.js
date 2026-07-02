@@ -21,17 +21,17 @@ import {
 // buildDbState
 // ----------------------------------------------------------------------------
 describe("buildDbState", () => {
-  it("returns ok state when db is configured", () => {
-    const s = buildDbState({ dbConfigured: true });
+  it("returns ok state when db is configured and reachable", () => {
+    const s = buildDbState({ dbConfigured: true, dbReachable: true });
     expect(s.className).toBe("info-val ok");
     expect(s.text).toBe("Connected");
   });
   it("appends username in parentheses when provided", () => {
-    const s = buildDbState({ dbConfigured: true, dbUsername: "readonly" });
+    const s = buildDbState({ dbConfigured: true, dbReachable: true, dbUsername: "readonly" });
     expect(s.text).toBe("Connected (readonly)");
   });
   it("does not append parentheses when username is empty string", () => {
-    const s = buildDbState({ dbConfigured: true, dbUsername: "" });
+    const s = buildDbState({ dbConfigured: true, dbReachable: true, dbUsername: "" });
     expect(s.text).toBe("Connected");
   });
   it("returns error state when db is not configured", () => {
@@ -39,8 +39,31 @@ describe("buildDbState", () => {
     expect(s.className).toBe("info-val error");
     expect(s.text).toBe("Not configured");
   });
+  it("returns error state when db is configured but not reachable", () => {
+    const s = buildDbState({ dbConfigured: true, dbReachable: false, dbUsername: "readonly" });
+    expect(s.className).toBe("info-val error");
+    expect(s.text).toContain("fehlgeschlagen");
+    expect(s.text).toContain("readonly");
+  });
+  it("exposes the backend error message via title when connection failed", () => {
+    const s = buildDbState({ dbConfigured: true, dbReachable: false, dbError: "ORA-12545: host unreachable" });
+    expect(s.title).toBe("ORA-12545: host unreachable");
+  });
+  it("empty title when no dbError is provided on failure", () => {
+    const s = buildDbState({ dbConfigured: true, dbReachable: false });
+    expect(s.title).toBe("");
+  });
+  it("returns warn/pending state when reachability has not been checked yet", () => {
+    const s = buildDbState({ dbConfigured: true });
+    expect(s.className).toBe("info-val warn");
+    expect(s.text).toContain("Prüfe Verbindung");
+  });
+  it("returns warn/pending state when dbReachable is explicitly null", () => {
+    const s = buildDbState({ dbConfigured: true, dbReachable: null });
+    expect(s.className).toBe("info-val warn");
+  });
   it("is a pure function – same input yields same output", () => {
-    expect(buildDbState({ dbConfigured: true })).toEqual(buildDbState({ dbConfigured: true }));
+    expect(buildDbState({ dbConfigured: true, dbReachable: true })).toEqual(buildDbState({ dbConfigured: true, dbReachable: true }));
   });
 });
 // ----------------------------------------------------------------------------
@@ -209,12 +232,16 @@ describe("StatusPanel – applyStatus()", () => {
     panel.applyStatus({ llmProvider: "claude", llmModel: "m", schemaTables: "0", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.githubInfoRow.style.display).toBe("none");
   });
-  it("applies ok class to infoDb when db is configured", () => {
-    panel.applyStatus({ llmProvider: "p", llmModel: "m", schemaTables: "0", dbConfigured: true, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+  it("applies ok class to infoDb when db is configured and reachable", () => {
+    panel.applyStatus({ llmProvider: "p", llmModel: "m", schemaTables: "0", dbConfigured: true, dbReachable: true, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.infoDb.className).toBe("info-val ok");
   });
   it("applies error class to infoDb when db is not configured", () => {
     panel.applyStatus({ llmProvider: "p", llmModel: "m", schemaTables: "0", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+    expect(els.infoDb.className).toBe("info-val error");
+  });
+  it("applies error class to infoDb when db is configured but not reachable", () => {
+    panel.applyStatus({ llmProvider: "p", llmModel: "m", schemaTables: "0", dbConfigured: true, dbReachable: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.infoDb.className).toBe("info-val error");
   });
   it("shows jiraWriteRow when jiraBaseUrlConfigured", () => {

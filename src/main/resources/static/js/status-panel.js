@@ -16,15 +16,25 @@
 // ── Pure state functions ──────────────────────────────────────────────────────
 
 /**
- * @param {{ dbConfigured: boolean, dbUsername?: string }} data
- * @returns {{ text: string, className: string }}
+ * @param {{ dbConfigured: boolean, dbUsername?: string, dbReachable?: boolean|null, dbError?: string }} data
+ * @returns {{ text: string, className: string, title: string }}
  */
 export function buildDbState(data) {
-  if (data.dbConfigured) {
-    const user = data.dbUsername ? ` (${data.dbUsername})` : '';
-    return { text: 'Connected' + user, className: 'info-val ok' };
+  if (!data.dbConfigured) {
+    return { text: 'Not configured', className: 'info-val error', title: '' };
   }
-  return { text: 'Not configured', className: 'info-val error' };
+  const user = data.dbUsername ? ` (${data.dbUsername})` : '';
+  if (data.dbReachable === false) {
+    return {
+      text: 'Verbindung fehlgeschlagen' + user,
+      className: 'info-val error',
+      title: data.dbError || '',
+    };
+  }
+  if (data.dbReachable === null || data.dbReachable === undefined) {
+    return { text: 'Prüfe Verbindung...' + user, className: 'info-val warn', title: '' };
+  }
+  return { text: 'Connected' + user, className: 'info-val ok', title: '' };
 }
 
 /**
@@ -202,10 +212,11 @@ export class StatusPanel {
   // ── Private helpers ───────────────────────────────────────────────────────
 
   /** @private */
-  _applyInfoRow(valEl, btnEl, { text, className, btnText = '', btnVisible = false }) {
+  _applyInfoRow(valEl, btnEl, { text, className, title = '', btnText = '', btnVisible = false }) {
     if (valEl) {
       valEl.textContent = text;
       valEl.className   = className;
+      valEl.title        = title;
     }
     if (btnEl) {
       if (btnText) btnEl.textContent = btnText;

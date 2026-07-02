@@ -27,6 +27,8 @@ public class StatusAggregatorService {
     private static final String KEY_LLM_MODEL                   = "llmModel";
     private static final String KEY_DB_CONFIGURED               = "dbConfigured";
     private static final String KEY_DB_USERNAME                 = "dbUsername";
+    private static final String KEY_DB_REACHABLE                = "dbReachable";
+    private static final String KEY_DB_ERROR                    = "dbError";
     private static final String KEY_JIRA_CONFIGURED             = "jiraConfigured";
     private static final String KEY_JIRA_BASEURL_CONFIGURED     = "jiraBaseUrlConfigured";
     private static final String KEY_JIRA_WRITE_ENABLED          = "jiraWriteEnabled";
@@ -82,6 +84,8 @@ public class StatusAggregatorService {
         // Database configuration
         status.put(KEY_DB_CONFIGURED, configValidator.isDbConfigured(dbConfig));
         status.put(KEY_DB_USERNAME, dbConfig.getUsername());
+        status.put(KEY_DB_REACHABLE, schemaLoader.isDbReachable());
+        status.put(KEY_DB_ERROR, schemaLoader.getLastError());
         status.put(KEY_SCHEMA_TABLES, schemaLoader.getTableCount());
 
         // Jira configuration and session state

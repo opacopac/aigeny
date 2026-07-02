@@ -126,7 +126,7 @@ const _schemaPanel = new SchemaPanel({
 });
 
 async function reloadSchema() {
-  await _schemaPanel.reload(appendMessage);
+  await _schemaPanel.reload(appendMessage, () => loadStatus());
 }
 
 

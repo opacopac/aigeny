@@ -96,7 +96,7 @@ describe('SchemaPanel – reload()', () => {
   });
 
   it('re-enables the button after a failed reload (non-ok status)', async () => {
-    fetchSpy.mockResolvedValue({ json: async () => ({ status: 'error', message: 'oops' }) });
+    fetchSpy.mockResolvedValue({ json: async () => ({ status: 'error', error: 'oops' }) });
 
     await panel.reload(appendFn);
 
@@ -139,12 +139,36 @@ describe('SchemaPanel – reload()', () => {
     expect(els.infoTables.textContent).toBe('99');
   });
 
-  it('does not update infoTables on error response', async () => {
-    fetchSpy.mockResolvedValue({ json: async () => ({ status: 'error', message: 'fail' }) });
+  it('does not update infoTables text on error response', async () => {
+    fetchSpy.mockResolvedValue({ json: async () => ({ status: 'error', error: 'fail' }) });
 
     await panel.reload(appendFn);
 
     expect(els.infoTables.textContent).toBe('0'); // unchanged
+  });
+
+  it('marks infoTables with the ok class on success', async () => {
+    fetchSpy.mockResolvedValue({ json: async () => ({ status: 'ok', tables: '99' }) });
+
+    await panel.reload(appendFn);
+
+    expect(els.infoTables.className).toBe('info-val ok');
+  });
+
+  it('marks infoTables with the error class on non-ok backend status', async () => {
+    fetchSpy.mockResolvedValue({ json: async () => ({ status: 'error', error: 'fail' }) });
+
+    await panel.reload(appendFn);
+
+    expect(els.infoTables.className).toBe('info-val error');
+  });
+
+  it('marks infoTables with the error class on network failure', async () => {
+    fetchSpy.mockRejectedValue(new Error('network gone'));
+
+    await panel.reload(appendFn);
+
+    expect(els.infoTables.className).toBe('info-val error');
   });
 
   // ── appendMessageFn calls ─────────────────────────────────────────────────
@@ -166,7 +190,7 @@ describe('SchemaPanel – reload()', () => {
   });
 
   it('calls appendMessageFn with error text on non-ok backend status', async () => {
-    fetchSpy.mockResolvedValue({ json: async () => ({ status: 'error', message: 'DB down' }) });
+    fetchSpy.mockResolvedValue({ json: async () => ({ status: 'error', error: 'DB down' }) });
 
     await panel.reload(appendFn);
 
@@ -205,6 +229,56 @@ describe('SchemaPanel – reload()', () => {
     fetchSpy.mockResolvedValue({ json: async () => ({ status: 'ok', tables: '1' }) });
 
     await expect(p.reload(appendFn)).resolves.not.toThrow();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// SchemaPanel – onDoneFn callback
+// ════════════════════════════════════════════════════════════════════════════
+
+describe('SchemaPanel – onDoneFn callback', () => {
+  let fetchSpy, panel, els, appendFn, onDoneFn;
+
+  beforeEach(() => {
+    els      = makeElements();
+    appendFn = vi.fn();
+    onDoneFn = vi.fn();
+    panel    = new SchemaPanel(els, '/api/test/schema/reload');
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('invokes onDoneFn after a successful reload', async () => {
+    fetchSpy.mockResolvedValue({ json: async () => ({ status: 'ok', tables: '5' }) });
+
+    await panel.reload(appendFn, onDoneFn);
+
+    expect(onDoneFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('invokes onDoneFn after a failed reload (non-ok status)', async () => {
+    fetchSpy.mockResolvedValue({ json: async () => ({ status: 'error', error: 'oops' }) });
+
+    await panel.reload(appendFn, onDoneFn);
+
+    expect(onDoneFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('invokes onDoneFn after a network error', async () => {
+    fetchSpy.mockRejectedValue(new Error('network gone'));
+
+    await panel.reload(appendFn, onDoneFn);
+
+    expect(onDoneFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not throw when onDoneFn is omitted', async () => {
+    fetchSpy.mockResolvedValue({ json: async () => ({ status: 'ok', tables: '5' }) });
+
+    await expect(panel.reload(appendFn)).resolves.not.toThrow();
   });
 });
 

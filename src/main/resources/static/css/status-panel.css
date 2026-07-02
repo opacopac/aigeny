@@ -1,4 +1,4 @@
-/* -- status-panel.css – Sidebar Info-Box & Status Indicator -----------------
+/* -- status-panel.css ï¿½ Sidebar Info-Box & Status Indicator -----------------
    Styles exclusively owned by the status panel component:
      - .info-box / .info-row / .info-key / .info-val
      - .status-dot (header indicator dot + animations)
@@ -33,6 +33,7 @@
 }
 .info-val.ok    { color: #44cc44; }
 .info-val.error { color: var(--red); }
+.info-val.warn  { color: #ddaa00; }
 /* -- Token button in info-row ------------------------------------------------ */
 .btn-token {
   display: none;

@@ -45,23 +45,32 @@ export class SchemaPanel {
    *
    * @param {function(string, string): void} appendMessageFn
    *   Callback to post a chat message, called as appendMessageFn(role, text).
+   * @param {function(): void} [onDoneFn]
+   *   Optional callback invoked after the reload finishes (success or failure),
+   *   e.g. to refresh the full /api/status panel (DB connection state).
    */
-  async reload(appendMessageFn) {
+  async reload(appendMessageFn, onDoneFn) {
     this._applyButtonState(buildSchemaButtonState(true));
     try {
       const res  = await fetch(this._api, { method: 'POST' });
       const data = await res.json();
       if (data.status === 'ok') {
-        if (this._els.infoTables) this._els.infoTables.textContent = data.tables;
+        if (this._els.infoTables) {
+          this._els.infoTables.textContent = data.tables;
+          this._els.infoTables.className   = 'info-val ok';
+        }
         appendMessageFn('aigeny',
           `Da! Schema neu geladen, Towarischtsch. Ich kenne jetzt **${data.tables}** Tabellen in Datenbank. Otschen choroscho!`);
       } else {
-        appendMessageFn('aigeny', 'Njet! Schema-Neuladen fehlgeschlagen: ' + (data.message || 'unbekannter Fehler'));
+        if (this._els.infoTables) this._els.infoTables.className = 'info-val error';
+        appendMessageFn('aigeny', 'Njet! Schema-Neuladen fehlgeschlagen: ' + (data.error || 'unbekannter Fehler'));
       }
     } catch (err) {
+      if (this._els.infoTables) this._els.infoTables.className = 'info-val error';
       appendMessageFn('aigeny', 'Njet! Schema konnte nicht geladen werden: ' + err.message);
     } finally {
       this._applyButtonState(buildSchemaButtonState(false));
+      if (onDoneFn) onDoneFn();
     }
   }
 

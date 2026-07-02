@@ -19,9 +19,9 @@ beforeAll(() => {
   styleCss = readFileSync(STYLE_CSS, "utf-8");
 });
 // ----------------------------------------------------------------------------
-// status-panel.css – selector presence
+// status-panel.css ï¿½ selector presence
 // ----------------------------------------------------------------------------
-describe("status-panel.css – selectors", () => {
+describe("status-panel.css ï¿½ selectors", () => {
   it("contains .info-box selector", () => {
     expect(panelCss).toMatch(/\.info-box\s*\{/);
   });
@@ -39,6 +39,9 @@ describe("status-panel.css – selectors", () => {
   });
   it("contains .info-val.error selector", () => {
     expect(panelCss).toMatch(/\.info-val\.error\s*\{/);
+  });
+  it("contains .info-val.warn selector", () => {
+    expect(panelCss).toMatch(/\.info-val\.warn\s*\{/);
   });
   it("contains .btn-token selector", () => {
     expect(panelCss).toMatch(/\.btn-token\s*\{/);
@@ -63,9 +66,9 @@ describe("status-panel.css – selectors", () => {
   });
 });
 // ----------------------------------------------------------------------------
-// status-panel.css – design tokens
+// status-panel.css ï¿½ design tokens
 // ----------------------------------------------------------------------------
-describe("status-panel.css – design tokens", () => {
+describe("status-panel.css ï¿½ design tokens", () => {
   it(".info-box uses var(--bg3) as background", () => {
     const block = panelCss.match(/\.info-box\s*\{([^}]+)\}/)?.[1] ?? "";
     expect(block).toContain("var(--bg3)");
@@ -99,9 +102,9 @@ describe("status-panel.css – design tokens", () => {
   });
 });
 // ----------------------------------------------------------------------------
-// status-panel.css – layout values
+// status-panel.css ï¿½ layout values
 // ----------------------------------------------------------------------------
-describe("status-panel.css – layout values", () => {
+describe("status-panel.css ï¿½ layout values", () => {
   it(".info-box has width: 100%", () => {
     const block = panelCss.match(/\.info-box\s*\{([^}]+)\}/)?.[1] ?? "";
     expect(block).toMatch(/width\s*:\s*100%/);
@@ -129,9 +132,9 @@ describe("status-panel.css – layout values", () => {
   });
 });
 // ----------------------------------------------------------------------------
-// Extraction contract – style.css must NOT contain moved rules
+// Extraction contract ï¿½ style.css must NOT contain moved rules
 // ----------------------------------------------------------------------------
-describe("extraction contract – style.css no longer owns status-panel rules", () => {
+describe("extraction contract ï¿½ style.css no longer owns status-panel rules", () => {
   it("style.css does not contain .info-box rule", () => {
     expect(styleCss).not.toMatch(/\.info-box\s*\{[^}]*background/);
   });
