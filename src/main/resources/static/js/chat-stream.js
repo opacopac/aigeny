@@ -25,6 +25,7 @@ let _setThinkingFn      = (_v) => {};
 let _setExportEnabledFn = (_v) => {};
 let _renderer           = {};
 let _currentAbortCtrl   = null;
+let _receivedTerminalEvent = false;
 
 /**
  * Inject app-level callbacks and the renderer.  Call once after the DOM is ready.
@@ -64,15 +65,18 @@ function buildSseHandlers() {
       _renderer.showJiraBatchConfirmation(data.actions);
     },
     done: (data) => {
+      _receivedTerminalEvent = true;
       _renderer.finalizeTypingIndicator();
       if (data.response)  _renderer.appendMessage('aigeny', data.response);
       if (data.hasExport) _setExportEnabledFn(true);
     },
     cancelled: () => {
+      _receivedTerminalEvent = true;
       _renderer.removeTypingIndicator();
       _renderer.appendMessage('aigeny', '_Abgebrochen, Towarischtsch. AIgeny steht wieder bereit._');
     },
     error: (data) => {
+      _receivedTerminalEvent = true;
       _renderer.removeTypingIndicator();
       _renderer.appendMessage('aigeny', 'Njet! Fehler, Towarischtsch: ' + (data.message || '?'));
     },
@@ -132,6 +136,7 @@ export async function sendMessage() {
   _renderer.showTypingIndicator();
 
   _currentAbortCtrl = new AbortController();
+  _receivedTerminalEvent = false;
 
   try {
     const response = await fetch('/api/chat/stream', {
@@ -141,6 +146,17 @@ export async function sendMessage() {
       signal:  _currentAbortCtrl.signal,
     });
     await processStream(response.body);
+
+    // The stream closed without ever sending a "done"/"cancelled"/"error" event -
+    // e.g. because the server-side SSE connection timed out or was killed by a proxy
+    // mid-orchestration. Without this, the UI would silently flip back to idle with
+    // no explanation for the user.
+    if (!_receivedTerminalEvent) {
+      _renderer.removeTypingIndicator();
+      _renderer.appendMessage('aigeny',
+        '_Njet! Die Verbindung wurde unerwartet beendet, Towarischtsch (Zeitüberschreitung?). ' +
+        'Bitte versuche es erneut._');
+    }
   } catch (err) {
     if (err.name === 'AbortError') {
       _renderer.removeTypingIndicator();

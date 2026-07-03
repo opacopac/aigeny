@@ -45,7 +45,7 @@ class SseStreamManagerTest {
             SseEmitter result = manager.createEmitter();
 
             assertThat(result).isNotNull();
-            assertThat(result.getTimeout()).isEqualTo(300_000L); // 5 minutes
+            assertThat(result.getTimeout()).isEqualTo(30 * 60_000L); // 30 minutes
         }
     }
 

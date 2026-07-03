@@ -144,6 +144,7 @@ public class OrchestrationService {
             }
         }
 
+        log.warn("Tool-call loop hit MAX_TOOL_ITERATIONS ({}) without a final response - aborting and informing the user", MAX_TOOL_ITERATIONS);
         return new ChatResult(Messages.get(MSG_TOOL_LOOP), null);
     }
 

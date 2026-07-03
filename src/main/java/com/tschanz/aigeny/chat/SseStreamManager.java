@@ -11,6 +11,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Manages Server-Sent Events (SSE) lifecycle and message sending.
@@ -31,7 +35,14 @@ public class SseStreamManager {
 
     private static final Logger log = LoggerFactory.getLogger(SseStreamManager.class);
 
-    private static final long SSE_TIMEOUT_MS = 300_000L; // 5 minutes
+    // Long research sessions (up to MAX_TOOL_ITERATIONS in OrchestrationService) can take
+    // well over 5 minutes. The previous 5-minute value caused Spring to silently complete
+    // (and thus kill) the emitter mid-orchestration, before any "done"/"error" event could be
+    // sent - the client then just saw the stream end with no explanation. Use a generous
+    // timeout and a periodic heartbeat comment so intermediate proxies don't kill the
+    // connection while we're waiting on a long-running LLM/tool call.
+    private static final long SSE_TIMEOUT_MS = 30 * 60_000L; // 30 minutes
+    private static final long HEARTBEAT_INTERVAL_SEC = 15L;
 
     // SSE event types
     private static final String EVENT_TYPE_ERROR        = "error";
@@ -49,18 +60,45 @@ public class SseStreamManager {
     private static final String KEY_HAS_EXPORT  = "hasExport";
 
     private final ObjectMapper objectMapper;
+    private final ScheduledExecutorService heartbeatExecutor =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "sse-heartbeat");
+                t.setDaemon(true);
+                return t;
+            });
 
     public SseStreamManager(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
     /**
-     * Creates a new SSE emitter with configured timeout.
-     * 
+     * Creates a new SSE emitter with a generous timeout and starts a periodic heartbeat
+     * (SSE comment ping) that keeps the connection alive for long-running orchestration
+     * loops and prevents intermediate proxies/load-balancers from closing an idle socket.
+     * The heartbeat is automatically stopped once the emitter completes, times out or errors.
+     *
      * @return A new SseEmitter instance ready for streaming
      */
     public SseEmitter createEmitter() {
-        return new SseEmitter(SSE_TIMEOUT_MS);
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+
+        ScheduledFuture<?> heartbeat = heartbeatExecutor.scheduleAtFixedRate(() -> {
+            try {
+                emitter.send(SseEmitter.event().comment("keep-alive"));
+            } catch (Exception e) {
+                log.debug("Heartbeat send failed (emitter likely closed): {}", e.getMessage());
+            }
+        }, HEARTBEAT_INTERVAL_SEC, HEARTBEAT_INTERVAL_SEC, TimeUnit.SECONDS);
+
+        Runnable stopHeartbeat = () -> heartbeat.cancel(true);
+        emitter.onCompletion(stopHeartbeat);
+        emitter.onTimeout(() -> {
+            log.warn("SSE emitter timed out after {} ms - chat stream closed without a terminal event", SSE_TIMEOUT_MS);
+            stopHeartbeat.run();
+        });
+        emitter.onError(t -> stopHeartbeat.run());
+
+        return emitter;
     }
 
     /**
