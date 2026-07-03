@@ -68,7 +68,7 @@ public class SearchJiraUserTool extends AbstractTool {
         return "Search for Jira users by display name (full name). " +
                "Returns the technical username ('name' field) which can be used in JQL queries " +
                "such as 'assignee = <username>'. " +
-               "Example: provide displayName='Andreas Gallmann' to find the corresponding Jira account.";
+               "Example: provide displayName='Max Muster' to find the corresponding Jira account.";
     }
 
     @Override
@@ -76,7 +76,7 @@ public class SearchJiraUserTool extends AbstractTool {
         Map<String, Object> propsMap = Map.of(
             "displayName", Map.of(
                 "type", "string",
-                "description", "The display name (full name) of the Jira user to search for, e.g. 'Andreas Gallmann'"
+                "description", "The display name (full name) of the Jira user to search for, e.g. 'Max Muster'"
             )
         );
         return new ToolDefinition(getName(), getDescription(),
