@@ -53,7 +53,8 @@ public class AnthropicAdapter implements LlmClient {
 
         ObjectNode body = JSON.createObjectNode();
         body.put("model", llm.getModel());
-        body.put("max_tokens", 8192);
+        // Output-token budget; too low can starve reasoning models of room for the answer.
+        body.put("max_tokens", llm.getMaxTokens());
         // Automatic prompt caching: single top-level cache_control lets the API
         // automatically move the breakpoint to the last cacheable block as the
         // conversation grows - ideal for multi-turn chats.

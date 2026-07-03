@@ -19,4 +19,10 @@ public interface LlmConfiguration {
 
     /** Model name (e.g. llama3.1:8b, claude-opus-4-5). */
     String getModel();
+
+    /**
+     * Max output tokens per response (per-request, not summed across the conversation).
+     * Set generously - reasoning models can spend much of this on internal "thinking".
+     */
+    int getMaxTokens();
 }

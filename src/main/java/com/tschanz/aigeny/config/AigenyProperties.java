@@ -73,6 +73,8 @@ public class AigenyProperties {
         private String baseUrl = "http://localhost:11434/v1";
         /** Model name */
         private String model = "llama3.1:8b";
+        /** Max output tokens per response (see {@link LlmConfiguration#getMaxTokens()}). */
+        private int maxTokens = 32000;
 
         public String getProvider() { return provider; }
         public void setProvider(String provider) { this.provider = provider; }
@@ -82,6 +84,8 @@ public class AigenyProperties {
         public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
         public String getModel() { return model; }
         public void setModel(String model) { this.model = model; }
+        public int getMaxTokens() { return maxTokens; }
+        public void setMaxTokens(int maxTokens) { this.maxTokens = maxTokens; }
     }
 
     public static class Db implements DbConfiguration {

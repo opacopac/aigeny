@@ -38,6 +38,7 @@ aigeny:
   llm:
     provider: github-copilot
     model: claude-sonnet-4.6
+    max-tokens: 32000   # output tokens per LLM response; raise if empty responses occur with reasoning models
 
   #llm:
   #  provider: claude

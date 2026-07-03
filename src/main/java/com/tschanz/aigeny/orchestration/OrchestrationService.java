@@ -27,10 +27,12 @@ public class OrchestrationService {
 
     private static final Logger log = LoggerFactory.getLogger(OrchestrationService.class);
     private static final int MAX_TOOL_ITERATIONS = 50;
+    private static final int MAX_EMPTY_RESPONSE_RETRIES = 2;
 
     // ── Message keys ─────────────────────────────────────────────────────────
     private static final String MSG_PERSONA_PRIMER    = "orchestration.persona_primer";
     private static final String MSG_TOOL_LOOP         = "orchestration.error.tool_loop";
+    private static final String MSG_EMPTY_RESPONSE    = "orchestration.error.empty_response";
 
     private final LlmClient llmClient;
     private final ToolExecutor toolExecutor;
@@ -100,6 +102,7 @@ public class OrchestrationService {
         history.add(Message.user(stampedMessage));
 
         ToolResult lastToolResult = null;
+        int emptyResponseRetries = 0;
 
         int iterations = 0;
         while (iterations++ < MAX_TOOL_ITERATIONS) {
@@ -116,6 +119,23 @@ public class OrchestrationService {
 
             if (!response.hasToolCalls()) {
                 String content = response.getContent();
+
+                // Some models (observed with GitHub Copilot + Claude reasoning models) can
+                // return an HTTP 200 with an empty "choices" array - e.g. when the entire
+                // output-token budget was consumed by internal reasoning, leaving nothing for
+                // the visible answer. Silently returning "" here would previously cause the
+                // chat to look like it "just stopped" with no explanation to the user.
+                // Retry the call a couple of times before giving up with a clear message.
+                if (content == null || content.isBlank()) {
+                    log.warn("LLM returned an empty final response on iteration {} (no tool calls, no text)", iterations);
+                    if (emptyResponseRetries++ < MAX_EMPTY_RESPONSE_RETRIES) {
+                        log.warn("Retrying LLM call ({}/{}) after empty response", emptyResponseRetries, MAX_EMPTY_RESPONSE_RETRIES);
+                        continue;
+                    }
+                    log.warn("LLM kept returning empty responses after {} retries - aborting and informing the user", MAX_EMPTY_RESPONSE_RETRIES);
+                    return new ChatResult(Messages.get(MSG_EMPTY_RESPONSE), lastToolResult);
+                }
+
                 history.add(Message.assistant(content));
                 log.info("Final response ({} chars)", content.length());
                 return new ChatResult(content, lastToolResult);

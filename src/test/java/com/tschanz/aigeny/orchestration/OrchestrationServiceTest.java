@@ -319,6 +319,35 @@ class OrchestrationServiceTest {
 
             verify(llmClient, never()).chat(anyList(), anyList());
         }
+
+        @Test
+        @DisplayName("retries and recovers when the LLM returns an empty final response (e.g. empty 'choices')")
+        void retriesAndRecovers_whenLlmReturnsEmptyResponseOnce() throws Exception {
+            // Simulates GitHub Copilot/Claude returning HTTP 200 with an empty "choices" array
+            // (all output tokens consumed by reasoning) followed by a proper answer on retry.
+            when(llmClient.chat(anyList(), anyList()))
+                    .thenReturn(new ChatResponse(""))
+                    .thenReturn(new ChatResponse("Now here's the real answer"));
+
+            ChatResult result = service.chat(new ArrayList<>(), "Do stuff");
+
+            assertThat(result.response()).isEqualTo("Now here's the real answer");
+            verify(llmClient, times(2)).chat(anyList(), anyList());
+        }
+
+        @Test
+        @DisplayName("gives up with a friendly message after repeated empty LLM responses")
+        void givesUpWithFriendlyMessage_whenLlmKeepsReturningEmptyResponses() throws Exception {
+            when(llmClient.chat(anyList(), anyList()))
+                    .thenReturn(new ChatResponse(""));
+
+            ChatResult result = service.chat(new ArrayList<>(), "Do stuff");
+
+            // MAX_EMPTY_RESPONSE_RETRIES (2) retries + the initial attempt = 3 calls total
+            verify(llmClient, times(3)).chat(anyList(), anyList());
+            assertThat(result.response()).isNotBlank();
+            assertThat(result.response()).doesNotContain("Do stuff");
+        }
     }
 }
 

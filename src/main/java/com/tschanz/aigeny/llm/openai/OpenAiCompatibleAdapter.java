@@ -74,7 +74,8 @@ public class OpenAiCompatibleAdapter implements LlmClient {
             body.put("tool_choice", "auto");
         }
 
-        body.put("max_tokens", 8192);
+        // Output-token budget; too low can starve reasoning models of room for the answer.
+        body.put("max_tokens", llm.getMaxTokens());
 
         String bodyStr = JSON.writeValueAsString(body);
 

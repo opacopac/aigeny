@@ -479,6 +479,7 @@ class ConfigurationValidatorTest {
                 public String getApiKey()   { return "sk-test"; }
                 public String getBaseUrl()  { return "https://api.anthropic.com/v1"; }
                 public String getModel()    { return "claude-opus-4-5"; }
+                public int getMaxTokens()   { return 32000; }
             };
             assertThat(validator.isLlmConfigured(config)).isTrue();
         }

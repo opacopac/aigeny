@@ -74,7 +74,8 @@ public class GitHubCopilotAdapter implements LlmClient {
             for (ToolDefinition td : tools) toolsArr.add(JSON.valueToTree(td));
             body.put("tool_choice", "auto");
         }
-        body.put("max_tokens", 8192);
+        // Output-token budget; too low can starve reasoning models of room for the answer.
+        body.put("max_tokens", llm.getMaxTokens());
 
         String bodyStr = JSON.writeValueAsString(body);
         String url = github.getCopilotApiBase().replaceAll("/$", "") + "/chat/completions";
