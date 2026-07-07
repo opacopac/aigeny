@@ -15,6 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Manages Server-Sent Events (SSE) lifecycle and message sending.
@@ -82,15 +83,30 @@ public class SseStreamManager {
     public SseEmitter createEmitter() {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
 
+        // Holds the ScheduledFuture so the heartbeat task can cancel itself once it
+        // detects the emitter is already completed. Relying solely on the emitter's
+        // onCompletion/onError callbacks is not enough: those fire when the emitter is
+        // completed via emitter.complete()/completeWithError(), but if the underlying
+        // HTTP connection was already torn down by the client/container beforehand,
+        // the callback may run after (or never quite in sync with) the next scheduled
+        // heartbeat tick, causing the same "already completed" failure to repeat
+        // indefinitely every HEARTBEAT_INTERVAL_SEC seconds. Self-cancelling on the
+        // first failure guarantees the log only ever appears once per emitter.
+        AtomicReference<ScheduledFuture<?>> heartbeatRef = new AtomicReference<>();
         ScheduledFuture<?> heartbeat = heartbeatExecutor.scheduleAtFixedRate(() -> {
             try {
                 emitter.send(SseEmitter.event().comment("keep-alive"));
             } catch (Exception e) {
-                log.debug("Heartbeat send failed (emitter likely closed): {}", e.getMessage());
+                log.debug("Heartbeat send failed (emitter likely closed), stopping heartbeat: {}", e.getMessage());
+                ScheduledFuture<?> self = heartbeatRef.get();
+                if (self != null) {
+                    self.cancel(false);
+                }
             }
         }, HEARTBEAT_INTERVAL_SEC, HEARTBEAT_INTERVAL_SEC, TimeUnit.SECONDS);
+        heartbeatRef.set(heartbeat);
 
-        Runnable stopHeartbeat = () -> heartbeat.cancel(true);
+        Runnable stopHeartbeat = () -> heartbeat.cancel(false);
         emitter.onCompletion(stopHeartbeat);
         emitter.onTimeout(() -> {
             log.warn("SSE emitter timed out after {} ms - chat stream closed without a terminal event", SSE_TIMEOUT_MS);

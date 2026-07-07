@@ -36,3 +36,4 @@ secrets/
 target/
 *.log
 /node_modules/
+/.idea/copilotDiffState.xml
