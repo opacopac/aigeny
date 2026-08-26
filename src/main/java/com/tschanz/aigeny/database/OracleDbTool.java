@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
@@ -25,8 +26,17 @@ import java.util.regex.Pattern;
  *
  * <p>The generated SQL is logged and included in the tool result so it appears
  * in the chat.
+ *
+ * <p><b>MCP migration:</b> this is the "direct" (in-process JDBC) implementation
+ * of the {@code query_oracle_db} tool. When {@code aigeny.db.mcp-enabled=true} it
+ * is disabled in favour of {@link com.tschanz.aigeny.database.mcp.OracleMcpClientTool},
+ * which talks to an embedded MCP server via stdio instead of calling JDBC directly.
+ * Both expose the exact same tool name/description/schema, so the LLM-facing
+ * contract and {@link com.tschanz.aigeny.orchestration.ToolExecutor} wiring are
+ * unaffected by the switch.
  */
 @Service
+@ConditionalOnProperty(name = "aigeny.db.mcp-enabled", havingValue = "false", matchIfMissing = true)
 public class OracleDbTool extends AbstractTool {
 
     private static final Logger log = LoggerFactory.getLogger(OracleDbTool.class);
