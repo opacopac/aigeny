@@ -28,9 +28,11 @@ Browser (any device)
 │              ┌──────────┘          └──────────┐       │
 │              ▼                                ▼       │
 │        LlmClient                          Tools       │
-│  OpenAiCompatibleAdapter          OracleDbTool        │
-│  (Ollama / Groq / OpenAI /        JiraTool            │
-│   Azure - switchable via yml)     SchemaLoader        │
+│  OpenAiCompatibleAdapter          OracleMcpClientTool  │
+│  (Ollama / Groq / OpenAI /        (query_oracle_db,    │
+│   Azure - switchable via yml)      via embedded MCP    │
+│                                     server, see below) │
+│                                    JiraTool            │
 │                                                       │
 │  ExportService  → byte[] CSV                          │
 └───────────────────────────────────────────────────────┘
@@ -74,7 +76,7 @@ src/main/java/com/tschanz/aigeny/
 │   └── model/                      Message, ToolCall, ToolDefinition, ChatResponse
 ├── tools/
 │   ├── Tool.java                   Interface
-│   ├── OracleDbTool.java           @Service - SQL SELECT via JDBC
+│   ├── OracleMcpClientTool.java    @Service - query_oracle_db via embedded MCP server
 │   ├── JiraTool.java               @Service - JQL search via HTTPS
 │   ├── QueryResult.java            Column names + row data
 │   └── ToolResult.java             Text + optional QueryResult

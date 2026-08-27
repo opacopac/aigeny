@@ -10,7 +10,7 @@
 | 4 | LLM models (Message, ToolCall, ToolDefinition, ChatResponse) | ✅ Done |
 | 5 | `OpenAiCompatibleAdapter` (Ollama/Groq/OpenAI/Azure) | ✅ Done |
 | 6 | `SchemaLoader` (`@Service`, startup loading, cache, reload) | ✅ Done |
-| 7 | `OracleDbTool` (`@Service`, SELECT whitelist, HikariCP) | ✅ Done |
+| 7 | `query_oracle_db` tool via embedded MCP server (`OracleMcpClientTool` + `OracleMcpServerLauncher`, see `docs/05_mcp_migration.md`) | ✅ Done |
 | 8 | `JiraTool` (`@Service`, JQL, Basic Auth) | ✅ Done |
 | 9 | `OrchestrationService` (agentic loop, system prompt, `ChatResult`) | ✅ Done |
 | 10 | `ExportService` (CSV bytes) | ✅ Done |

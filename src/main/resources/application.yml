@@ -51,12 +51,9 @@ aigeny:
     username: ""
     password: ""   # or AIGENY_DB_PASSWORD_FILE for Docker secrets
     schema: ""     # optional: Oracle schema if different from username (e.g. username=readonly_user, schema=MYAPP)
-    mcp-enabled: true
-    # When true, the query_oracle_db tool is served by an embedded MCP server
-    # (com.tschanz.aigeny.database.mcp.OracleMcpServerLauncher), launched as a stdio
-    # child process, instead of running JDBC directly in-process (OracleDbTool).
-    # Phase 1 of the MCP migration - the tool contract towards the LLM is
-    # identical either way. Set via AIGENY_DB_MCP_ENABLED=true if preferred.
+    # The list_tables/describe_table/search_schema/sample_table/run_query tools are served
+    # by an embedded MCP server (com.tschanz.aigeny.database.mcp_server.OracleMcpServerLauncher),
+    # launched as a stdio child process (see com.tschanz.aigeny.database.mcp_client.OracleMcpConnection).
 
   jira:
     base-url: ""   # e.g. https://jira.example.com  – token entered via UI

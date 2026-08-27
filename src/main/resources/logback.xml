@@ -17,9 +17,19 @@
         </encoder>
     </appender>
 
-    <logger name="com.aigeny" level="INFO"/>
+    <!-- NOTE: package is com.tschanz.aigeny, not com.aigeny - must match exactly or this
+         config silently does nothing and everything falls through to root (WARN). -->
+    <logger name="com.tschanz.aigeny" level="DEBUG"/>
     <logger name="com.zaxxer.hikari" level="WARN"/>
     <logger name="oracle" level="WARN"/>
+
+    <!-- Raw MCP JSON-RPC traffic (initialize, tools/list, tools/call, ...).
+         additivity="false" + FILE-only: the MCP server child process uses stdout
+         as its protocol transport, so nothing here may go to the CONSOLE appender
+         or it would corrupt the stdio stream. Check ~/.aigeny/aigeny.log to see it. -->
+    <logger name="io.modelcontextprotocol" level="DEBUG" additivity="false">
+        <appender-ref ref="FILE"/>
+    </logger>
 
     <root level="WARN">
         <appender-ref ref="CONSOLE"/>

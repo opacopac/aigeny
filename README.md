@@ -206,7 +206,10 @@ src/main/java/com/tschanz/aigeny/
 │   ├── ToolResult.java
 │   ├── QueryResult.java
 │   ├── db/
-│   │   └── OracleDbTool.java    # Oracle DB query tool
+│   │   ├── mcp_server/               # embedded MCP server (child process): OracleMcpServerLauncher
+│   │   │   └── ...                   # + one OracleMcpToolHandler impl per tool (list_tables, describe_table, ...)
+│   │   └── mcp_client/               # MCP client tools registered with ToolExecutor
+│   │       └── ...                   # OracleMcpConnection + one *Tool class per tool
 │   └── jira/
 │       ├── QueryJiraTool.java       # Jira search tool
 │       ├── ReadJiraAttachmentTool.java

@@ -11,10 +11,12 @@ import com.tschanz.aigeny.jira.confirmation.ConfirmationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
 import com.tschanz.aigeny.jira.JiraConfiguration;
-import com.tschanz.aigeny.database.OracleConnectionPool;
+import com.tschanz.aigeny.config.ConfigurationValidator;
+import com.tschanz.aigeny.database.DbConfiguration;
 import com.tschanz.aigeny.bitbucket.ReadBitbucketFileTool;
 import com.tschanz.aigeny.bitbucket.SearchBitbucketTool;
-import com.tschanz.aigeny.database.OracleDbTool;
+import com.tschanz.aigeny.database.mcp_client.RunQueryTool;
+import com.tschanz.aigeny.database.mcp_client.OracleMcpConnection;
 import com.tschanz.aigeny.jira.*;
 import com.tschanz.aigeny.jira.JiraHttpClient;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +44,8 @@ class ToolGetCallDescriptionTest {
 
     @Mock private JiraConfiguration jiraConfig;
     @Mock private BitbucketConfiguration bitbucketConfig;
-    @Mock private OracleConnectionPool oracleConnectionPool;
+    @Mock private DbConfiguration dbConfig;
+    @Mock private ConfigurationValidator configValidator;
     @Mock private JiraHttpClient jiraHttpClient;
     @Mock private ConfirmationService confirmationService;
 
@@ -52,15 +55,18 @@ class ToolGetCallDescriptionTest {
         lenient().when(bitbucketConfig.getBaseUrl()).thenReturn("https://bb.example.com");
     }
 
-    // ── OracleDbTool ──────────────────────────────────────────────────────────
+    // ── RunQueryTool ────────────────────────────────────────────────────────────
 
     @Nested
-    @DisplayName("OracleDbTool (inherits AbstractTool default)")
-    class OracleDbToolDesc {
+    @DisplayName("RunQueryTool (overrides getCallDescription)")
+    class RunQueryToolDesc {
 
-        private OracleDbTool tool;
+        private RunQueryTool tool;
 
-        @BeforeEach void init() { tool = new OracleDbTool(oracleConnectionPool, objectMapper); }
+        @BeforeEach void init() {
+            OracleMcpConnection connection = new OracleMcpConnection(dbConfig, configValidator, objectMapper);
+            tool = new RunQueryTool(connection, objectMapper);
+        }
 
         @Test
         @DisplayName("returns 'description' field from JSON")
@@ -73,7 +79,7 @@ class ToolGetCallDescriptionTest {
         @DisplayName("falls back to tool name when no description")
         void fallsBackToName() {
             assertThat(tool.getCallDescription("{\"sql\":\"SELECT 1\"}"))
-                    .isEqualTo("query_oracle_db");
+                    .isEqualTo("run_query");
         }
     }
 
