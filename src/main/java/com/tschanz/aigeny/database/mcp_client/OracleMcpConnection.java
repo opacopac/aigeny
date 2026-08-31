@@ -6,9 +6,10 @@ import com.tschanz.aigeny.database.DbConfiguration;
 import com.tschanz.aigeny.database.mcp_server.OracleMcpServerLauncher;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
+import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.annotation.PostConstruct;
@@ -30,9 +31,11 @@ import java.util.Optional;
  * {@link OracleMcpServerLauncher} as a local child process and communicates with it over
  * the MCP stdio transport, exactly like a real external MCP server would be used. When a
  * {@code mcp-server-url} is configured instead, the local subprocess is skipped entirely and
- * the client connects to that URL over the SSE-based MCP HTTP transport - so switching from
- * the embedded implementation to an independently deployed/remote MCP server is a pure
- * configuration change (see {@code aigeny.db.mcp-server-url} in {@code application.yml}).
+ * the client connects to that URL over the Streamable HTTP MCP transport (optionally sending
+ * {@link DbConfiguration#getMcpServerHeaders()} with every request, e.g. an auth header/API
+ * key) - so switching from the embedded implementation to an independently deployed/remote
+ * MCP server is a pure configuration change (see {@code aigeny.db.mcp-server-url} in
+ * {@code application.yml}).
  *
  * <p>After the {@code initialize} handshake (either way), this also calls {@code listTools()}
  * once to discover the tools the server actually offers (name, description, JSON schema) -
@@ -107,14 +110,22 @@ public class OracleMcpConnection {
     }
 
     /**
-     * Builds the {@link McpClientTransport} to connect with: the SSE-based MCP HTTP
-     * transport pointed at {@link DbConfiguration#getMcpServerUrl()} when configured,
-     * otherwise the stdio transport to a locally spawned {@link OracleMcpServerLauncher}
-     * subprocess. Package-private (not {@code private}) so it can be unit-tested directly.
+     * Builds the {@link McpClientTransport} to connect with: the Streamable HTTP MCP
+     * transport pointed at {@link DbConfiguration#getMcpServerUrl()} when configured
+     * (with any {@link DbConfiguration#getMcpServerHeaders()} attached to every request,
+     * e.g. an auth header/API key), otherwise the stdio transport to a locally spawned
+     * {@link OracleMcpServerLauncher} subprocess. Package-private (not {@code private})
+     * so it can be unit-tested directly.
      */
     McpClientTransport buildTransport() {
         if (isRemoteConfigured()) {
-            return HttpClientSseClientTransport.builder(dbConfig.getMcpServerUrl()).build();
+            HttpClientStreamableHttpTransport.Builder builder =
+                    HttpClientStreamableHttpTransport.builder(dbConfig.getMcpServerUrl());
+            Map<String, String> headers = dbConfig.getMcpServerHeaders();
+            if (headers != null && !headers.isEmpty()) {
+                builder.customizeRequest(req -> headers.forEach(req::header));
+            }
+            return builder.build();
         }
 
         String javaBin = ProcessHandle.current().info().command().orElse("java");
@@ -125,7 +136,7 @@ public class OracleMcpConnection {
                 .addEnvVar("AIGENY_DB_PASSWORD", nullToEmpty(dbConfig.getPassword()))
                 .addEnvVar("AIGENY_DB_SCHEMA", nullToEmpty(dbConfig.getEffectiveSchema()))
                 .build();
-        return new StdioClientTransport(params, objectMapper);
+        return new StdioClientTransport(params, new JacksonMcpJsonMapper(objectMapper));
     }
 
     private void discoverTools(McpSyncClient c) {

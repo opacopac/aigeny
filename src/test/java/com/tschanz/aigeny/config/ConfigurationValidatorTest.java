@@ -448,6 +448,7 @@ class ConfigurationValidatorTest {
                 public String getPassword()        { return "pass"; }
                 public String getEffectiveSchema() { return "user"; }
                 public String getMcpServerUrl()    { return ""; }
+                public java.util.Map<String, String> getMcpServerHeaders() { return java.util.Map.of(); }
             };
             assertThat(validator.isDbConfigured(config)).isTrue();
         }

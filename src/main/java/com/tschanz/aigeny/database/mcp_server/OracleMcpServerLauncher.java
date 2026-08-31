@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.database.mcp_client.OracleMcpConnection;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
@@ -62,15 +64,21 @@ public final class OracleMcpServerLauncher {
 
         HikariDataSource dataSource = buildDataSource(url, username, password, schema);
         ObjectMapper objectMapper = new ObjectMapper();
+        McpJsonMapper jsonMapper = new JacksonMcpJsonMapper(objectMapper);
 
-        StdioServerTransportProvider transportProvider = new StdioServerTransportProvider(objectMapper);
+        StdioServerTransportProvider transportProvider = new StdioServerTransportProvider(jsonMapper);
 
-        McpServer.SyncSpecification builder = McpServer.sync(transportProvider)
+        var builder = McpServer.sync(transportProvider)
                 .serverInfo("aigeny-oracle-db", "1.0.0")
                 .capabilities(McpSchema.ServerCapabilities.builder().tools(true).build());
 
         for (OracleMcpToolHandler handler : HANDLERS) {
-            builder = builder.tool(new McpSchema.Tool(handler.name(), handler.description(), handler.schemaJson()),
+            McpSchema.Tool tool = McpSchema.Tool.builder()
+                    .name(handler.name())
+                    .description(handler.description())
+                    .inputSchema(jsonMapper, handler.schemaJson())
+                    .build();
+            builder.tool(tool,
                     (exchange, arguments) -> handler.handle(dataSource, objectMapper, arguments));
         }
 

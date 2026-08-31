@@ -1,5 +1,7 @@
 package com.tschanz.aigeny.database;
 
+import java.util.Map;
+
 /**
  * Read-only view of the database configuration.
  * <p>
@@ -25,8 +27,8 @@ public interface DbConfiguration {
     String getEffectiveSchema();
 
     /**
-     * Optional URL of a remote Oracle DB MCP server (e.g. {@code http://mcp-host:8081}),
-     * exposing the SSE-based MCP HTTP transport.
+     * Optional URL of a remote Oracle DB MCP server (e.g. {@code https://mcp-host/mcp}),
+     * exposing the Streamable HTTP MCP transport.
      *
      * <p>When blank/not set (the default), the embedded MCP server is spawned locally as a
      * stdio subprocess. When set, the local subprocess is skipped entirely and the client
@@ -35,4 +37,12 @@ public interface DbConfiguration {
      * independently deployed MCP server without any code change.
      */
     String getMcpServerUrl();
+
+    /**
+     * Optional extra HTTP headers to send with every request to a remote Oracle DB MCP
+     * server (see {@link #getMcpServerUrl()}) - e.g. an auth header/API key required by
+     * that server. Ignored for the local stdio subprocess. Never {@code null} (empty map
+     * when none are configured).
+     */
+    Map<String, String> getMcpServerHeaders();
 }

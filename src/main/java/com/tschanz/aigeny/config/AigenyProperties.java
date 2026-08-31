@@ -106,6 +106,18 @@ public class AigenyProperties {
          * subprocess; set this to switch to an independently deployed/remote MCP server instead.
          */
         private String mcpServerUrl = "";
+        /**
+         * Optional extra HTTP headers sent with every request to a remote MCP server
+         * (see {@link DbConfiguration#getMcpServerHeaders()}), e.g. {@code X-API-Key}.
+         * Bound from YAML as a nested map, e.g.:
+         * <pre>
+         * aigeny:
+         *   db:
+         *     mcp-server-headers:
+         *       X-API-Key: "secret"
+         * </pre>
+         */
+        private java.util.Map<String, String> mcpServerHeaders = new java.util.LinkedHashMap<>();
 
         public String getUrl() { return url; }
         public void setUrl(String url) { this.url = url; }
@@ -117,6 +129,10 @@ public class AigenyProperties {
         public void setSchema(String schema) { this.schema = schema; }
         public String getMcpServerUrl() { return mcpServerUrl; }
         public void setMcpServerUrl(String mcpServerUrl) { this.mcpServerUrl = mcpServerUrl; }
+        public java.util.Map<String, String> getMcpServerHeaders() { return mcpServerHeaders; }
+        public void setMcpServerHeaders(java.util.Map<String, String> mcpServerHeaders) {
+            this.mcpServerHeaders = mcpServerHeaders != null ? mcpServerHeaders : new java.util.LinkedHashMap<>();
+        }
 
         /**
          * Returns the effective Oracle schema name.

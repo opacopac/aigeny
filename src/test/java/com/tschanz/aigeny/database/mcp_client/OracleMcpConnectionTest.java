@@ -5,7 +5,7 @@ import com.tschanz.aigeny.config.ConfigurationValidator;
 import com.tschanz.aigeny.database.DbConfiguration;
 import com.tschanz.aigeny.database.mcp_server.OracleMcpServerLauncher;
 import io.modelcontextprotocol.client.McpSyncClient;
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -162,13 +162,35 @@ class OracleMcpConnectionTest {
         }
 
         @Test
-        @DisplayName("builds an HttpClientSseClientTransport (remote) when a mcpServerUrl is configured")
-        void buildsSseTransportWhenRemoteConfigured() {
+        @DisplayName("builds an HttpClientStreamableHttpTransport (remote) when a mcpServerUrl is configured")
+        void buildsStreamableTransportWhenRemoteConfigured() {
             when(dbConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
 
             McpClientTransport transport = connection.buildTransport();
 
-            assertThat(transport).isInstanceOf(HttpClientSseClientTransport.class);
+            assertThat(transport).isInstanceOf(HttpClientStreamableHttpTransport.class);
+        }
+
+        @Test
+        @DisplayName("still builds a valid remote transport when extra headers are configured")
+        void buildsStreamableTransportWithExtraHeaders() {
+            when(dbConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
+            when(dbConfig.getMcpServerHeaders()).thenReturn(Map.of("X-API-Key", "secret-value"));
+
+            McpClientTransport transport = connection.buildTransport();
+
+            assertThat(transport).isInstanceOf(HttpClientStreamableHttpTransport.class);
+        }
+
+        @Test
+        @DisplayName("still builds a valid remote transport when no headers are configured (null or empty map)")
+        void buildsStreamableTransportWithoutHeaders() {
+            when(dbConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
+            when(dbConfig.getMcpServerHeaders()).thenReturn(null);
+
+            McpClientTransport transport = connection.buildTransport();
+
+            assertThat(transport).isInstanceOf(HttpClientStreamableHttpTransport.class);
         }
     }
 
@@ -232,8 +254,11 @@ class OracleMcpConnectionTest {
         @DisplayName("getToolInfo() returns metadata cached from listTools() after connecting")
         void cachesDiscoveredTools() throws Exception {
             injectMockClient();
-            McpSchema.Tool tool = new McpSchema.Tool("list_tables", "List all tables",
-                    new McpSchema.JsonSchema("object", Map.of("prefix", Map.of("type", "string")), List.of(), null, null, null));
+            McpSchema.Tool tool = McpSchema.Tool.builder()
+                    .name("list_tables")
+                    .description("List all tables")
+                    .inputSchema(new McpSchema.JsonSchema("object", Map.of("prefix", Map.of("type", "string")), List.of(), null, null, null))
+                    .build();
             when(mcpClient.listTools()).thenReturn(new McpSchema.ListToolsResult(List.of(tool), null));
 
             Method discover = OracleMcpConnection.class.getDeclaredMethod("discoverTools", McpSyncClient.class);

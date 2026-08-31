@@ -59,8 +59,11 @@ class GenericOracleMcpToolTest {
         @Test
         @DisplayName("getDescription() returns the server-declared description when available")
         void getDescriptionFromServer() {
-            McpSchema.Tool serverTool = new McpSchema.Tool("run_query", "Run a SELECT query",
-                    new McpSchema.JsonSchema("object", Map.of(), List.of(), null, null, null));
+            McpSchema.Tool serverTool = McpSchema.Tool.builder()
+                    .name("run_query")
+                    .description("Run a SELECT query")
+                    .inputSchema(new McpSchema.JsonSchema("object", Map.of(), List.of(), null, null, null))
+                    .build();
             when(connection.getToolInfo("run_query")).thenReturn(Optional.of(serverTool));
 
             assertThat(tool("run_query").getDescription()).isEqualTo("Run a SELECT query");
@@ -69,10 +72,13 @@ class GenericOracleMcpToolTest {
         @Test
         @DisplayName("getDefinition() builds parameters from the server's JSON schema")
         void getDefinitionFromServerSchema() {
-            McpSchema.Tool serverTool = new McpSchema.Tool("run_query", "Run a SELECT query",
-                    new McpSchema.JsonSchema("object",
+            McpSchema.Tool serverTool = McpSchema.Tool.builder()
+                    .name("run_query")
+                    .description("Run a SELECT query")
+                    .inputSchema(new McpSchema.JsonSchema("object",
                             Map.of("sql", Map.of("type", "string")),
-                            List.of("sql"), null, null, null));
+                            List.of("sql"), null, null, null))
+                    .build();
             when(connection.getToolInfo("run_query")).thenReturn(Optional.of(serverTool));
 
             var definition = tool("run_query").getDefinition();

@@ -139,6 +139,32 @@ class AigenyPropertiesConfigurationInterfaceTest {
             DbConfiguration config = db;
             assertThat(config.getMcpServerUrl()).isEqualTo("http://mcp-host:8081");
         }
+
+        @Test
+        @DisplayName("getMcpServerHeaders() defaults to an empty map")
+        void getMcpServerHeadersDefaultsToEmpty() {
+            AigenyProperties.Db db = new AigenyProperties.Db();
+            DbConfiguration config = db;
+            assertThat(config.getMcpServerHeaders()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("getMcpServerHeaders() delegates to the stored value")
+        void getMcpServerHeadersDelegates() {
+            AigenyProperties.Db db = new AigenyProperties.Db();
+            db.setMcpServerHeaders(java.util.Map.of("X-API-Key", "secret-value"));
+            DbConfiguration config = db;
+            assertThat(config.getMcpServerHeaders()).containsEntry("X-API-Key", "secret-value");
+        }
+
+        @Test
+        @DisplayName("getMcpServerHeaders() never returns null, even when explicitly set to null")
+        void getMcpServerHeadersNeverNull() {
+            AigenyProperties.Db db = new AigenyProperties.Db();
+            db.setMcpServerHeaders(null);
+            DbConfiguration config = db;
+            assertThat(config.getMcpServerHeaders()).isNotNull().isEmpty();
+        }
     }
 
     @Nested

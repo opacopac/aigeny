@@ -56,8 +56,12 @@ aigeny:
     # com.tschanz.aigeny.database.mcp_server.OracleMcpServerLauncher, launched as a local
     # stdio child process (see com.tschanz.aigeny.database.mcp_client.OracleMcpConnection).
     # Set mcp-server-url to switch to an independently deployed/remote MCP server instead
-    # (SSE-based MCP HTTP transport) - no other code change needed.
-    mcp-server-url: ""   # e.g. http://mcp-host:8081
+    # (Streamable HTTP MCP transport) - no other code change needed.
+    mcp-server-url: ""   # e.g. https://mcp-host/mcp
+    # Optional extra HTTP headers sent with every request to that remote MCP server,
+    # e.g. an auth header/API key. Ignored for the local stdio subprocess.
+    mcp-server-headers: {}
+    #  X-API-Key: "secret"
 
   jira:
     base-url: ""   # e.g. https://jira.example.com  – token entered via UI
