@@ -6,8 +6,10 @@ import com.tschanz.aigeny.database.DbConfiguration;
 import com.tschanz.aigeny.database.mcp_server.OracleMcpServerLauncher;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -22,16 +24,20 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Manages the lifecycle of the embedded Oracle DB MCP server subprocess and the
- * {@link McpSyncClient} connected to it.
+ * Manages the lifecycle of the {@link McpSyncClient} connected to the Oracle DB MCP server.
  *
- * <p>On startup this launches {@link OracleMcpServerLauncher} as a child process and
- * communicates with it over the MCP stdio transport, exactly like a real external MCP
- * server would be used. After the {@code initialize} handshake, it also calls
- * {@code listTools()} once to discover the tools the server actually offers (name,
- * description, JSON schema) - this is the single source of truth for what gets exposed
- * to the LLM. See {@code AbstractOracleMcpTool} for the base class that reads this cache
- * and the concrete {@code *Tool} classes in this package for how each tool is exposed.
+ * <p>By default (no {@link DbConfiguration#getMcpServerUrl()} configured) this launches
+ * {@link OracleMcpServerLauncher} as a local child process and communicates with it over
+ * the MCP stdio transport, exactly like a real external MCP server would be used. When a
+ * {@code mcp-server-url} is configured instead, the local subprocess is skipped entirely and
+ * the client connects to that URL over the SSE-based MCP HTTP transport - so switching from
+ * the embedded implementation to an independently deployed/remote MCP server is a pure
+ * configuration change (see {@code aigeny.db.mcp-server-url} in {@code application.yml}).
+ *
+ * <p>After the {@code initialize} handshake (either way), this also calls {@code listTools()}
+ * once to discover the tools the server actually offers (name, description, JSON schema) -
+ * this is the single source of truth for what gets exposed to the LLM. See
+ * {@link GenericOracleMcpTool} and {@link OracleMcpToolProvider} for how each tool is exposed.
  */
 @Service
 public class OracleMcpConnection {
@@ -56,33 +62,70 @@ public class OracleMcpConnection {
 
     @PostConstruct
     void start() {
-        if (!configValidator.isDbConfigured(dbConfig)) {
+        if (shouldSkipStartup()) {
             log.info("Oracle DB not configured – MCP DB server not started.");
             return;
         }
+        boolean remote = isRemoteConfigured();
         try {
-            String javaBin = ProcessHandle.current().info().command().orElse("java");
-
-            ServerParameters params = ServerParameters.builder(javaBin)
-                    .args(buildJavaArgs())
-                    .addEnvVar("AIGENY_DB_URL", nullToEmpty(dbConfig.getUrl()))
-                    .addEnvVar("AIGENY_DB_USERNAME", nullToEmpty(dbConfig.getUsername()))
-                    .addEnvVar("AIGENY_DB_PASSWORD", nullToEmpty(dbConfig.getPassword()))
-                    .addEnvVar("AIGENY_DB_SCHEMA", nullToEmpty(dbConfig.getEffectiveSchema()))
-                    .build();
-
-            StdioClientTransport transport = new StdioClientTransport(params, objectMapper);
+            McpClientTransport transport = buildTransport();
             McpSyncClient newClient = McpClient.sync(transport)
                     .clientInfo(new McpSchema.Implementation("aigeny", "1.0.0"))
                     .build();
             newClient.initialize();
             this.client = newClient;
-            log.info("Oracle DB MCP server started (stdio subprocess) and initialized.");
+            if (remote) {
+                log.info("Oracle DB MCP client connected to remote server at {}.", dbConfig.getMcpServerUrl());
+            } else {
+                log.info("Oracle DB MCP server started (stdio subprocess) and initialized.");
+            }
 
             discoverTools(newClient);
         } catch (Exception e) {
-            log.error("Failed to start Oracle DB MCP server: {}", e.getMessage(), e);
+            log.error("Failed to {} Oracle DB MCP {}: {}", remote ? "connect to" : "start",
+                    remote ? "server at " + dbConfig.getMcpServerUrl() : "server", e.getMessage(), e);
         }
+    }
+
+    /**
+     * True when a {@link DbConfiguration#getMcpServerUrl()} is configured, i.e. tool calls
+     * should go to that remote MCP server instead of a locally spawned subprocess.
+     */
+    boolean isRemoteConfigured() {
+        String url = dbConfig.getMcpServerUrl();
+        return url != null && !url.isBlank();
+    }
+
+    /**
+     * Startup is only skipped when neither a remote MCP server URL nor the local JDBC
+     * connection details are configured - a remote server manages its own DB credentials,
+     * so it doesn't need the local {@code url}/{@code username} to be set. Package-private
+     * (not {@code private}) so it can be unit-tested directly without a real connection attempt.
+     */
+    boolean shouldSkipStartup() {
+        return !isRemoteConfigured() && !configValidator.isDbConfigured(dbConfig);
+    }
+
+    /**
+     * Builds the {@link McpClientTransport} to connect with: the SSE-based MCP HTTP
+     * transport pointed at {@link DbConfiguration#getMcpServerUrl()} when configured,
+     * otherwise the stdio transport to a locally spawned {@link OracleMcpServerLauncher}
+     * subprocess. Package-private (not {@code private}) so it can be unit-tested directly.
+     */
+    McpClientTransport buildTransport() {
+        if (isRemoteConfigured()) {
+            return HttpClientSseClientTransport.builder(dbConfig.getMcpServerUrl()).build();
+        }
+
+        String javaBin = ProcessHandle.current().info().command().orElse("java");
+        ServerParameters params = ServerParameters.builder(javaBin)
+                .args(buildJavaArgs())
+                .addEnvVar("AIGENY_DB_URL", nullToEmpty(dbConfig.getUrl()))
+                .addEnvVar("AIGENY_DB_USERNAME", nullToEmpty(dbConfig.getUsername()))
+                .addEnvVar("AIGENY_DB_PASSWORD", nullToEmpty(dbConfig.getPassword()))
+                .addEnvVar("AIGENY_DB_SCHEMA", nullToEmpty(dbConfig.getEffectiveSchema()))
+                .build();
+        return new StdioClientTransport(params, objectMapper);
     }
 
     private void discoverTools(McpSyncClient c) {
@@ -104,7 +147,7 @@ public class OracleMcpConnection {
         McpSyncClient c = this.client;
         if (c != null) {
             c.closeGracefully();
-            log.info("Oracle DB MCP server stopped.");
+            log.info("Oracle DB MCP client stopped.");
         }
     }
 

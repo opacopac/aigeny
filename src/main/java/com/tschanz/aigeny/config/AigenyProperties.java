@@ -100,6 +100,12 @@ public class AigenyProperties {
          * e.g. username=READONLY_USER, schema=NOVAP_INTE.
          */
         private String schema = "";
+        /**
+         * Optional URL of a remote Oracle DB MCP server (see {@link DbConfiguration#getMcpServerUrl()}).
+         * Leave blank (default) to keep launching the embedded MCP server as a local stdio
+         * subprocess; set this to switch to an independently deployed/remote MCP server instead.
+         */
+        private String mcpServerUrl = "";
 
         public String getUrl() { return url; }
         public void setUrl(String url) { this.url = url; }
@@ -109,6 +115,8 @@ public class AigenyProperties {
         public void setPassword(String password) { this.password = password; }
         public String getSchema() { return schema; }
         public void setSchema(String schema) { this.schema = schema; }
+        public String getMcpServerUrl() { return mcpServerUrl; }
+        public void setMcpServerUrl(String mcpServerUrl) { this.mcpServerUrl = mcpServerUrl; }
 
         /**
          * Returns the effective Oracle schema name.

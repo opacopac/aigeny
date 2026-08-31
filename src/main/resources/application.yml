@@ -52,8 +52,12 @@ aigeny:
     password: ""   # or AIGENY_DB_PASSWORD_FILE for Docker secrets
     schema: ""     # optional: Oracle schema if different from username (e.g. username=readonly_user, schema=MYAPP)
     # The list_tables/describe_table/search_schema/sample_table/run_query tools are served
-    # by an embedded MCP server (com.tschanz.aigeny.database.mcp_server.OracleMcpServerLauncher),
-    # launched as a stdio child process (see com.tschanz.aigeny.database.mcp_client.OracleMcpConnection).
+    # by an MCP server. By default (mcp-server-url blank) that server is the embedded
+    # com.tschanz.aigeny.database.mcp_server.OracleMcpServerLauncher, launched as a local
+    # stdio child process (see com.tschanz.aigeny.database.mcp_client.OracleMcpConnection).
+    # Set mcp-server-url to switch to an independently deployed/remote MCP server instead
+    # (SSE-based MCP HTTP transport) - no other code change needed.
+    mcp-server-url: ""   # e.g. http://mcp-host:8081
 
   jira:
     base-url: ""   # e.g. https://jira.example.com  – token entered via UI

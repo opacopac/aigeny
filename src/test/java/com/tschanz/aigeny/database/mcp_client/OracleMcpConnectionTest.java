@@ -5,6 +5,9 @@ import com.tschanz.aigeny.config.ConfigurationValidator;
 import com.tschanz.aigeny.database.DbConfiguration;
 import com.tschanz.aigeny.database.mcp_server.OracleMcpServerLauncher;
 import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.client.transport.StdioClientTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -74,14 +77,98 @@ class OracleMcpConnectionTest {
     class StartLifecycle {
 
         @Test
-        @DisplayName("does not attempt to launch the MCP server when DB is not configured")
+        @DisplayName("does not attempt to launch the MCP server when DB is not configured and no remote URL is set")
         void skipsStartupWhenNotConfigured() throws Exception {
             when(configValidator.isDbConfigured(dbConfig)).thenReturn(false);
+            when(dbConfig.getMcpServerUrl()).thenReturn("");
 
             invokeStart();
 
             assertThat(readClientField()).isNull();
             assertThat(connection.isAvailable()).isFalse();
+        }
+
+        @Test
+        @DisplayName("does not skip startup when a remote MCP server URL is configured, even if local DB fields are blank")
+        void doesNotSkipStartupWhenRemoteUrlConfigured() {
+            when(dbConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
+            // isDbConfigured() is deliberately never stubbed here (Mockito default: false) -
+            // shouldSkipStartup() must still be false because a remote URL is set. Verified
+            // directly (no real connection attempt / network call involved).
+            assertThat(connection.shouldSkipStartup()).isFalse();
+        }
+
+        @Test
+        @DisplayName("skips startup when neither a remote URL nor local DB fields are configured")
+        void skipsStartupWhenNeitherConfigured() {
+            when(dbConfig.getMcpServerUrl()).thenReturn("");
+            when(configValidator.isDbConfigured(dbConfig)).thenReturn(false);
+
+            assertThat(connection.shouldSkipStartup()).isTrue();
+        }
+
+        @Test
+        @DisplayName("does not skip startup when local DB fields are configured, even without a remote URL")
+        void doesNotSkipStartupWhenLocallyConfigured() {
+            when(dbConfig.getMcpServerUrl()).thenReturn("");
+            when(configValidator.isDbConfigured(dbConfig)).thenReturn(true);
+
+            assertThat(connection.shouldSkipStartup()).isFalse();
+        }
+    }
+
+    // ── isRemoteConfigured() ──────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("isRemoteConfigured()")
+    class IsRemoteConfigured {
+
+        @Test
+        @DisplayName("is false when mcpServerUrl is blank")
+        void falseWhenBlank() {
+            when(dbConfig.getMcpServerUrl()).thenReturn("");
+            assertThat(connection.isRemoteConfigured()).isFalse();
+        }
+
+        @Test
+        @DisplayName("is false when mcpServerUrl is null")
+        void falseWhenNull() {
+            when(dbConfig.getMcpServerUrl()).thenReturn(null);
+            assertThat(connection.isRemoteConfigured()).isFalse();
+        }
+
+        @Test
+        @DisplayName("is true when mcpServerUrl is set")
+        void trueWhenSet() {
+            when(dbConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
+            assertThat(connection.isRemoteConfigured()).isTrue();
+        }
+    }
+
+    // ── buildTransport() ──────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("buildTransport()")
+    class BuildTransport {
+
+        @Test
+        @DisplayName("builds a StdioClientTransport (local subprocess) when no remote URL is configured")
+        void buildsStdioTransportByDefault() {
+            when(dbConfig.getMcpServerUrl()).thenReturn("");
+
+            McpClientTransport transport = connection.buildTransport();
+
+            assertThat(transport).isInstanceOf(StdioClientTransport.class);
+        }
+
+        @Test
+        @DisplayName("builds an HttpClientSseClientTransport (remote) when a mcpServerUrl is configured")
+        void buildsSseTransportWhenRemoteConfigured() {
+            when(dbConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
+
+            McpClientTransport transport = connection.buildTransport();
+
+            assertThat(transport).isInstanceOf(HttpClientSseClientTransport.class);
         }
     }
 
@@ -156,6 +243,7 @@ class OracleMcpConnectionTest {
             Optional<McpSchema.Tool> info = connection.getToolInfo("list_tables");
             assertThat(info).isPresent();
             assertThat(info.get().description()).isEqualTo("List all tables");
+            assertThat(connection.getDiscoveredToolNames()).containsExactly("list_tables");
         }
 
         @Test

@@ -122,6 +122,23 @@ class AigenyPropertiesConfigurationInterfaceTest {
             DbConfiguration config = db;
             assertThat(config.getEffectiveSchema()).isEqualTo("MYUSER");
         }
+
+        @Test
+        @DisplayName("getMcpServerUrl() defaults to blank")
+        void getMcpServerUrlDefaultsToBlank() {
+            AigenyProperties.Db db = new AigenyProperties.Db();
+            DbConfiguration config = db;
+            assertThat(config.getMcpServerUrl()).isBlank();
+        }
+
+        @Test
+        @DisplayName("getMcpServerUrl() delegates to the stored value")
+        void getMcpServerUrlDelegates() {
+            AigenyProperties.Db db = new AigenyProperties.Db();
+            db.setMcpServerUrl("http://mcp-host:8081");
+            DbConfiguration config = db;
+            assertThat(config.getMcpServerUrl()).isEqualTo("http://mcp-host:8081");
+        }
     }
 
     @Nested
