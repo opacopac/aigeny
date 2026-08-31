@@ -159,6 +159,16 @@ public class OracleMcpConnection {
         return Optional.ofNullable(discoveredTools.get(name));
     }
 
+    /**
+     * Returns the names of all tools discovered from the server's {@code listTools()}
+     * response (empty if not connected yet, or discovery failed). This is the single
+     * source of truth {@link OracleMcpToolProvider} uses to build the set of client-side
+     * {@link GenericOracleMcpTool} instances - nothing is hardcoded here.
+     */
+    List<String> getDiscoveredToolNames() {
+        return List.copyOf(discoveredTools.keySet());
+    }
+
     /** Invokes a tool by name on the MCP server. Throws if not connected. */
     McpSchema.CallToolResult callTool(String name, Map<String, Object> arguments) {
         McpSyncClient c = this.client;

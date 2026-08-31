@@ -15,7 +15,7 @@ import com.tschanz.aigeny.config.ConfigurationValidator;
 import com.tschanz.aigeny.database.DbConfiguration;
 import com.tschanz.aigeny.bitbucket.ReadBitbucketFileTool;
 import com.tschanz.aigeny.bitbucket.SearchBitbucketTool;
-import com.tschanz.aigeny.database.mcp_client.RunQueryTool;
+import com.tschanz.aigeny.database.mcp_client.GenericOracleMcpTool;
 import com.tschanz.aigeny.database.mcp_client.OracleMcpConnection;
 import com.tschanz.aigeny.jira.*;
 import com.tschanz.aigeny.jira.JiraHttpClient;
@@ -55,17 +55,17 @@ class ToolGetCallDescriptionTest {
         lenient().when(bitbucketConfig.getBaseUrl()).thenReturn("https://bb.example.com");
     }
 
-    // ── RunQueryTool ────────────────────────────────────────────────────────────
+    // ── GenericOracleMcpTool (run_query instance) ────────────────────────────────
 
     @Nested
-    @DisplayName("RunQueryTool (overrides getCallDescription)")
-    class RunQueryToolDesc {
+    @DisplayName("GenericOracleMcpTool (overrides getCallDescription)")
+    class GenericOracleMcpToolDesc {
 
-        private RunQueryTool tool;
+        private GenericOracleMcpTool tool;
 
         @BeforeEach void init() {
             OracleMcpConnection connection = new OracleMcpConnection(dbConfig, configValidator, objectMapper);
-            tool = new RunQueryTool(connection, objectMapper);
+            tool = new GenericOracleMcpTool("run_query", connection, objectMapper);
         }
 
         @Test
@@ -76,10 +76,10 @@ class ToolGetCallDescriptionTest {
         }
 
         @Test
-        @DisplayName("falls back to tool name when no description")
-        void fallsBackToName() {
+        @DisplayName("falls back to humanized name + args when no description")
+        void fallsBackToNameAndArgs() {
             assertThat(tool.getCallDescription("{\"sql\":\"SELECT 1\"}"))
-                    .isEqualTo("run_query");
+                    .isEqualTo("run query: SELECT 1");
         }
     }
 

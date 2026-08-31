@@ -48,7 +48,7 @@ class ToolExecutorTest {
         @Test
         void shouldInitializeWithTools() {
             // When
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
 
             // Then
             assertThat(executor.getTools()).hasSize(2);
@@ -58,7 +58,7 @@ class ToolExecutorTest {
         @Test
         void shouldHandleEmptyToolList() {
             // When
-            ToolExecutor executor = new ToolExecutor(List.of());
+            ToolExecutor executor = new ToolExecutor(List.of(), List.of());
 
             // Then
             assertThat(executor.getTools()).isEmpty();
@@ -72,7 +72,7 @@ class ToolExecutorTest {
         @Test
         void shouldFindExistingTool() {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
 
             // When
             Optional<Tool> found = executor.findTool("tool1");
@@ -85,7 +85,7 @@ class ToolExecutorTest {
         @Test
         void shouldReturnEmptyForNonExistingTool() {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
 
             // When
             Optional<Tool> found = executor.findTool("nonexistent");
@@ -97,7 +97,7 @@ class ToolExecutorTest {
         @Test
         void shouldBeCaseSensitive() {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
 
             // When
             Optional<Tool> found = executor.findTool("TOOL1");
@@ -109,7 +109,7 @@ class ToolExecutorTest {
         @Test
         void shouldFindSecondTool() {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
 
             // When
             Optional<Tool> found = executor.findTool("tool2");
@@ -126,7 +126,7 @@ class ToolExecutorTest {
         @Test
         void shouldExecuteToolSuccessfully() throws Exception {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
             ToolCall toolCall = new ToolCall("call-1", new ToolCall.FunctionCall("tool1", "{}"));
             ToolResult expectedResult = new ToolResult("Success");
             when(mockTool1.execute(anyString())).thenReturn(expectedResult);
@@ -143,7 +143,7 @@ class ToolExecutorTest {
         @Test
         void shouldInvokeCallbackBeforeExecution() throws Exception {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
             ToolCall toolCall = new ToolCall("call-1", new ToolCall.FunctionCall("tool1", "{\"arg\":\"value\"}"));
             ToolResult expectedResult = new ToolResult("Success");
             when(mockTool1.execute(anyString())).thenReturn(expectedResult);
@@ -170,7 +170,7 @@ class ToolExecutorTest {
         @Test
         void shouldHandleUnknownTool() throws Exception {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
             ToolCall toolCall = new ToolCall("call-1", new ToolCall.FunctionCall("unknown", "{}"));
 
             // When
@@ -186,7 +186,7 @@ class ToolExecutorTest {
         @Test
         void shouldHandleToolExecutionException() throws Exception {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
             ToolCall toolCall = new ToolCall("call-1", new ToolCall.FunctionCall("tool1", "{}"));
             when(mockTool1.execute(anyString())).thenThrow(new RuntimeException("Tool failed"));
             when(mockTool1.getCallDescription(anyString())).thenReturn("Description");
@@ -202,7 +202,7 @@ class ToolExecutorTest {
         @Test
         void shouldNotInvokeCallbackForUnknownTool() throws Exception {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
             ToolCall toolCall = new ToolCall("call-1", new ToolCall.FunctionCall("unknown", "{}"));
             AtomicBoolean callbackInvoked = new AtomicBoolean(false);
 
@@ -218,7 +218,7 @@ class ToolExecutorTest {
         @Test
         void shouldWorkWithoutCallback() throws Exception {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
             ToolCall toolCall = new ToolCall("call-1", new ToolCall.FunctionCall("tool1", "{}"));
             ToolResult expectedResult = new ToolResult("Success");
             when(mockTool1.execute(anyString())).thenReturn(expectedResult);
@@ -238,7 +238,7 @@ class ToolExecutorTest {
         @Test
         void shouldReturnAllTools() {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
 
             // When
             List<Tool> allTools = executor.getTools();
@@ -251,7 +251,7 @@ class ToolExecutorTest {
         @Test
         void shouldReturnEmptyListWhenNoTools() {
             // Given
-            ToolExecutor executor = new ToolExecutor(List.of());
+            ToolExecutor executor = new ToolExecutor(List.of(), List.of());
 
             // When
             List<Tool> allTools = executor.getTools();
@@ -267,7 +267,7 @@ class ToolExecutorTest {
         @Test
         void shouldReturnCorrectCount() {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
 
             // When
             int count = executor.getToolCount();
@@ -279,7 +279,7 @@ class ToolExecutorTest {
         @Test
         void shouldReturnZeroWhenNoTools() {
             // Given
-            ToolExecutor executor = new ToolExecutor(List.of());
+            ToolExecutor executor = new ToolExecutor(List.of(), List.of());
 
             // When
             int count = executor.getToolCount();
@@ -295,7 +295,7 @@ class ToolExecutorTest {
         @Test
         void shouldSetCurrentToolCallContextDuringExecution() throws Exception {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
             ToolCall toolCall = new ToolCall("call-ctx-test", new ToolCall.FunctionCall("tool1", "{}"));
             AtomicReference<String> capturedId = new AtomicReference<>();
             when(mockTool1.getCallDescription(anyString())).thenReturn("desc");
@@ -314,7 +314,7 @@ class ToolExecutorTest {
         @Test
         void shouldClearCurrentToolCallContextAfterExecution() throws Exception {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
             ToolCall toolCall = new ToolCall("call-1", new ToolCall.FunctionCall("tool1", "{}"));
             when(mockTool1.getCallDescription(anyString())).thenReturn("desc");
             when(mockTool1.execute(anyString())).thenReturn(new ToolResult("ok"));
@@ -329,7 +329,7 @@ class ToolExecutorTest {
         @Test
         void shouldClearCurrentToolCallContextEvenAfterException() throws Exception {
             // Given
-            ToolExecutor executor = new ToolExecutor(tools);
+            ToolExecutor executor = new ToolExecutor(tools, List.of());
             ToolCall toolCall = new ToolCall("call-err", new ToolCall.FunctionCall("tool1", "{}"));
             when(mockTool1.getCallDescription(anyString())).thenReturn("desc");
             when(mockTool1.execute(anyString())).thenThrow(new RuntimeException("boom"));

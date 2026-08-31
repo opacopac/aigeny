@@ -1,14 +1,15 @@
 package com.tschanz.aigeny.orchestration;
 
 import com.tschanz.aigeny.Messages;
-import com.tschanz.aigeny.orchestration.CurrentToolCallContext;
 import com.tschanz.aigeny.llm.model.ToolCall;
+import com.tschanz.aigeny.tool.DynamicToolProvider;
 import com.tschanz.aigeny.tool.Tool;
 import com.tschanz.aigeny.tool.ToolResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiConsumer;
@@ -28,14 +29,23 @@ public class ToolExecutor {
     private final List<Tool> tools;
 
     /**
-     * Constructor - Spring auto-collects all Tool beans into the list.
+     * Constructor - Spring auto-collects all statically-declared Tool beans into {@code tools},
+     * which is then merged with whatever every {@link DynamicToolProvider} bean (e.g.
+     * {@code OracleMcpToolProvider}, backing the Oracle DB MCP tools discovered at runtime)
+     * currently reports, so dynamically discovered tools need no dedicated {@code @Service}
+     * class of their own.
      *
-     * @param tools list of available tools
+     * @param tools list of statically-declared tools
+     * @param dynamicToolProviders providers contributing additional, runtime-discovered tools
      */
-    public ToolExecutor(List<Tool> tools) {
-        this.tools = tools;
+    public ToolExecutor(List<Tool> tools, List<DynamicToolProvider> dynamicToolProviders) {
+        List<Tool> merged = new ArrayList<>(tools);
+        for (DynamicToolProvider provider : dynamicToolProviders) {
+            merged.addAll(provider.getTools());
+        }
+        this.tools = List.copyOf(merged);
         log.info("ToolExecutor initialized with {} tools: {}",
-                tools.size(), tools.stream().map(Tool::getName).toList());
+                this.tools.size(), this.tools.stream().map(Tool::getName).toList());
     }
 
     /**

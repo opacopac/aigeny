@@ -122,6 +122,12 @@ class OracleMcpConnectionTest {
         }
 
         @Test
+        @DisplayName("getDiscoveredToolNames() is empty")
+        void noDiscoveredNames() {
+            assertThat(connection.getDiscoveredToolNames()).isEmpty();
+        }
+
+        @Test
         @DisplayName("callTool() throws IllegalStateException")
         void callToolThrows() {
             assertThatThrownBy(() -> connection.callTool("list_tables", Map.of()))

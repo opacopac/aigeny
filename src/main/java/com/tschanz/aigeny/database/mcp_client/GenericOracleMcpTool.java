@@ -3,7 +3,6 @@ package com.tschanz.aigeny.database.mcp_client;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;
-import com.tschanz.aigeny.database.mcp_server.OracleMcpServerLauncher;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.tool.AbstractTool;
 import com.tschanz.aigeny.tool.QueryResult;
@@ -12,52 +11,57 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 /**
- * Base class for the Oracle DB MCP client-side tools ({@link ListTablesTool}, {@link DescribeTableTool},
- * {@link SearchSchemaTool}, {@link SampleTableTool}, {@link RunQueryTool}).
+ * A single generic client-side tool that proxies exactly one tool call to the embedded
+ * Oracle DB MCP server ({@link OracleMcpConnection}).
  *
- * <p>Each concrete subclass owns exactly one tool name and its {@code getCallDescription()}
- * logic (how to summarize its own specific arguments for the UI typing indicator). Everything
- * else that is common to all five - resolving description/JSON-schema from the MCP server's
- * {@code listTools()} response, invoking the tool via {@link OracleMcpConnection}, and turning
- * the {@link McpSchema.CallToolResult} into a {@link ToolResult} (with optional {@link QueryResult}
- * for CSV export) - lives here.
- *
- * <p>The server ({@link OracleMcpServerLauncher} and its {@code OracleMcpToolHandler}
- * implementations, in the sibling {@code mcp_server} package) remains the single source
- * of truth for description and JSON schema; this class never hardcodes them.
+ * <p>This class deliberately does not hardcode a tool name, description, JSON schema or any
+ * argument names anywhere. One instance is created per tool name that the server actually
+ * reports via {@code listTools()} - see {@link OracleMcpToolProvider}, which is the only place
+ * that turns the server's response into a set of {@code Tool} instances. Adding, removing or
+ * changing a tool on the server side (a new/changed {@code OracleMcpToolHandler} - see the
+ * sibling {@code mcp_server} package) is therefore automatically reflected here without any
+ * client-side code change.
  */
-public abstract class AbstractOracleMcpTool extends AbstractTool {
+public class GenericOracleMcpTool extends AbstractTool {
 
-    private static final Logger log = LoggerFactory.getLogger(AbstractOracleMcpTool.class);
+    private static final Logger log = LoggerFactory.getLogger(GenericOracleMcpTool.class);
     private static final String MSG_NOT_CONFIGURED = "db.error.not_configured";
 
-    protected final OracleMcpConnection connection;
+    private final String name;
+    private final OracleMcpConnection connection;
 
-    protected AbstractOracleMcpTool(OracleMcpConnection connection, ObjectMapper objectMapper) {
+    public GenericOracleMcpTool(String name, OracleMcpConnection connection, ObjectMapper objectMapper) {
         super(objectMapper);
+        this.name = name;
         this.connection = connection;
     }
 
     @Override
+    public String getName() {
+        return name;
+    }
+
+    @Override
     public String getDescription() {
-        return connection.getToolInfo(getName())
+        return connection.getToolInfo(name)
                 .map(McpSchema.Tool::description)
-                .orElse("Oracle DB tool '" + getName() + "' (not available - database not configured " +
+                .orElse("Oracle DB tool '" + name + "' (not available - database not configured " +
                         "or the MCP server is not reachable)");
     }
 
     @Override
     public ToolDefinition getDefinition() {
-        Optional<McpSchema.Tool> info = connection.getToolInfo(getName());
+        Optional<McpSchema.Tool> info = connection.getToolInfo(name);
         if (info.isEmpty()) {
             // MCP server not reachable (yet) - minimal fallback schema so the app still starts up cleanly.
-            return new ToolDefinition(getName(), getDescription(),
+            return new ToolDefinition(name, getDescription(),
                     Map.of("type", "object", "properties", Map.of()));
         }
         McpSchema.JsonSchema schema = info.get().inputSchema();
@@ -67,7 +71,43 @@ public abstract class AbstractOracleMcpTool extends AbstractTool {
         if (schema.required() != null && !schema.required().isEmpty()) {
             parameters.put("required", schema.required());
         }
-        return new ToolDefinition(getName(), getDescription(), parameters);
+        return new ToolDefinition(name, getDescription(), parameters);
+    }
+
+    /**
+     * Generic call-description for the UI typing indicator: prefers an explicit
+     * {@code description} argument (used e.g. by {@code run_query}); otherwise summarizes the
+     * call by joining the values of all scalar top-level arguments after the humanized tool
+     * name, so this stays useful without knowing any tool-specific argument names.
+     */
+    @Override
+    public String getCallDescription(String argumentsJson) {
+        try {
+            JsonNode args = objectMapper.readTree(argumentsJson);
+            JsonNode desc = args.get("description");
+            if (desc != null && !desc.isNull() && !desc.asText().isBlank()) {
+                return desc.asText();
+            }
+
+            StringBuilder sb = new StringBuilder(humanize(name));
+            boolean any = false;
+            Iterator<Map.Entry<String, JsonNode>> fields = args.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+                JsonNode value = field.getValue();
+                if (value.isValueNode() && !value.isNull() && !value.asText().isBlank()) {
+                    sb.append(any ? ", " : ": ").append(value.asText());
+                    any = true;
+                }
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return name;
+        }
+    }
+
+    private static String humanize(String toolName) {
+        return toolName.replace('_', ' ');
     }
 
     @Override
@@ -79,7 +119,7 @@ public abstract class AbstractOracleMcpTool extends AbstractTool {
         Map<String, Object> arguments = objectMapper.readValue(argumentsJson,
                 objectMapper.getTypeFactory().constructMapType(Map.class, String.class, Object.class));
 
-        log.info("  DB TOOL REQUEST name={} args={}", getName(), arguments);
+        log.info("  DB TOOL REQUEST name={} args={}", name, arguments);
         if (arguments.get("sql") != null) {
             // Dedicated debug line with the raw SQL string (run_query), independent of the
             // generic args map above - easiest to grep for when debugging a specific query.
@@ -87,19 +127,19 @@ public abstract class AbstractOracleMcpTool extends AbstractTool {
         }
 
         long t0 = System.currentTimeMillis();
-        McpSchema.CallToolResult result = connection.callTool(getName(), arguments);
+        McpSchema.CallToolResult result = connection.callTool(name, arguments);
         long elapsed = System.currentTimeMillis() - t0;
 
         List<McpSchema.Content> content = result.content();
         String text = content.isEmpty() ? "" : asText(content.get(0));
 
         if (Boolean.TRUE.equals(result.isError())) {
-            log.error("  DB TOOL {} FAILED elapsed={}ms error=\"{}\"", getName(), elapsed, text);
+            log.error("  DB TOOL {} FAILED elapsed={}ms error=\"{}\"", name, elapsed, text);
             return new ToolResult(text);
         }
 
         QueryResult qr = tryParseStructuredResult(content);
-        log.info("  DB TOOL {} OK elapsed={}ms rows={}", getName(), elapsed, qr == null ? 0 : qr.getRows().size());
+        log.info("  DB TOOL {} OK elapsed={}ms rows={}", name, elapsed, qr == null ? 0 : qr.getRows().size());
         return qr != null ? new ToolResult(text, qr) : new ToolResult(text);
     }
 
@@ -115,7 +155,7 @@ public abstract class AbstractOracleMcpTool extends AbstractTool {
                     objectMapper.getTypeFactory().constructCollectionType(List.class, Map.class));
             return new QueryResult("Oracle DB", columns, rows);
         } catch (Exception e) {
-            log.warn("Could not parse structured MCP result for tool {}: {}", getName(), e.getMessage());
+            log.warn("Could not parse structured MCP result for tool {}: {}", name, e.getMessage());
             return null;
         }
     }
