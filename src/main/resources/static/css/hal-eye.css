@@ -5,7 +5,7 @@
 
 /* Side-panel container */
 .hal-panel {
-  width: 310px;
+  width: 350px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;

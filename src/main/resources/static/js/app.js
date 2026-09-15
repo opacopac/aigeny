@@ -11,7 +11,6 @@ import { GithubConnector } from './github-connect.js';
 import { TokenModal } from './token-modal.js';
 import { JiraWriteMode } from './jira-write-mode.js';
 import { StatusPanel } from './status-panel.js';
-import { SchemaPanel } from './schema-panel.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let isThinking = false;
@@ -118,18 +117,6 @@ function copyGithubUserCode()           { _githubConnector.copyUserCode(); }
 function disconnectGithub()             { _githubConnector.disconnect(); }
 async function refreshGithubInfoBox()   { await _githubConnector.refreshInfoBox(); }
 
-// ── Controls ───────────────────────────────────────────────────────────────
-
-const _schemaPanel = new SchemaPanel({
-  btn:        document.querySelector('button[onclick="reloadSchema()"]'),
-  infoTables: document.getElementById('infoTables'),
-});
-
-async function reloadSchema() {
-  await _schemaPanel.reload(appendMessage, () => loadStatus());
-}
-
-
 // ── State helpers ──────────────────────────────────────────────────────────
 
 function setThinking(thinking) {
@@ -183,7 +170,7 @@ window.addEventListener('load', () => {
     startGithubConnect, copyGithubUserCode, disconnectGithub,
     openJiraTokenModal, closeJiraTokenModal, saveJiraToken, clearJiraToken,
     openBitbucketTokenModal, closeBitbucketTokenModal, saveBitbucketToken, clearBitbucketToken,
-    reloadSchema, toggleJiraWriteMode: (v) => _jiraWriteMode.toggle(v),
+    toggleJiraWriteMode: (v) => _jiraWriteMode.toggle(v),
   });
 
   _jiraTokenModal.syncToSession()

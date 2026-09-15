@@ -167,7 +167,6 @@ aigeny:
 | `POST` | `/api/chat` | Send a message `{"message":"..."}`, get `{"response":"...","hasExport":true/false}` |
 | `POST` | `/api/chat/stream` | Same as `/api/chat` but as SSE stream (events: `tool_call`, `intermediate`, `done`, `error`) |
 | `POST` | `/api/chat/clear` | Clear session history |
-| `POST` | `/api/schema/reload` | Reload DB schema from Oracle |
 | `GET` | `/api/status` | LLM/DB/Jira connection status |
 | `GET` | `/api/export/csv` | Download last query result as CSV |
 | `POST` | `/api/jira/token` | Set Jira API token for the current session `{"token":"..."}` |
@@ -220,8 +219,7 @@ src/main/java/com/tschanz/aigeny/
 │       ├── JiraTokenContext.java
 │       ├── PendingJiraAction.java
 │       └── PendingJiraActionContext.java
-├── db/                          # Schema loader (auto-loads on startup)
-│   └── SchemaLoader.java
+├── db/                          # DB configuration / MCP client
 ├── export/                      # CSV export (byte[] generation)
 │   └── ExportService.java
 ├── orchestration/               # Agentic tool-call loop

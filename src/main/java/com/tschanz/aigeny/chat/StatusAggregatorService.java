@@ -6,9 +6,9 @@ import com.tschanz.aigeny.export.SessionExportService;
 import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
 import com.tschanz.aigeny.config.ConfigurationValidator;
 import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.mcp_client.OracleMcpConnection;
 import com.tschanz.aigeny.jira.JiraConfiguration;
 import com.tschanz.aigeny.llm.LlmConfiguration;
-import com.tschanz.aigeny.database.SchemaLoader;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Service;
 
@@ -17,25 +17,26 @@ import java.util.Map;
 
 /**
  * Aggregates system status information from various sources including
- * LLM configuration, database, Jira, Bitbucket, and schema metadata.
+ * LLM configuration, MCP DB connection, Jira, and Bitbucket.
  */
 @Service
 public class StatusAggregatorService {
 
     // Status map keys
-    private static final String KEY_LLM_PROVIDER                = "llmProvider";
-    private static final String KEY_LLM_MODEL                   = "llmModel";
-    private static final String KEY_DB_CONFIGURED               = "dbConfigured";
-    private static final String KEY_DB_USERNAME                 = "dbUsername";
-    private static final String KEY_DB_REACHABLE                = "dbReachable";
-    private static final String KEY_DB_ERROR                    = "dbError";
-    private static final String KEY_JIRA_CONFIGURED             = "jiraConfigured";
-    private static final String KEY_JIRA_BASEURL_CONFIGURED     = "jiraBaseUrlConfigured";
-    private static final String KEY_JIRA_WRITE_ENABLED          = "jiraWriteEnabled";
-    private static final String KEY_BITBUCKET_CONFIGURED        = "bitbucketConfigured";
+    private static final String KEY_LLM_PROVIDER                 = "llmProvider";
+    private static final String KEY_LLM_MODEL                    = "llmModel";
+    private static final String KEY_DB_CONFIGURED                = "dbConfigured";
+    private static final String KEY_DB_USERNAME                  = "dbUsername";
+    private static final String KEY_DB_MCP_CONNECTED             = "dbMcpConnected";
+    private static final String KEY_DB_MCP_LIST_TABLES_AVAILABLE = "dbMcpListTablesAvailable";
+    private static final String KEY_DB_MCP_TABLE_COUNT           = "dbMcpTableCount";
+    private static final String KEY_DB_MCP_ERROR                 = "dbMcpError";
+    private static final String KEY_JIRA_CONFIGURED              = "jiraConfigured";
+    private static final String KEY_JIRA_BASEURL_CONFIGURED      = "jiraBaseUrlConfigured";
+    private static final String KEY_JIRA_WRITE_ENABLED           = "jiraWriteEnabled";
+    private static final String KEY_BITBUCKET_CONFIGURED         = "bitbucketConfigured";
     private static final String KEY_BITBUCKET_BASEURL_CONFIGURED = "bitbucketBaseUrlConfigured";
-    private static final String KEY_SCHEMA_TABLES               = "schemaTables";
-    private static final String KEY_HAS_EXPORT                  = "hasExport";
+    private static final String KEY_HAS_EXPORT                   = "hasExport";
 
     private final LlmConfiguration llmConfig;
     private final DbConfiguration dbConfig;
@@ -45,7 +46,7 @@ public class StatusAggregatorService {
     private final TokenService tokenService;
     private final SessionJiraWriteService jiraWriteService;
     private final SessionExportService exportService;
-    private final SchemaLoader schemaLoader;
+    private final OracleMcpConnection dbMcpConnection;
 
     public StatusAggregatorService(LlmConfiguration llmConfig,
                                    DbConfiguration dbConfig,
@@ -55,7 +56,7 @@ public class StatusAggregatorService {
                                    TokenService tokenService,
                                    SessionJiraWriteService jiraWriteService,
                                    SessionExportService exportService,
-                                   SchemaLoader schemaLoader) {
+                                   OracleMcpConnection dbMcpConnection) {
         this.llmConfig = llmConfig;
         this.dbConfig = dbConfig;
         this.jiraConfig = jiraConfig;
@@ -64,7 +65,7 @@ public class StatusAggregatorService {
         this.tokenService = tokenService;
         this.jiraWriteService = jiraWriteService;
         this.exportService = exportService;
-        this.schemaLoader = schemaLoader;
+        this.dbMcpConnection = dbMcpConnection;
     }
 
     /**
@@ -84,9 +85,15 @@ public class StatusAggregatorService {
         // Database configuration
         status.put(KEY_DB_CONFIGURED, configValidator.isDbConfigured(dbConfig));
         status.put(KEY_DB_USERNAME, currentDbUsername());
-        status.put(KEY_DB_REACHABLE, schemaLoader.isDbReachable());
-        status.put(KEY_DB_ERROR, schemaLoader.getLastError());
-        status.put(KEY_SCHEMA_TABLES, schemaLoader.getTableCount());
+
+        // DB MCP server status - checked live via the "list_tables" MCP tool call.
+        // Named "dbMcp*" (not just "mcp*") since later on there will also be MCP
+        // servers for Jira and Bitbucket - this one is specifically the DB server.
+        OracleMcpConnection.McpListTablesStatus dbMcpStatus = dbMcpConnection.checkListTables();
+        status.put(KEY_DB_MCP_CONNECTED, dbMcpStatus.connected());
+        status.put(KEY_DB_MCP_LIST_TABLES_AVAILABLE, dbMcpStatus.available());
+        status.put(KEY_DB_MCP_TABLE_COUNT, dbMcpStatus.tableCount());
+        status.put(KEY_DB_MCP_ERROR, dbMcpStatus.error());
 
         // Jira configuration and session state
         status.put(KEY_JIRA_CONFIGURED, tokenService.hasJiraToken(session));

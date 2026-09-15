@@ -32,7 +32,6 @@ import java.util.concurrent.CompletableFuture;
  *
  * <p>Token management → {@link TokenController}
  * <p>Jira confirmations → {@link ConfirmationController}
- * <p>Schema operations → {@link SchemaController}
  */
 @RestController
 @RequestMapping("/api")

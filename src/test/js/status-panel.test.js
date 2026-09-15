@@ -1,4 +1,4 @@
-﻿/**
+/**
  * status-panel.test.js
  *
  * Tests for status-panel.js, organised by the same three-layer structure:
@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   buildDbState,
+  buildTablesState,
   buildJiraState,
   buildBitbucketState,
   buildStatusIndicatorState,
@@ -21,49 +22,54 @@ import {
 // buildDbState
 // ----------------------------------------------------------------------------
 describe("buildDbState", () => {
-  it("returns ok state when db is configured and reachable", () => {
-    const s = buildDbState({ dbConfigured: true, dbReachable: true });
+  it("returns ok state when db is configured and its MCP server is connected", () => {
+    const s = buildDbState({ dbConfigured: true, dbMcpConnected: true });
     expect(s.className).toBe("info-val ok");
-    expect(s.text).toBe("Connected");
-  });
-  it("appends username in parentheses when provided", () => {
-    const s = buildDbState({ dbConfigured: true, dbReachable: true, dbUsername: "readonly" });
-    expect(s.text).toBe("Connected (readonly)");
-  });
-  it("does not append parentheses when username is empty string", () => {
-    const s = buildDbState({ dbConfigured: true, dbReachable: true, dbUsername: "" });
-    expect(s.text).toBe("Connected");
+    expect(s.text).toBe("mcp-server connected");
   });
   it("returns error state when db is not configured", () => {
     const s = buildDbState({ dbConfigured: false });
     expect(s.className).toBe("info-val error");
     expect(s.text).toBe("Not configured");
   });
-  it("returns error state when db is configured but not reachable", () => {
-    const s = buildDbState({ dbConfigured: true, dbReachable: false, dbUsername: "readonly" });
+  it("returns error state when db is configured but its MCP server is not connected", () => {
+    const s = buildDbState({ dbConfigured: true, dbMcpConnected: false });
     expect(s.className).toBe("info-val error");
-    expect(s.text).toContain("fehlgeschlagen");
-    expect(s.text).toContain("readonly");
   });
-  it("exposes the backend error message via title when connection failed", () => {
-    const s = buildDbState({ dbConfigured: true, dbReachable: false, dbError: "ORA-12545: host unreachable" });
-    expect(s.title).toBe("ORA-12545: host unreachable");
+  it("exposes the backend error message via title when the MCP connection failed", () => {
+    const s = buildDbState({ dbConfigured: true, dbMcpConnected: false, dbMcpError: "MCP client is not connected" });
+    expect(s.title).toBe("MCP client is not connected");
   });
-  it("empty title when no dbError is provided on failure", () => {
-    const s = buildDbState({ dbConfigured: true, dbReachable: false });
+  it("empty title when no dbMcpError is provided on failure", () => {
+    const s = buildDbState({ dbConfigured: true, dbMcpConnected: false });
     expect(s.title).toBe("");
   });
-  it("returns warn/pending state when reachability has not been checked yet", () => {
-    const s = buildDbState({ dbConfigured: true });
-    expect(s.className).toBe("info-val warn");
-    expect(s.text).toContain("Prüfe Verbindung");
-  });
-  it("returns warn/pending state when dbReachable is explicitly null", () => {
-    const s = buildDbState({ dbConfigured: true, dbReachable: null });
-    expect(s.className).toBe("info-val warn");
-  });
   it("is a pure function – same input yields same output", () => {
-    expect(buildDbState({ dbConfigured: true, dbReachable: true })).toEqual(buildDbState({ dbConfigured: true, dbReachable: true }));
+    expect(buildDbState({ dbConfigured: true, dbMcpConnected: true })).toEqual(buildDbState({ dbConfigured: true, dbMcpConnected: true }));
+  });
+});
+// ----------------------------------------------------------------------------
+// buildTablesState
+// ----------------------------------------------------------------------------
+describe("buildTablesState", () => {
+  it("returns the table count when list_tables is available", () => {
+    const s = buildTablesState({ dbConfigured: true, dbMcpConnected: true, dbMcpListTablesAvailable: true, dbMcpTableCount: 42 });
+    expect(s.className).toBe("info-val ok");
+    expect(s.text).toBe("42");
+  });
+  it("returns 'list_tables not available' when the tool is not exposed by the server", () => {
+    const s = buildTablesState({ dbConfigured: true, dbMcpConnected: true, dbMcpListTablesAvailable: false });
+    expect(s.className).toBe("info-val warn");
+    expect(s.text).toBe("list_tables not available");
+  });
+  it("returns error text when list_tables call failed", () => {
+    const s = buildTablesState({ dbConfigured: true, dbMcpConnected: true, dbMcpListTablesAvailable: true, dbMcpTableCount: null, dbMcpError: "boom" });
+    expect(s.className).toBe("info-val error");
+    expect(s.text).toBe("boom");
+  });
+  it("returns a placeholder when the MCP server is not connected", () => {
+    const s = buildTablesState({ dbConfigured: true, dbMcpConnected: false });
+    expect(s.text).not.toBe("42");
   });
 });
 // ----------------------------------------------------------------------------
@@ -209,52 +215,56 @@ describe("StatusPanel – applyStatus()", () => {
     panel = new StatusPanel(els);
   });
   it("updates infoLlm textContent", () => {
-    panel.applyStatus({ llmProvider: "claude", llmModel: "x", schemaTables: "5", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+    panel.applyStatus({ llmProvider: "claude", llmModel: "x", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.infoLlm.textContent).toBe("claude");
   });
   it("falls back to em-dash when llmProvider is absent", () => {
-    panel.applyStatus({ llmModel: "x", schemaTables: "0", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+    panel.applyStatus({ llmModel: "x", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.infoLlm.textContent).toBe("—");
   });
   it("updates infoModel textContent", () => {
-    panel.applyStatus({ llmProvider: "p", llmModel: "claude-3", schemaTables: "0", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+    panel.applyStatus({ llmProvider: "p", llmModel: "claude-3", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.infoModel.textContent).toBe("claude-3");
   });
-  it("updates infoTables textContent", () => {
-    panel.applyStatus({ llmProvider: "p", llmModel: "m", schemaTables: "42", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+  it("updates infoTables textContent with the DB MCP table count", () => {
+    panel.applyStatus({ llmProvider: "p", llmModel: "m", dbConfigured: true, dbMcpConnected: true, dbMcpListTablesAvailable: true, dbMcpTableCount: 42, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.infoTables.textContent).toBe("42");
   });
+  it("shows 'list_tables not available' in infoTables when the tool is missing", () => {
+    panel.applyStatus({ llmProvider: "p", llmModel: "m", dbConfigured: true, dbMcpConnected: true, dbMcpListTablesAvailable: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+    expect(els.infoTables.textContent).toBe("list_tables not available");
+  });
   it("shows githubInfoRow when provider is github-copilot", () => {
-    panel.applyStatus({ llmProvider: "github-copilot", llmModel: "m", schemaTables: "0", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+    panel.applyStatus({ llmProvider: "github-copilot", llmModel: "m", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.githubInfoRow.style.display).toBe("");
   });
   it("hides githubInfoRow when provider is not github-copilot", () => {
-    panel.applyStatus({ llmProvider: "claude", llmModel: "m", schemaTables: "0", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+    panel.applyStatus({ llmProvider: "claude", llmModel: "m", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.githubInfoRow.style.display).toBe("none");
   });
-  it("applies ok class to infoDb when db is configured and reachable", () => {
-    panel.applyStatus({ llmProvider: "p", llmModel: "m", schemaTables: "0", dbConfigured: true, dbReachable: true, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+  it("applies ok class to infoDb when db is configured and its MCP server is connected", () => {
+    panel.applyStatus({ llmProvider: "p", llmModel: "m", dbConfigured: true, dbMcpConnected: true, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.infoDb.className).toBe("info-val ok");
   });
   it("applies error class to infoDb when db is not configured", () => {
-    panel.applyStatus({ llmProvider: "p", llmModel: "m", schemaTables: "0", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+    panel.applyStatus({ llmProvider: "p", llmModel: "m", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.infoDb.className).toBe("info-val error");
   });
-  it("applies error class to infoDb when db is configured but not reachable", () => {
-    panel.applyStatus({ llmProvider: "p", llmModel: "m", schemaTables: "0", dbConfigured: true, dbReachable: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+  it("applies error class to infoDb when db is configured but its MCP server is not connected", () => {
+    panel.applyStatus({ llmProvider: "p", llmModel: "m", dbConfigured: true, dbMcpConnected: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.infoDb.className).toBe("info-val error");
   });
   it("shows jiraWriteRow when jiraBaseUrlConfigured", () => {
-    panel.applyStatus({ llmProvider: "p", llmModel: "m", schemaTables: "0", dbConfigured: false, jiraBaseUrlConfigured: true, jiraConfigured: true, bitbucketBaseUrlConfigured: false });
+    panel.applyStatus({ llmProvider: "p", llmModel: "m", dbConfigured: false, jiraBaseUrlConfigured: true, jiraConfigured: true, bitbucketBaseUrlConfigured: false });
     expect(els.jiraWriteRow.style.display).toBe("flex");
   });
   it("hides jiraWriteRow when jiraBaseUrlConfigured is false", () => {
-    panel.applyStatus({ llmProvider: "p", llmModel: "m", schemaTables: "0", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+    panel.applyStatus({ llmProvider: "p", llmModel: "m", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.jiraWriteRow.style.display).toBe("none");
   });
   it("does not throw when all elements are null", () => {
     const nullPanel = new StatusPanel({});
-    expect(() => nullPanel.applyStatus({ llmProvider: "p", llmModel: "m", schemaTables: "0", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false })).not.toThrow();
+    expect(() => nullPanel.applyStatus({ llmProvider: "p", llmModel: "m", dbConfigured: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false })).not.toThrow();
   });
 });
 // ----------------------------------------------------------------------------

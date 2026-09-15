@@ -1,5 +1,6 @@
 package com.tschanz.aigeny.database.mcp_client;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.config.ConfigurationValidator;
 import com.tschanz.aigeny.database.DbConfiguration;
@@ -259,5 +260,97 @@ public class OracleMcpConnection {
         }
         return c.callTool(new McpSchema.CallToolRequest(name, arguments));
     }
+
+    // ── Sidebar "MCP" status (used by StatusAggregatorService) ──────────────
+
+    /** Well-known name of the tool used to check whether the MCP connection is alive. */
+    private static final String LIST_TABLES_TOOL = "list_tables";
+
+    /**
+     * Result of a {@link #checkListTables()} probe.
+     *
+     * @param connected  true if the MCP client is connected to the server
+     * @param available  true if the server actually exposes a {@code list_tables} tool
+     * @param tableCount number of tables reported by the last successful {@code list_tables}
+     *                   call, or {@code null} if it couldn't be determined
+     * @param error      error message of the last failed attempt, or {@code null} if none
+     */
+    public record McpListTablesStatus(boolean connected, boolean available, Integer tableCount, String error) {}
+
+    /**
+     * Checks whether the MCP connection is alive by actually invoking the {@code list_tables}
+     * tool and counting the rows it returns. Used to power the sidebar "MCP" status and table
+     * count instead of a direct JDBC connection to the DB.
+     *
+     * <p>Explicitly passes the configured {@code context}/{@code stage} arguments (see
+     * {@link DbConfiguration#getDefaultContext()}/{@link DbConfiguration#getDefaultStage()}),
+     * even though the embedded server falls back to those same defaults when they're omitted
+     * (see {@code ContextStageSupport}) - both are declared {@code required} in the tool's JSON
+     * schema (see {@link com.tschanz.aigeny.database.mcp_server.ListTablesHandler}), and a
+     * strictly-validating external/remote MCP server (see
+     * {@link DbConfiguration#getMcpServerUrl()}) may reject the call with a "Missing required
+     * argument 'context'" style error if they're missing on the wire, unlike our lenient
+     * embedded implementation.
+     */
+    public McpListTablesStatus checkListTables() {
+        if (!isAvailable()) {
+            return new McpListTablesStatus(false, false, null, "MCP client is not connected");
+        }
+        if (getToolInfo(LIST_TABLES_TOOL).isEmpty()) {
+            return new McpListTablesStatus(true, false, null, null);
+        }
+        try {
+            McpSchema.CallToolResult result = callTool(LIST_TABLES_TOOL, listTablesArguments());
+            if (Boolean.TRUE.equals(result.isError())) {
+                return new McpListTablesStatus(true, true, null, firstText(result.content()));
+            }
+            return new McpListTablesStatus(true, true, extractRowCount(result.content()), null);
+        } catch (Exception e) {
+            log.warn("Could not call {} to check MCP status: {}", LIST_TABLES_TOOL, e.getMessage());
+            return new McpListTablesStatus(true, true, null, e.getMessage());
+        }
+    }
+
+    /**
+     * Builds the arguments for the {@link #checkListTables()} probe call: always includes the
+     * configured default {@code context}/{@code stage} (when set), since both are declared
+     * {@code required} in the tool's JSON schema and a strictly-validating external/remote MCP
+     * server rejects the call with a "Missing required argument 'context'" style error if they're
+     * missing on the wire - even though our lenient embedded implementation would fall back to
+     * its own defaults if they were omitted. Only actually blank/unconfigured values are left out,
+     * since there's nothing meaningful to send for them.
+     */
+    private Map<String, Object> listTablesArguments() {
+        Map<String, Object> arguments = new LinkedHashMap<>();
+        putIfNotBlank(arguments, "context", dbConfig.getDefaultContext());
+        putIfNotBlank(arguments, "stage", dbConfig.getDefaultStage());
+        return arguments;
+    }
+
+    private static void putIfNotBlank(Map<String, Object> arguments, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            arguments.put(key, value);
+        }
+    }
+
+    /** Extracts the row count from the structured (second) content block of a tool result. */
+    private Integer extractRowCount(List<McpSchema.Content> content) {
+        if (content.size() < 2) return null;
+        try {
+            JsonNode structured = objectMapper.readTree(firstText(List.of(content.get(1))));
+            JsonNode rows = structured.get("rows");
+            return (rows != null && rows.isArray()) ? rows.size() : null;
+        } catch (Exception e) {
+            log.warn("Could not parse {} result while checking MCP status: {}", LIST_TABLES_TOOL, e.getMessage());
+            return null;
+        }
+    }
+
+    private static String firstText(List<McpSchema.Content> content) {
+        if (content.isEmpty()) return "";
+        McpSchema.Content c = content.get(0);
+        return (c instanceof McpSchema.TextContent tc) ? tc.text() : "";
+    }
 }
+
 

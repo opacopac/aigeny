@@ -16,25 +16,40 @@
 // ── Pure state functions ──────────────────────────────────────────────────────
 
 /**
- * @param {{ dbConfigured: boolean, dbUsername?: string, dbReachable?: boolean|null, dbError?: string }} data
+ * @param {{ dbConfigured: boolean, dbMcpConnected?: boolean, dbMcpError?: string }} data
  * @returns {{ text: string, className: string, title: string }}
  */
 export function buildDbState(data) {
   if (!data.dbConfigured) {
     return { text: 'Not configured', className: 'info-val error', title: '' };
   }
-  const user = data.dbUsername ? ` (${data.dbUsername})` : '';
-  if (data.dbReachable === false) {
-    return {
-      text: 'Verbindung fehlgeschlagen' + user,
-      className: 'info-val error',
-      title: data.dbError || '',
-    };
+  if (!data.dbMcpConnected) {
+    return { text: 'MCP-Server nicht verbunden', className: 'info-val error', title: data.dbMcpError || '' };
   }
-  if (data.dbReachable === null || data.dbReachable === undefined) {
-    return { text: 'Prüfe Verbindung...' + user, className: 'info-val warn', title: '' };
+  return { text: 'mcp-server connected', className: 'info-val ok', title: '' };
+}
+
+/**
+ * @param {{
+ *   dbConfigured: boolean,
+ *   dbMcpConnected?: boolean,
+ *   dbMcpListTablesAvailable?: boolean,
+ *   dbMcpTableCount?: (number|null),
+ *   dbMcpError?: string,
+ * }} data
+ * @returns {{ text: string, className: string, title: string }}
+ */
+export function buildTablesState(data) {
+  if (!data.dbConfigured || !data.dbMcpConnected) {
+    return { text: '(none)', className: 'info-val', title: '' };
   }
-  return { text: 'Connected' + user, className: 'info-val ok', title: '' };
+  if (!data.dbMcpListTablesAvailable) {
+    return { text: 'list_tables not available', className: 'info-val warn', title: '' };
+  }
+  if (data.dbMcpTableCount === null || data.dbMcpTableCount === undefined) {
+    return { text: data.dbMcpError || 'Fehler', className: 'info-val error', title: data.dbMcpError || '' };
+  }
+  return { text: String(data.dbMcpTableCount), className: 'info-val ok', title: '' };
 }
 
 /**
@@ -152,15 +167,17 @@ export class StatusPanel {
 
     if (els.infoLlm)    els.infoLlm.textContent    = data.llmProvider  || '—';
     if (els.infoModel)  els.infoModel.textContent   = data.llmModel     || '—';
-    if (els.infoTables) els.infoTables.textContent  = data.schemaTables || '0';
 
     // GitHub row – only shown when provider is github-copilot
     if (els.githubInfoRow) {
       els.githubInfoRow.style.display = (data.llmProvider === 'github-copilot') ? '' : 'none';
     }
 
-    // DB
+    // DB connection (backed by the DB's MCP server, checked via "list_tables")
     this._applyInfoRow(els.infoDb, null, buildDbState(data));
+
+    // Number of tables reported by the DB MCP server's "list_tables" tool
+    this._applyInfoRow(els.infoTables, null, buildTablesState(data));
 
     // Jira
     const jira = buildJiraState(data);

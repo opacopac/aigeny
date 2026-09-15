@@ -89,9 +89,9 @@ describe('hal-eye.css – design tokens', () => {
 // hal-eye.css – layout values
 // ════════════════════════════════════════════════════════════════════════════
 describe('hal-eye.css – layout values', () => {
-  it('.hal-panel has width: 310px', () => {
+  it('.hal-panel has width: 350px', () => {
     const panelBlock = halCss.match(/\.hal-panel\s*\{([^}]+)\}/)?.[1] ?? '';
-    expect(panelBlock).toMatch(/width\s*:\s*310px/);
+    expect(panelBlock).toMatch(/width\s*:\s*350px/);
   });
 
   it('.hal-status has font-style: italic', () => {

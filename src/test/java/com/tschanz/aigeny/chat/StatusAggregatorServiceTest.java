@@ -7,9 +7,9 @@ import com.tschanz.aigeny.config.AigenyProperties;
 import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
 import com.tschanz.aigeny.config.ConfigurationValidator;
 import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.mcp_client.OracleMcpConnection;
 import com.tschanz.aigeny.jira.JiraConfiguration;
 import com.tschanz.aigeny.llm.LlmConfiguration;
-import com.tschanz.aigeny.database.SchemaLoader;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -46,7 +46,7 @@ class StatusAggregatorServiceTest {
     private SessionExportService exportService;
 
     @Mock
-    private SchemaLoader schemaLoader;
+    private OracleMcpConnection dbMcpConnection;
 
     @Mock
     private HttpSession session;
@@ -60,6 +60,9 @@ class StatusAggregatorServiceTest {
         jiraConfig = new AigenyProperties.Jira();
         bitbucketConfig = new AigenyProperties.Bitbucket();
 
+        lenient().when(dbMcpConnection.checkListTables())
+                .thenReturn(new OracleMcpConnection.McpListTablesStatus(false, false, null, null));
+
         statusAggregator = new StatusAggregatorService(
             llmConfig,
             dbConfig,
@@ -69,7 +72,7 @@ class StatusAggregatorServiceTest {
             tokenService,
             jiraWriteService,
             exportService,
-            schemaLoader
+            dbMcpConnection
         );
     }
 
@@ -92,7 +95,6 @@ class StatusAggregatorServiceTest {
             when(tokenService.hasBitbucketToken(session)).thenReturn(true);
             when(jiraWriteService.isJiraWriteModeEnabled(session)).thenReturn(true);
             when(exportService.hasQueryResult(session)).thenReturn(true);
-            when(schemaLoader.getTableCount()).thenReturn(42);
             when(configValidator.isDbConfigured(dbConfig)).thenReturn(true);
 
             // When
@@ -104,7 +106,6 @@ class StatusAggregatorServiceTest {
             assertThat(status.get("llmModel")).isEqualTo("claude-3-sonnet");
             assertThat(status.get("dbConfigured")).isEqualTo(true);
             assertThat(status.get("dbUsername")).isEqualTo("dbuser");
-            assertThat(status.get("schemaTables")).isEqualTo(42);
             assertThat(status.get("jiraConfigured")).isEqualTo(true);
             assertThat(status.get("jiraBaseUrlConfigured")).isEqualTo(true);
             assertThat(status.get("jiraWriteEnabled")).isEqualTo(true);
@@ -126,7 +127,6 @@ class StatusAggregatorServiceTest {
             when(tokenService.hasBitbucketToken(session)).thenReturn(false);
             when(jiraWriteService.isJiraWriteModeEnabled(session)).thenReturn(false);
             when(exportService.hasQueryResult(session)).thenReturn(false);
-            when(schemaLoader.getTableCount()).thenReturn(0);
             when(configValidator.isDbConfigured(dbConfig)).thenReturn(false);
 
             // When
@@ -138,7 +138,6 @@ class StatusAggregatorServiceTest {
             assertThat(status.get("llmModel")).isEqualTo("gpt-4");
             assertThat(status.get("dbConfigured")).isEqualTo(false);
             assertThat(status.get("dbUsername")).isNull();
-            assertThat(status.get("schemaTables")).isEqualTo(0);
             assertThat(status.get("jiraConfigured")).isEqualTo(false);
             assertThat(status.get("jiraBaseUrlConfigured")).isEqualTo(false);
             assertThat(status.get("jiraWriteEnabled")).isEqualTo(false);
@@ -162,7 +161,7 @@ class StatusAggregatorServiceTest {
             verify(tokenService).hasBitbucketToken(session);
             verify(jiraWriteService).isJiraWriteModeEnabled(session);
             verify(exportService).hasQueryResult(session);
-            verify(schemaLoader).getTableCount();
+            verify(dbMcpConnection).checkListTables();
             verify(configValidator, atLeastOnce()).isDbConfigured(dbConfig);
         }
 
@@ -182,7 +181,10 @@ class StatusAggregatorServiceTest {
                 "llmModel",
                 "dbConfigured",
                 "dbUsername",
-                "schemaTables",
+                "dbMcpConnected",
+                "dbMcpListTablesAvailable",
+                "dbMcpTableCount",
+                "dbMcpError",
                 "jiraConfigured",
                 "jiraBaseUrlConfigured",
                 "jiraWriteEnabled",
@@ -361,18 +363,22 @@ class StatusAggregatorServiceTest {
         }
 
         @Test
-        @DisplayName("should aggregate schema table count from loader")
-        void shouldAggregateSchemaTableCountFromLoader() {
+        @DisplayName("should aggregate DB MCP status from the OracleMcpConnection")
+        void shouldAggregateDbMcpStatusFromConnection() {
             // Given
             llmConfig.setProvider("test");
             llmConfig.setModel("test");
-            when(schemaLoader.getTableCount()).thenReturn(99);
+            when(dbMcpConnection.checkListTables())
+                    .thenReturn(new OracleMcpConnection.McpListTablesStatus(true, true, 99, null));
 
             // When
             Map<String, Object> status = statusAggregator.aggregateStatus(session);
 
             // Then
-            assertThat(status.get("schemaTables")).isEqualTo(99);
+            assertThat(status.get("dbMcpConnected")).isEqualTo(true);
+            assertThat(status.get("dbMcpListTablesAvailable")).isEqualTo(true);
+            assertThat(status.get("dbMcpTableCount")).isEqualTo(99);
+            assertThat(status.get("dbMcpError")).isNull();
         }
     }
 
@@ -441,7 +447,4 @@ class StatusAggregatorServiceTest {
         }
     }
 }
-
-
-
 

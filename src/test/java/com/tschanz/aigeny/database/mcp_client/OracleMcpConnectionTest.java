@@ -309,5 +309,123 @@ class OracleMcpConnectionTest {
                     req.name().equals("run_query") && req.arguments().get("sql").equals("SELECT 1")));
         }
     }
+
+    // ── checkListTables() (sidebar "MCP" status / table count) ─────────────────
+
+    @Nested
+    @DisplayName("checkListTables()")
+    class CheckListTables {
+
+        private McpSchema.Tool listTablesTool() {
+            return McpSchema.Tool.builder()
+                    .name("list_tables")
+                    .description("List all tables")
+                    .inputSchema(new McpSchema.JsonSchema("object", Map.of(), List.of("context", "stage"), null, null, null))
+                    .build();
+        }
+
+        private void discoverListTablesTool() throws Exception {
+            when(mcpClient.listTools()).thenReturn(new McpSchema.ListToolsResult(List.of(listTablesTool()), null));
+            Method discover = OracleMcpConnection.class.getDeclaredMethod("discoverTools", McpSyncClient.class);
+            discover.setAccessible(true);
+            discover.invoke(connection, mcpClient);
+        }
+
+        @Test
+        @DisplayName("reports not connected when the MCP client isn't available yet")
+        void notConnected() {
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables();
+
+            assertThat(status.connected()).isFalse();
+            assertThat(status.available()).isFalse();
+            assertThat(status.tableCount()).isNull();
+            assertThat(status.error()).isNotBlank();
+        }
+
+        @Test
+        @DisplayName("reports connected but not available when the server doesn't expose list_tables")
+        void connectedButToolMissing() throws Exception {
+            injectMockClient();
+
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables();
+
+            assertThat(status.connected()).isTrue();
+            assertThat(status.available()).isFalse();
+            assertThat(status.tableCount()).isNull();
+        }
+
+        @Test
+        @DisplayName("always sends the configured context/stage arguments, since both are required by the tool's JSON schema")
+        void alwaysSendsContextAndStage() throws Exception {
+            injectMockClient();
+            discoverListTablesTool();
+            when(dbConfig.getDefaultContext()).thenReturn("pflege");
+            when(dbConfig.getDefaultStage()).thenReturn("INTE");
+            when(mcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult(List.of(
+                    new McpSchema.TextContent("ok"),
+                    new McpSchema.TextContent("{\"rows\":[{},{},{}]}")
+            ), false));
+
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables();
+
+            assertThat(status.connected()).isTrue();
+            assertThat(status.available()).isTrue();
+            assertThat(status.tableCount()).isEqualTo(3);
+            assertThat(status.error()).isNull();
+            verify(mcpClient).callTool(argThat(req ->
+                    "list_tables".equals(req.name())
+                            && "pflege".equals(req.arguments().get("context"))
+                            && "INTE".equals(req.arguments().get("stage"))));
+        }
+
+        @Test
+        @DisplayName("omits context/stage when they are not configured (blank)")
+        void omitsBlankContextAndStage() throws Exception {
+            injectMockClient();
+            discoverListTablesTool();
+            when(dbConfig.getDefaultContext()).thenReturn("");
+            when(dbConfig.getDefaultStage()).thenReturn(null);
+            when(mcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult(List.of(
+                    new McpSchema.TextContent("ok"),
+                    new McpSchema.TextContent("{\"rows\":[]}")
+            ), false));
+
+            connection.checkListTables();
+
+            verify(mcpClient).callTool(argThat(req ->
+                    !req.arguments().containsKey("context") && !req.arguments().containsKey("stage")));
+        }
+
+        @Test
+        @DisplayName("surfaces the server's error message (e.g. \"Missing required argument 'context'\") when the call fails")
+        void surfacesToolError() throws Exception {
+            injectMockClient();
+            discoverListTablesTool();
+            when(mcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult(
+                    List.of(new McpSchema.TextContent("Missing required argument 'context'")), true));
+
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables();
+
+            assertThat(status.connected()).isTrue();
+            assertThat(status.available()).isTrue();
+            assertThat(status.tableCount()).isNull();
+            assertThat(status.error()).isEqualTo("Missing required argument 'context'");
+        }
+
+        @Test
+        @DisplayName("surfaces the exception message when the call throws")
+        void surfacesException() throws Exception {
+            injectMockClient();
+            discoverListTablesTool();
+            when(mcpClient.callTool(any())).thenThrow(new RuntimeException("connection reset"));
+
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables();
+
+            assertThat(status.connected()).isTrue();
+            assertThat(status.available()).isTrue();
+            assertThat(status.tableCount()).isNull();
+            assertThat(status.error()).isEqualTo("connection reset");
+        }
+    }
 }
 
