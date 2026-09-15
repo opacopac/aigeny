@@ -83,7 +83,7 @@ public class StatusAggregatorService {
 
         // Database configuration
         status.put(KEY_DB_CONFIGURED, configValidator.isDbConfigured(dbConfig));
-        status.put(KEY_DB_USERNAME, dbConfig.getUsername());
+        status.put(KEY_DB_USERNAME, currentDbUsername());
         status.put(KEY_DB_REACHABLE, schemaLoader.isDbReachable());
         status.put(KEY_DB_ERROR, schemaLoader.getLastError());
         status.put(KEY_SCHEMA_TABLES, schemaLoader.getTableCount());
@@ -101,6 +101,15 @@ public class StatusAggregatorService {
         status.put(KEY_HAS_EXPORT, exportService.hasQueryResult(session));
 
         return status;
+    }
+
+    /**
+     * Returns the username of the default DB stage (see {@link DbConfiguration#getDefaultStage()}),
+     * or {@code null} if that stage isn't configured.
+     */
+    private String currentDbUsername() {
+        DbConfiguration.Stage stage = dbConfig.getStage(dbConfig.getDefaultStage());
+        return stage != null ? stage.getUsername() : null;
     }
 
     /**

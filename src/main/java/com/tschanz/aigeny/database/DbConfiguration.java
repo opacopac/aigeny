@@ -5,23 +5,66 @@ import java.util.Map;
 /**
  * Read-only view of the database configuration.
  * <p>
- * Depend on this interface instead of {@link AigenyProperties} to keep
+ * Depend on this interface instead of {@code AigenyProperties} to keep
  * database-related classes decoupled from the concrete configuration holder.
+ * <p>
+ * Connection details are organized per <b>stage</b> (e.g. {@code INTE}, {@code PROD}, and
+ * potentially any number of additional stages such as {@code TEST}/{@code DEV}) - each stage may
+ * have its own JDBC URL, username, password and schema, since different environments are
+ * typically entirely separate Oracle instances/accounts. See {@link #getStages()}.
  */
 public interface DbConfiguration {
 
-    /**
-     * JDBC URL used for the {@code INTE} (integration) stage, e.g.
-     * {@code jdbc:oracle:thin:@hostname:1521/SERVICENAME}. Also the default/fallback
-     * connection when only a single environment is configured.
-     */
-    String getUrl();
+    /** Per-stage Oracle connection details. */
+    interface Stage {
+
+        /** JDBC URL, e.g. {@code jdbc:oracle:thin:@hostname:1521/SERVICENAME}. */
+        String getUrl();
+
+        /** Database login username for this stage. */
+        String getUsername();
+
+        /** Database login password for this stage. */
+        String getPassword();
+
+        /**
+         * Optional Oracle schema to set as CURRENT_SCHEMA for the session. When blank,
+         * {@link #getUsername()} is used as the schema (Oracle default). See
+         * {@link #getEffectiveSchema()} for the resolved value.
+         */
+        String getSchema();
+
+        /**
+         * Returns the effective Oracle schema name for this stage: the explicitly configured
+         * schema if set, otherwise falls back to the username (in Oracle the username equals
+         * the schema by default).
+         */
+        String getEffectiveSchema();
+    }
 
     /**
-     * JDBC URL used for the {@code PROD} (production) stage. When blank, the {@code PROD}
-     * stage is unavailable and the {@code stage} tool argument only accepts {@code INTE}.
+     * All configured stages, keyed by stage name (e.g. {@code "INTE"}, {@code "PROD"}, or any
+     * other name such as {@code "TEST"}/{@code "DEV"} - fully open-ended, no fixed set of stage
+     * names is hardcoded anywhere). Never {@code null} (empty map when none are configured).
      */
-    String getUrlProd();
+    Map<String, ? extends Stage> getStages();
+
+    /**
+     * Looks up a configured stage by name, case-insensitively.
+     *
+     * @return the matching {@link Stage}, or {@code null} if no stage with that name is configured.
+     */
+    default Stage getStage(String stage) {
+        if (stage == null) {
+            return null;
+        }
+        for (Map.Entry<String, ? extends Stage> entry : getStages().entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(stage)) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
 
     /**
      * Default value for the mandatory {@code context} argument accepted by every Oracle DB
@@ -32,23 +75,10 @@ public interface DbConfiguration {
 
     /**
      * Default value for the mandatory {@code stage} argument accepted by every Oracle DB MCP
-     * tool call, used when the caller omits it. Must be {@code INTE} or {@code PROD}; selects
-     * which JDBC URL ({@link #getUrl()} or {@link #getUrlProd()}) the MCP server connects to.
+     * tool call, used when the caller omits it. Selects which configured {@link Stage} (see
+     * {@link #getStages()}) the MCP server connects to.
      */
     String getDefaultStage();
-
-    /** Database login username. */
-    String getUsername();
-
-    /** Database login password. */
-    String getPassword();
-
-    /**
-     * Returns the effective Oracle schema name.
-     * Uses the explicitly configured schema if set; otherwise falls back to
-     * the username (in Oracle the username equals the schema by default).
-     */
-    String getEffectiveSchema();
 
     /**
      * Optional URL of a remote Oracle DB MCP server (e.g. {@code https://mcp-host/mcp}),
@@ -70,3 +100,4 @@ public interface DbConfiguration {
      */
     Map<String, String> getMcpServerHeaders();
 }
+

@@ -17,7 +17,8 @@ public class ConfigurationValidator {
 
     /**
      * Checks if database configuration is complete and valid.
-     * A database is considered configured if both URL and username are provided.
+     * A database is considered configured if the default stage (see
+     * {@link DbConfiguration#getDefaultStage()}) has both a URL and a username configured.
      *
      * @param db the database configuration to validate
      * @return true if database is properly configured, false otherwise
@@ -26,8 +27,12 @@ public class ConfigurationValidator {
         if (db == null) {
             return false;
         }
-        return db.getUrl() != null && !db.getUrl().isBlank()
-            && db.getUsername() != null && !db.getUsername().isBlank();
+        DbConfiguration.Stage stage = db.getStage(db.getDefaultStage());
+        if (stage == null) {
+            return false;
+        }
+        return stage.getUrl() != null && !stage.getUrl().isBlank()
+            && stage.getUsername() != null && !stage.getUsername().isBlank();
     }
 
     /**

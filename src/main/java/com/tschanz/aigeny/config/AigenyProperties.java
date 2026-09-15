@@ -8,6 +8,9 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * All AIgeny configuration, bound from application.yml (prefix: aigeny).
  * <p>
@@ -19,7 +22,7 @@ import org.springframework.stereotype.Component;
  * </ul>
  * <p>
  * External override file: ~/.aigeny/aigeny.yml
- * Environment variable pattern: AIGENY_LLM_BASE_URL, AIGENY_DB_PASSWORD, etc.
+ * Environment variable pattern: AIGENY_LLM_BASE_URL, AIGENY_DB_STAGES_INTE_PASSWORD, etc.
  * (Spring Boot maps aigeny.llm.base-url → AIGENY_LLM_BASE_URL automatically)
  */
 @Component
@@ -89,19 +92,29 @@ public class AigenyProperties {
     }
 
     public static class Db implements DbConfiguration {
-        /** JDBC URL for the INTE (integration) stage, e.g. jdbc:oracle:thin:@hostname:1521/SERVICENAME */
-        private String url = "";
-        /** JDBC URL for the PROD (production) stage. Blank = PROD stage unavailable. */
-        private String urlProd = "";
-        private String username = "";
-        private String password = "";
+
         /**
-         * Optional Oracle schema to set as CURRENT_SCHEMA for the session.
-         * When blank the username is used as the schema (Oracle default).
-         * Set this when the DB user and the data schema are different,
-         * e.g. username=READONLY_USER, schema=NOVAP_INTE.
+         * Per-stage Oracle connection details, keyed by stage name (e.g. {@code INTE},
+         * {@code PROD}, or any other name such as {@code TEST}/{@code DEV} - fully open-ended).
+         * Bound from YAML as a nested map, e.g.:
+         * <pre>
+         * aigeny:
+         *   db:
+         *     stages:
+         *       INTE:
+         *         url: "jdbc:oracle:thin:@inte-host:1521/SERVICENAME"
+         *         username: "readonly_user"
+         *         password: ""
+         *         schema: ""
+         *       PROD:
+         *         url: "jdbc:oracle:thin:@prod-host:1521/SERVICENAME"
+         *         username: "readonly_user"
+         *         password: ""
+         *         schema: ""
+         * </pre>
          */
-        private String schema = "";
+        private Map<String, StageProps> stages = new LinkedHashMap<>();
+
         /**
          * Default value for the mandatory {@code context} tool argument (see
          * {@link DbConfiguration#getDefaultContext()}).
@@ -109,7 +122,9 @@ public class AigenyProperties {
         private String defaultContext = "pflege";
         /**
          * Default value for the mandatory {@code stage} tool argument (see
-         * {@link DbConfiguration#getDefaultStage()}).
+         * {@link DbConfiguration#getDefaultStage()}). Also the stage whose password
+         * {@link #setPassword(String)} (used by {@link SecretFileResolver} for the
+         * {@code AIGENY_DB_PASSWORD_FILE} Docker secret) applies to.
          */
         private String defaultStage = "INTE";
         /**
@@ -129,36 +144,73 @@ public class AigenyProperties {
          *       X-API-Key: "secret"
          * </pre>
          */
-        private java.util.Map<String, String> mcpServerHeaders = new java.util.LinkedHashMap<>();
+        private Map<String, String> mcpServerHeaders = new LinkedHashMap<>();
 
-        public String getUrl() { return url; }
-        public void setUrl(String url) { this.url = url; }
-        public String getUrlProd() { return urlProd; }
-        public void setUrlProd(String urlProd) { this.urlProd = urlProd; }
-        public String getUsername() { return username; }
-        public void setUsername(String username) { this.username = username; }
-        public String getPassword() { return password; }
-        public void setPassword(String password) { this.password = password; }
-        public String getSchema() { return schema; }
-        public void setSchema(String schema) { this.schema = schema; }
+        public Map<String, StageProps> getStages() { return stages; }
+        public void setStages(Map<String, StageProps> stages) {
+            this.stages = stages != null ? stages : new LinkedHashMap<>();
+        }
+
         public String getDefaultContext() { return defaultContext; }
         public void setDefaultContext(String defaultContext) { this.defaultContext = defaultContext; }
         public String getDefaultStage() { return defaultStage; }
         public void setDefaultStage(String defaultStage) { this.defaultStage = defaultStage; }
         public String getMcpServerUrl() { return mcpServerUrl; }
         public void setMcpServerUrl(String mcpServerUrl) { this.mcpServerUrl = mcpServerUrl; }
-        public java.util.Map<String, String> getMcpServerHeaders() { return mcpServerHeaders; }
-        public void setMcpServerHeaders(java.util.Map<String, String> mcpServerHeaders) {
-            this.mcpServerHeaders = mcpServerHeaders != null ? mcpServerHeaders : new java.util.LinkedHashMap<>();
+        public Map<String, String> getMcpServerHeaders() { return mcpServerHeaders; }
+        public void setMcpServerHeaders(Map<String, String> mcpServerHeaders) {
+            this.mcpServerHeaders = mcpServerHeaders != null ? mcpServerHeaders : new LinkedHashMap<>();
         }
 
         /**
-         * Returns the effective Oracle schema name.
-         * Uses the explicitly configured schema if set, otherwise falls back to the username
-         * (in Oracle the username equals the schema by default).
+         * Convenience accessor used by {@link SecretFileResolver} to resolve the
+         * {@code AIGENY_DB_PASSWORD_FILE} Docker secret onto the <em>default</em> stage's
+         * password (the common case: exactly one stage/environment per running container).
+         * For multi-stage local setups, configure each stage's password directly in
+         * {@code ~/.aigeny/aigeny.yml} instead.
+         *
+         * @return the default stage's password, or {@code ""} if that stage isn't configured yet.
          */
-        public String getEffectiveSchema() {
-            return (schema != null && !schema.isBlank()) ? schema : username;
+        public String getPassword() {
+            StageProps stage = stages.get(defaultStage);
+            return stage != null ? stage.getPassword() : "";
+        }
+
+        /** @see #getPassword() */
+        public void setPassword(String password) {
+            stages.computeIfAbsent(defaultStage, key -> new StageProps()).setPassword(password);
+        }
+
+        public static class StageProps implements DbConfiguration.Stage {
+            /** JDBC URL, e.g. jdbc:oracle:thin:@hostname:1521/SERVICENAME */
+            private String url = "";
+            private String username = "";
+            private String password = "";
+            /**
+             * Optional Oracle schema to set as CURRENT_SCHEMA for the session.
+             * When blank the username is used as the schema (Oracle default).
+             * Set this when the DB user and the data schema are different,
+             * e.g. username=READONLY_USER, schema=NOVAP_INTE.
+             */
+            private String schema = "";
+
+            public String getUrl() { return url; }
+            public void setUrl(String url) { this.url = url; }
+            public String getUsername() { return username; }
+            public void setUsername(String username) { this.username = username; }
+            public String getPassword() { return password; }
+            public void setPassword(String password) { this.password = password; }
+            public String getSchema() { return schema; }
+            public void setSchema(String schema) { this.schema = schema; }
+
+            /**
+             * Returns the effective Oracle schema name.
+             * Uses the explicitly configured schema if set, otherwise falls back to the username
+             * (in Oracle the username equals the schema by default).
+             */
+            public String getEffectiveSchema() {
+                return (schema != null && !schema.isBlank()) ? schema : username;
+            }
         }
     }
 

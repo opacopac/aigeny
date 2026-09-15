@@ -83,7 +83,8 @@ class StatusAggregatorServiceTest {
             // Given
             llmConfig.setProvider("claude");
             llmConfig.setModel("claude-3-sonnet");
-            dbConfig.setUsername("dbuser");
+            dbConfig.getStages().put("INTE", new AigenyProperties.Db.StageProps());
+            dbConfig.getStages().get("INTE").setUsername("dbuser");
             jiraConfig.setBaseUrl("https://jira.example.com");
             bitbucketConfig.setBaseUrl("https://bitbucket.example.com");
 
@@ -118,7 +119,6 @@ class StatusAggregatorServiceTest {
             // Given
             llmConfig.setProvider("openai");
             llmConfig.setModel("gpt-4");
-            dbConfig.setUsername(null);
             jiraConfig.setBaseUrl(null);
             bitbucketConfig.setBaseUrl(null);
 
@@ -348,7 +348,8 @@ class StatusAggregatorServiceTest {
         @DisplayName("should aggregate database username from configuration")
         void shouldAggregateDatabaseUsernameFromConfiguration() {
             // Given
-            dbConfig.setUsername("mydbuser");
+            dbConfig.getStages().put("INTE", new AigenyProperties.Db.StageProps());
+            dbConfig.getStages().get("INTE").setUsername("mydbuser");
             llmConfig.setProvider("test");
             llmConfig.setModel("test");
 

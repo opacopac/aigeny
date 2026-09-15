@@ -25,13 +25,20 @@ class ConfigurationValidatorTest {
     @DisplayName("Database Configuration Validation")
     class DatabaseConfigurationValidation {
 
+        private AigenyProperties.Db dbWithDefaultStage(String url, String username) {
+            AigenyProperties.Db db = new AigenyProperties.Db();
+            AigenyProperties.Db.StageProps stage = new AigenyProperties.Db.StageProps();
+            stage.setUrl(url);
+            stage.setUsername(username);
+            db.getStages().put(db.getDefaultStage(), stage);
+            return db;
+        }
+
         @Test
         @DisplayName("should return true when DB is fully configured")
         void shouldReturnTrueWhenDbIsFullyConfigured() {
             // Given
-            AigenyProperties.Db db = new AigenyProperties.Db();
-            db.setUrl("jdbc:oracle:thin:@localhost:1521/XE");
-            db.setUsername("testuser");
+            AigenyProperties.Db db = dbWithDefaultStage("jdbc:oracle:thin:@localhost:1521/XE", "testuser");
             db.setPassword("testpass");
 
             // When
@@ -52,12 +59,23 @@ class ConfigurationValidatorTest {
         }
 
         @Test
+        @DisplayName("should return false when no stage is configured at all")
+        void shouldReturnFalseWhenNoStageConfigured() {
+            // Given
+            AigenyProperties.Db db = new AigenyProperties.Db();
+
+            // When
+            boolean result = validator.isDbConfigured(db);
+
+            // Then
+            assertThat(result).isFalse();
+        }
+
+        @Test
         @DisplayName("should return false when DB URL is null")
         void shouldReturnFalseWhenDbUrlIsNull() {
             // Given
-            AigenyProperties.Db db = new AigenyProperties.Db();
-            db.setUrl(null);
-            db.setUsername("testuser");
+            AigenyProperties.Db db = dbWithDefaultStage(null, "testuser");
 
             // When
             boolean result = validator.isDbConfigured(db);
@@ -70,9 +88,7 @@ class ConfigurationValidatorTest {
         @DisplayName("should return false when DB URL is blank")
         void shouldReturnFalseWhenDbUrlIsBlank() {
             // Given
-            AigenyProperties.Db db = new AigenyProperties.Db();
-            db.setUrl("   ");
-            db.setUsername("testuser");
+            AigenyProperties.Db db = dbWithDefaultStage("   ", "testuser");
 
             // When
             boolean result = validator.isDbConfigured(db);
@@ -85,9 +101,7 @@ class ConfigurationValidatorTest {
         @DisplayName("should return false when DB username is null")
         void shouldReturnFalseWhenDbUsernameIsNull() {
             // Given
-            AigenyProperties.Db db = new AigenyProperties.Db();
-            db.setUrl("jdbc:oracle:thin:@localhost:1521/XE");
-            db.setUsername(null);
+            AigenyProperties.Db db = dbWithDefaultStage("jdbc:oracle:thin:@localhost:1521/XE", null);
 
             // When
             boolean result = validator.isDbConfigured(db);
@@ -100,9 +114,7 @@ class ConfigurationValidatorTest {
         @DisplayName("should return false when DB username is blank")
         void shouldReturnFalseWhenDbUsernameIsBlank() {
             // Given
-            AigenyProperties.Db db = new AigenyProperties.Db();
-            db.setUrl("jdbc:oracle:thin:@localhost:1521/XE");
-            db.setUsername("");
+            AigenyProperties.Db db = dbWithDefaultStage("jdbc:oracle:thin:@localhost:1521/XE", "");
 
             // When
             boolean result = validator.isDbConfigured(db);
@@ -115,9 +127,7 @@ class ConfigurationValidatorTest {
         @DisplayName("should return true even when password is missing (can use wallet)")
         void shouldReturnTrueEvenWhenPasswordIsMissing() {
             // Given
-            AigenyProperties.Db db = new AigenyProperties.Db();
-            db.setUrl("jdbc:oracle:thin:@localhost:1521/XE");
-            db.setUsername("testuser");
+            AigenyProperties.Db db = dbWithDefaultStage("jdbc:oracle:thin:@localhost:1521/XE", "testuser");
             db.setPassword(null);  // Password is not required for validation
 
             // When
@@ -442,11 +452,17 @@ class ConfigurationValidatorTest {
         @Test
         @DisplayName("isDbConfigured accepts arbitrary DbConfiguration implementations")
         void isDbConfiguredAcceptsArbitraryImplementation() {
-            DbConfiguration config = new DbConfiguration() {
+            DbConfiguration.Stage stage = new DbConfiguration.Stage() {
                 public String getUrl()             { return "jdbc:oracle:thin:@host:1521/XE"; }
                 public String getUsername()        { return "user"; }
                 public String getPassword()        { return "pass"; }
+                public String getSchema()          { return ""; }
                 public String getEffectiveSchema() { return "user"; }
+            };
+            DbConfiguration config = new DbConfiguration() {
+                public java.util.Map<String, ? extends Stage> getStages() { return java.util.Map.of("INTE", stage); }
+                public String getDefaultContext()  { return "pflege"; }
+                public String getDefaultStage()    { return "INTE"; }
                 public String getMcpServerUrl()    { return ""; }
                 public java.util.Map<String, String> getMcpServerHeaders() { return java.util.Map.of(); }
             };

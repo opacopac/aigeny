@@ -13,11 +13,11 @@ server:
 
 # ── AIgeny configuration ──────────────────────────────────────────────────────
 # Override via environment variables (Spring Boot auto-mapping):
-#   aigeny.llm.api-key  →  AIGENY_LLM_API_KEY
-#   aigeny.db.password  →  AIGENY_DB_PASSWORD
+#   aigeny.llm.api-key               →  AIGENY_LLM_API_KEY
+#   aigeny.db.stages.inte.password   →  AIGENY_DB_STAGES_INTE_PASSWORD
 # Or use Docker-secret _FILE variants:
 #   AIGENY_LLM_API_KEY_FILE=/run/secrets/llm_api_key
-#   AIGENY_DB_PASSWORD_FILE=/run/secrets/db_password
+#   AIGENY_DB_PASSWORD_FILE=/run/secrets/db_password   (applies to the aigeny.db.default-stage stage only)
 #
 # ── Supported LLM providers ───────────────────────────────────────────────────
 #
@@ -47,18 +47,44 @@ aigeny:
   #  model: claude-sonnet-4-6
 
   db:
-    url: ""
-    url-prod: ""   # optional: JDBC URL for the PROD stage; blank = PROD unavailable, only INTE can be selected
-    username: ""
-    password: ""   # or AIGENY_DB_PASSWORD_FILE for Docker secrets
-    schema: ""     # optional: Oracle schema if different from username (e.g. username=readonly_user, schema=MYAPP)
+    # Per-stage Oracle connection details - each stage is an entirely separate Oracle
+    # instance/account, so url/username/password/schema are all configured per stage. Add as
+    # many stages as needed (this is not limited to INTE/PROD - e.g. TEST/DEV work the same way,
+    # with no code change). The stage names below (INTE/PROD) are just examples with blank
+    # placeholders; configure the actual values ONLY in your local ~/.aigeny/aigeny.yml
+    # (never commit real hostnames/credentials into this file):
+    #
+    # aigeny:
+    #   db:
+    #     stages:
+    #       INTE:
+    #         url: "jdbc:oracle:thin:@inte-host:1521/SERVICENAME"
+    #         username: "readonly_user"
+    #         password: ""   # or AIGENY_DB_PASSWORD_FILE for Docker secrets (applies to default-stage only)
+    #         schema: ""     # optional: Oracle schema if different from username
+    #       PROD:
+    #         url: "jdbc:oracle:thin:@prod-host:1521/SERVICENAME"
+    #         username: "readonly_user"
+    #         password: ""
+    #         schema: ""
+    stages:
+      INTE:
+        url: ""
+        username: ""
+        password: ""
+        schema: ""
+      PROD:
+        url: ""
+        username: ""
+        password: ""
+        schema: ""
     # Every list_tables/describe_table/search_schema/sample_table/run_query tool call now carries
     # two mandatory string arguments, "context" and "stage" - these defaults are used whenever
     # the caller omits them:
     #  - context: currently only this configured value is accepted; any other value is rejected
     #    by the MCP server with a "context not available" error.
-    #  - stage: "INTE" or "PROD" - selects whether the "url" (INTE) or "url-prod" (PROD)
-    #    connection above is used. An unconfigured/unknown stage is rejected with a
+    #  - stage: selects which entry of "stages" above is used for the DB connection. An
+    #    unconfigured/unknown stage (or one with a blank url) is rejected with a
     #    "stage not available" error.
     default-context: pflege
     default-stage: INTE
@@ -78,7 +104,7 @@ aigeny:
     base-url: ""   # e.g. https://jira.example.com  – token entered via UI
 
   bitbucket:
-    base-url: ""   # e.g. https://git.example.com   – token entered via UI
+    base-url: ""   # e.g. https://code.example.com   – token entered via UI
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging:
@@ -87,3 +113,4 @@ logging:
     com.zaxxer.hikari: WARN
   file:
     name: ${user.home}/.aigeny/aigeny.log
+

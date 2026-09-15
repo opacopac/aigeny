@@ -131,15 +131,40 @@ public class OracleMcpConnection {
         String javaBin = ProcessHandle.current().info().command().orElse("java");
         ServerParameters params = ServerParameters.builder(javaBin)
                 .args(buildJavaArgs())
-                .addEnvVar("AIGENY_DB_URL", nullToEmpty(dbConfig.getUrl()))
-                .addEnvVar("AIGENY_DB_URL_PROD", nullToEmpty(dbConfig.getUrlProd()))
-                .addEnvVar("AIGENY_DB_USERNAME", nullToEmpty(dbConfig.getUsername()))
-                .addEnvVar("AIGENY_DB_PASSWORD", nullToEmpty(dbConfig.getPassword()))
-                .addEnvVar("AIGENY_DB_SCHEMA", nullToEmpty(dbConfig.getEffectiveSchema()))
+                .addEnvVar("AIGENY_DB_STAGES_JSON", buildStagesJson())
                 .addEnvVar("AIGENY_DB_DEFAULT_CONTEXT", nullToEmpty(dbConfig.getDefaultContext()))
                 .addEnvVar("AIGENY_DB_DEFAULT_STAGE", nullToEmpty(dbConfig.getDefaultStage()))
                 .build();
         return new StdioClientTransport(params, new JacksonMcpJsonMapper(objectMapper));
+    }
+
+    /**
+     * Serializes all configured {@link DbConfiguration.Stage}s (url/username/password/effective
+     * schema, keyed by upper-cased stage name) into a single JSON blob, passed to the
+     * {@link OracleMcpServerLauncher} subprocess via the {@code AIGENY_DB_STAGES_JSON} env var -
+     * this keeps the set of supported stages fully open-ended (not hardcoded to INTE/PROD) on
+     * both sides. Package-private (not {@code private}) so it can be unit-tested directly.
+     */
+    String buildStagesJson() {
+        Map<String, ? extends DbConfiguration.Stage> stages = dbConfig.getStages();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        if (stages != null) {
+            for (Map.Entry<String, ? extends DbConfiguration.Stage> entry : stages.entrySet()) {
+                DbConfiguration.Stage stage = entry.getValue();
+                Map<String, String> stagePayload = new LinkedHashMap<>();
+                stagePayload.put("url", nullToEmpty(stage.getUrl()));
+                stagePayload.put("username", nullToEmpty(stage.getUsername()));
+                stagePayload.put("password", nullToEmpty(stage.getPassword()));
+                stagePayload.put("schema", nullToEmpty(stage.getEffectiveSchema()));
+                payload.put(entry.getKey().toUpperCase(), stagePayload);
+            }
+        }
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            log.warn("Could not serialize DB stage configuration for MCP subprocess: {}", e.getMessage());
+            return "{}";
+        }
     }
 
     private void discoverTools(McpSyncClient c) {

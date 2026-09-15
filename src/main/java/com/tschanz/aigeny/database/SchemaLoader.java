@@ -70,18 +70,19 @@ public class SchemaLoader {
             lastError = null;
             return;
         }
+        DbConfiguration.Stage stage = dbConfig.getStage(dbConfig.getDefaultStage());
         HikariConfig hc = new HikariConfig();
-        hc.setJdbcUrl(dbConfig.getUrl());
-        hc.setUsername(dbConfig.getUsername());
-        hc.setPassword(dbConfig.getPassword());
+        hc.setJdbcUrl(stage.getUrl());
+        hc.setUsername(stage.getUsername());
+        hc.setPassword(stage.getPassword());
         hc.setMaximumPoolSize(1);
         hc.setConnectionTimeout(10_000);
         hc.setReadOnly(true);
         hc.setPoolName("AIgeny-Schema");
         // If a dedicated schema is configured (different from the login user),
         // switch the Oracle session schema for accurate table counting.
-        String effectiveSchema = dbConfig.getEffectiveSchema();
-        if (!effectiveSchema.isBlank() && !effectiveSchema.equalsIgnoreCase(dbConfig.getUsername())) {
+        String effectiveSchema = stage.getEffectiveSchema();
+        if (!effectiveSchema.isBlank() && !effectiveSchema.equalsIgnoreCase(stage.getUsername())) {
             hc.setConnectionInitSql("ALTER SESSION SET CURRENT_SCHEMA = " + effectiveSchema);
             log.info("SchemaLoader: CURRENT_SCHEMA will be set to {}", effectiveSchema);
         }

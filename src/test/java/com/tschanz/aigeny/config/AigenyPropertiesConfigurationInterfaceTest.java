@@ -77,50 +77,71 @@ class AigenyPropertiesConfigurationInterfaceTest {
         }
 
         @Test
-        @DisplayName("getUrl() delegates to the stored value")
-        void getUrlDelegates() {
+        @DisplayName("getStages() is empty by default")
+        void getStagesDefaultsToEmpty() {
             AigenyProperties.Db db = new AigenyProperties.Db();
-            db.setUrl("jdbc:oracle:thin:@host:1521/XE");
             DbConfiguration config = db;
-            assertThat(config.getUrl()).isEqualTo("jdbc:oracle:thin:@host:1521/XE");
+            assertThat(config.getStages()).isEmpty();
         }
 
         @Test
-        @DisplayName("getUsername() delegates to the stored value")
-        void getUsernameDelegates() {
+        @DisplayName("getStage() looks up a configured stage case-insensitively")
+        void getStageLooksUpCaseInsensitively() {
             AigenyProperties.Db db = new AigenyProperties.Db();
-            db.setUsername("myuser");
+            AigenyProperties.Db.StageProps stage = new AigenyProperties.Db.StageProps();
+            stage.setUrl("jdbc:oracle:thin:@host:1521/XE");
+            db.getStages().put("INTE", stage);
             DbConfiguration config = db;
-            assertThat(config.getUsername()).isEqualTo("myuser");
+            assertThat(config.getStage("inte")).isSameAs(stage);
+            assertThat(config.getStage("PROD")).isNull();
         }
 
         @Test
-        @DisplayName("getPassword() delegates to the stored value")
-        void getPasswordDelegates() {
+        @DisplayName("Stage.getUrl()/getUsername()/getPassword() delegate to the stored values")
+        void stageFieldsDelegate() {
+            AigenyProperties.Db.StageProps stage = new AigenyProperties.Db.StageProps();
+            stage.setUrl("jdbc:oracle:thin:@host:1521/XE");
+            stage.setUsername("myuser");
+            stage.setPassword("secret");
+            assertThat(stage.getUrl()).isEqualTo("jdbc:oracle:thin:@host:1521/XE");
+            assertThat(stage.getUsername()).isEqualTo("myuser");
+            assertThat(stage.getPassword()).isEqualTo("secret");
+        }
+
+        @Test
+        @DisplayName("Stage.getEffectiveSchema() returns schema when set")
+        void getEffectiveSchemaReturnsSchemaWhenSet() {
+            AigenyProperties.Db.StageProps stage = new AigenyProperties.Db.StageProps();
+            stage.setUsername("READONLY");
+            stage.setSchema("DATA_SCHEMA");
+            assertThat(stage.getEffectiveSchema()).isEqualTo("DATA_SCHEMA");
+        }
+
+        @Test
+        @DisplayName("Stage.getEffectiveSchema() falls back to username when schema is blank")
+        void getEffectiveSchemaFallsBackToUsername() {
+            AigenyProperties.Db.StageProps stage = new AigenyProperties.Db.StageProps();
+            stage.setUsername("MYUSER");
+            stage.setSchema("");
+            assertThat(stage.getEffectiveSchema()).isEqualTo("MYUSER");
+        }
+
+        @Test
+        @DisplayName("getDefaultContext()/getDefaultStage() default to pflege/INTE")
+        void defaultContextAndStageHaveSensibleDefaults() {
+            AigenyProperties.Db db = new AigenyProperties.Db();
+            DbConfiguration config = db;
+            assertThat(config.getDefaultContext()).isEqualTo("pflege");
+            assertThat(config.getDefaultStage()).isEqualTo("INTE");
+        }
+
+        @Test
+        @DisplayName("getPassword()/setPassword() convenience methods operate on the default stage")
+        void passwordConvenienceDelegatesToDefaultStage() {
             AigenyProperties.Db db = new AigenyProperties.Db();
             db.setPassword("secret");
-            DbConfiguration config = db;
-            assertThat(config.getPassword()).isEqualTo("secret");
-        }
-
-        @Test
-        @DisplayName("getEffectiveSchema() returns schema when set")
-        void getEffectiveSchemaReturnsSchemaWhenSet() {
-            AigenyProperties.Db db = new AigenyProperties.Db();
-            db.setUsername("READONLY");
-            db.setSchema("DATA_SCHEMA");
-            DbConfiguration config = db;
-            assertThat(config.getEffectiveSchema()).isEqualTo("DATA_SCHEMA");
-        }
-
-        @Test
-        @DisplayName("getEffectiveSchema() falls back to username when schema is blank")
-        void getEffectiveSchemaFallsBackToUsername() {
-            AigenyProperties.Db db = new AigenyProperties.Db();
-            db.setUsername("MYUSER");
-            db.setSchema("");
-            DbConfiguration config = db;
-            assertThat(config.getEffectiveSchema()).isEqualTo("MYUSER");
+            assertThat(db.getPassword()).isEqualTo("secret");
+            assertThat(db.getStage(db.getDefaultStage()).getPassword()).isEqualTo("secret");
         }
 
         @Test
