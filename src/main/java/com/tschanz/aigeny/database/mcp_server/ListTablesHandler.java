@@ -24,9 +24,11 @@ final class ListTablesHandler implements OracleMcpToolHandler {
             {
               "type": "object",
               "properties": {
-                "prefix": {"type": "string", "description": "Optional case-insensitive prefix filter for table names."}
+                "prefix": {"type": "string", "description": "Optional case-insensitive prefix filter for table names."},
+                "context": {"type": "string", "description": "Data context to query. Defaults to the configured aigeny.db.default-context value if omitted."},
+                "stage": {"type": "string", "description": "Environment stage: 'INTE' (integration) or 'PROD' (production), selects the DB connection used. Defaults to the configured aigeny.db.default-stage value if omitted."}
               },
-              "required": []
+              "required": ["context", "stage"]
             }
             """;
 

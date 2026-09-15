@@ -132,9 +132,12 @@ public class OracleMcpConnection {
         ServerParameters params = ServerParameters.builder(javaBin)
                 .args(buildJavaArgs())
                 .addEnvVar("AIGENY_DB_URL", nullToEmpty(dbConfig.getUrl()))
+                .addEnvVar("AIGENY_DB_URL_PROD", nullToEmpty(dbConfig.getUrlProd()))
                 .addEnvVar("AIGENY_DB_USERNAME", nullToEmpty(dbConfig.getUsername()))
                 .addEnvVar("AIGENY_DB_PASSWORD", nullToEmpty(dbConfig.getPassword()))
                 .addEnvVar("AIGENY_DB_SCHEMA", nullToEmpty(dbConfig.getEffectiveSchema()))
+                .addEnvVar("AIGENY_DB_DEFAULT_CONTEXT", nullToEmpty(dbConfig.getDefaultContext()))
+                .addEnvVar("AIGENY_DB_DEFAULT_STAGE", nullToEmpty(dbConfig.getDefaultStage()))
                 .build();
         return new StdioClientTransport(params, new JacksonMcpJsonMapper(objectMapper));
     }

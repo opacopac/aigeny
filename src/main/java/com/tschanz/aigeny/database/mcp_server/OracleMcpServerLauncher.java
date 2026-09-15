@@ -11,7 +11,9 @@ import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
 /**
@@ -24,9 +26,15 @@ import java.util.concurrent.CountDownLatch;
  *
  * <p>Deliberately framework-free (no Spring context): it only needs DB
  * credentials, which are passed via environment variables by the parent
- * process ({@code AIGENY_DB_URL}, {@code AIGENY_DB_USERNAME},
- * {@code AIGENY_DB_PASSWORD}, {@code AIGENY_DB_SCHEMA}). This keeps the
+ * process ({@code AIGENY_DB_URL}, {@code AIGENY_DB_URL_PROD},
+ * {@code AIGENY_DB_USERNAME}, {@code AIGENY_DB_PASSWORD}, {@code AIGENY_DB_SCHEMA},
+ * {@code AIGENY_DB_DEFAULT_CONTEXT}, {@code AIGENY_DB_DEFAULT_STAGE}). This keeps the
  * subprocess lightweight and fast to start.
+ *
+ * <p>Every tool call carries mandatory {@code context}/{@code stage} arguments (see
+ * {@link ContextStageSupport}): {@code context} is validated against the single configured
+ * value, and {@code stage} ({@code INTE}/{@code PROD}) selects which of the (up to two)
+ * {@link HikariDataSource}s built here is used for that call.
  *
  * <p>Each tool is implemented by its own {@link OracleMcpToolHandler}: its name,
  * description, JSON parameter schema and SQL logic all live together in one class -
@@ -57,12 +65,24 @@ public final class OracleMcpServerLauncher {
     private OracleMcpServerLauncher() {}
 
     public static void main(String[] args) throws Exception {
-        String url      = System.getenv("AIGENY_DB_URL");
+        String urlInte  = System.getenv("AIGENY_DB_URL");
+        String urlProd  = System.getenv("AIGENY_DB_URL_PROD");
         String username = System.getenv("AIGENY_DB_USERNAME");
         String password = System.getenv("AIGENY_DB_PASSWORD");
         String schema   = System.getenv("AIGENY_DB_SCHEMA");
+        String allowedContext = System.getenv("AIGENY_DB_DEFAULT_CONTEXT");
+        String defaultStage   = System.getenv("AIGENY_DB_DEFAULT_STAGE");
 
-        HikariDataSource dataSource = buildDataSource(url, username, password, schema);
+        // One HikariDataSource per stage for which a JDBC URL was actually configured - the
+        // "stage" tool argument (see ContextStageSupport) selects between them at call time.
+        Map<String, HikariDataSource> stageDataSources = new LinkedHashMap<>();
+        if (urlInte != null && !urlInte.isBlank()) {
+            stageDataSources.put("INTE", buildDataSource(urlInte, username, password, schema, "INTE"));
+        }
+        if (urlProd != null && !urlProd.isBlank()) {
+            stageDataSources.put("PROD", buildDataSource(urlProd, username, password, schema, "PROD"));
+        }
+
         ObjectMapper objectMapper = new ObjectMapper();
         McpJsonMapper jsonMapper = new JacksonMcpJsonMapper(objectMapper);
 
@@ -78,8 +98,14 @@ public final class OracleMcpServerLauncher {
                     .description(handler.description())
                     .inputSchema(jsonMapper, handler.schemaJson())
                     .build();
-            builder.tool(tool,
-                    (exchange, arguments) -> handler.handle(dataSource, objectMapper, arguments));
+            builder.tool(tool, (exchange, arguments) -> {
+                ContextStageSupport.Resolution resolution = ContextStageSupport.resolve(
+                        arguments, allowedContext, allowedContext, defaultStage, Map.copyOf(stageDataSources));
+                if (resolution.isError()) {
+                    return resolution.error();
+                }
+                return handler.handle(resolution.dataSource(), objectMapper, arguments);
+            });
         }
 
         McpSyncServer server = builder.build();
@@ -91,7 +117,8 @@ public final class OracleMcpServerLauncher {
         new CountDownLatch(1).await();
     }
 
-    private static HikariDataSource buildDataSource(String url, String username, String password, String schema) {
+    private static HikariDataSource buildDataSource(String url, String username, String password, String schema,
+                                                      String stage) {
         HikariConfig hc = new HikariConfig();
         hc.setJdbcUrl(url);
         hc.setUsername(username);
@@ -99,11 +126,13 @@ public final class OracleMcpServerLauncher {
         hc.setMaximumPoolSize(3);
         hc.setConnectionTimeout(15_000);
         hc.setReadOnly(true);
-        hc.setPoolName("AIgeny-Oracle-MCP");
+        hc.setPoolName("AIgeny-Oracle-MCP-" + stage);
         if (schema != null && !schema.isBlank() && !schema.equalsIgnoreCase(username)) {
             hc.setConnectionInitSql("ALTER SESSION SET CURRENT_SCHEMA = " + schema);
         }
         return new HikariDataSource(hc);
     }
 }
+
+
 

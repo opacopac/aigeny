@@ -22,9 +22,11 @@ final class SearchSchemaHandler implements OracleMcpToolHandler {
             {
               "type": "object",
               "properties": {
-                "term": {"type": "string", "description": "Search term matched (case-insensitive substring) against table and column names."}
+                "term": {"type": "string", "description": "Search term matched (case-insensitive substring) against table and column names."},
+                "context": {"type": "string", "description": "Data context to query. Defaults to the configured aigeny.db.default-context value if omitted."},
+                "stage": {"type": "string", "description": "Environment stage: 'INTE' (integration) or 'PROD' (production), selects the DB connection used. Defaults to the configured aigeny.db.default-stage value if omitted."}
               },
-              "required": ["term"]
+              "required": ["term", "context", "stage"]
             }
             """;
 

@@ -89,8 +89,10 @@ public class AigenyProperties {
     }
 
     public static class Db implements DbConfiguration {
-        /** JDBC URL, e.g. jdbc:oracle:thin:@hostname:1521/SERVICENAME */
+        /** JDBC URL for the INTE (integration) stage, e.g. jdbc:oracle:thin:@hostname:1521/SERVICENAME */
         private String url = "";
+        /** JDBC URL for the PROD (production) stage. Blank = PROD stage unavailable. */
+        private String urlProd = "";
         private String username = "";
         private String password = "";
         /**
@@ -100,6 +102,16 @@ public class AigenyProperties {
          * e.g. username=READONLY_USER, schema=NOVAP_INTE.
          */
         private String schema = "";
+        /**
+         * Default value for the mandatory {@code context} tool argument (see
+         * {@link DbConfiguration#getDefaultContext()}).
+         */
+        private String defaultContext = "pflege";
+        /**
+         * Default value for the mandatory {@code stage} tool argument (see
+         * {@link DbConfiguration#getDefaultStage()}).
+         */
+        private String defaultStage = "INTE";
         /**
          * Optional URL of a remote Oracle DB MCP server (see {@link DbConfiguration#getMcpServerUrl()}).
          * Leave blank (default) to keep launching the embedded MCP server as a local stdio
@@ -121,12 +133,18 @@ public class AigenyProperties {
 
         public String getUrl() { return url; }
         public void setUrl(String url) { this.url = url; }
+        public String getUrlProd() { return urlProd; }
+        public void setUrlProd(String urlProd) { this.urlProd = urlProd; }
         public String getUsername() { return username; }
         public void setUsername(String username) { this.username = username; }
         public String getPassword() { return password; }
         public void setPassword(String password) { this.password = password; }
         public String getSchema() { return schema; }
         public void setSchema(String schema) { this.schema = schema; }
+        public String getDefaultContext() { return defaultContext; }
+        public void setDefaultContext(String defaultContext) { this.defaultContext = defaultContext; }
+        public String getDefaultStage() { return defaultStage; }
+        public void setDefaultStage(String defaultStage) { this.defaultStage = defaultStage; }
         public String getMcpServerUrl() { return mcpServerUrl; }
         public void setMcpServerUrl(String mcpServerUrl) { this.mcpServerUrl = mcpServerUrl; }
         public java.util.Map<String, String> getMcpServerHeaders() { return mcpServerHeaders; }

@@ -10,8 +10,32 @@ import java.util.Map;
  */
 public interface DbConfiguration {
 
-    /** JDBC URL, e.g. {@code jdbc:oracle:thin:@hostname:1521/SERVICENAME}. */
+    /**
+     * JDBC URL used for the {@code INTE} (integration) stage, e.g.
+     * {@code jdbc:oracle:thin:@hostname:1521/SERVICENAME}. Also the default/fallback
+     * connection when only a single environment is configured.
+     */
     String getUrl();
+
+    /**
+     * JDBC URL used for the {@code PROD} (production) stage. When blank, the {@code PROD}
+     * stage is unavailable and the {@code stage} tool argument only accepts {@code INTE}.
+     */
+    String getUrlProd();
+
+    /**
+     * Default value for the mandatory {@code context} argument accepted by every Oracle DB
+     * MCP tool call, used when the caller omits it. Currently also the only value accepted -
+     * the MCP server returns a "context not available" error for any other value.
+     */
+    String getDefaultContext();
+
+    /**
+     * Default value for the mandatory {@code stage} argument accepted by every Oracle DB MCP
+     * tool call, used when the caller omits it. Must be {@code INTE} or {@code PROD}; selects
+     * which JDBC URL ({@link #getUrl()} or {@link #getUrlProd()}) the MCP server connects to.
+     */
+    String getDefaultStage();
 
     /** Database login username. */
     String getUsername();

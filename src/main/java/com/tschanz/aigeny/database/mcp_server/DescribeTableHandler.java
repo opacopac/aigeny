@@ -28,9 +28,11 @@ final class DescribeTableHandler implements OracleMcpToolHandler {
             {
               "type": "object",
               "properties": {
-                "table": {"type": "string", "description": "Table name to describe, optionally schema-qualified (SCHEMA.TABLE)."}
+                "table": {"type": "string", "description": "Table name to describe, optionally schema-qualified (SCHEMA.TABLE)."},
+                "context": {"type": "string", "description": "Data context to query. Defaults to the configured aigeny.db.default-context value if omitted."},
+                "stage": {"type": "string", "description": "Environment stage: 'INTE' (integration) or 'PROD' (production), selects the DB connection used. Defaults to the configured aigeny.db.default-stage value if omitted."}
               },
-              "required": ["table"]
+              "required": ["table", "context", "stage"]
             }
             """;
 

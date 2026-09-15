@@ -25,9 +25,11 @@ final class SampleTableHandler implements OracleMcpToolHandler {
               "type": "object",
               "properties": {
                 "table": {"type": "string", "description": "Table name to sample, optionally schema-qualified (SCHEMA.TABLE)."},
-                "limit": {"type": "integer", "description": "Max rows to return (default 20, max 5000)."}
+                "limit": {"type": "integer", "description": "Max rows to return (default 20, max 5000)."},
+                "context": {"type": "string", "description": "Data context to query. Defaults to the configured aigeny.db.default-context value if omitted."},
+                "stage": {"type": "string", "description": "Environment stage: 'INTE' (integration) or 'PROD' (production), selects the DB connection used. Defaults to the configured aigeny.db.default-stage value if omitted."}
               },
-              "required": ["table"]
+              "required": ["table", "context", "stage"]
             }
             """;
 

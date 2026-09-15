@@ -48,9 +48,20 @@ aigeny:
 
   db:
     url: ""
+    url-prod: ""   # optional: JDBC URL for the PROD stage; blank = PROD unavailable, only INTE can be selected
     username: ""
     password: ""   # or AIGENY_DB_PASSWORD_FILE for Docker secrets
     schema: ""     # optional: Oracle schema if different from username (e.g. username=readonly_user, schema=MYAPP)
+    # Every list_tables/describe_table/search_schema/sample_table/run_query tool call now carries
+    # two mandatory string arguments, "context" and "stage" - these defaults are used whenever
+    # the caller omits them:
+    #  - context: currently only this configured value is accepted; any other value is rejected
+    #    by the MCP server with a "context not available" error.
+    #  - stage: "INTE" or "PROD" - selects whether the "url" (INTE) or "url-prod" (PROD)
+    #    connection above is used. An unconfigured/unknown stage is rejected with a
+    #    "stage not available" error.
+    default-context: pflege
+    default-stage: INTE
     # The list_tables/describe_table/search_schema/sample_table/run_query tools are served
     # by an MCP server. By default (mcp-server-url blank) that server is the embedded
     # com.tschanz.aigeny.database.mcp_server.OracleMcpServerLauncher, launched as a local
