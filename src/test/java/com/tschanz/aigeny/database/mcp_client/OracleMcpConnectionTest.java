@@ -336,7 +336,7 @@ class OracleMcpConnectionTest {
         @Test
         @DisplayName("reports not connected when the MCP client isn't available yet")
         void notConnected() {
-            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables();
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables("pflege", "INTE");
 
             assertThat(status.connected()).isFalse();
             assertThat(status.available()).isFalse();
@@ -349,7 +349,7 @@ class OracleMcpConnectionTest {
         void connectedButToolMissing() throws Exception {
             injectMockClient();
 
-            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables();
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables("pflege", "INTE");
 
             assertThat(status.connected()).isTrue();
             assertThat(status.available()).isFalse();
@@ -357,18 +357,16 @@ class OracleMcpConnectionTest {
         }
 
         @Test
-        @DisplayName("always sends the configured context/stage arguments, since both are required by the tool's JSON schema")
+        @DisplayName("always sends the given context/stage arguments, since both are required by the tool's JSON schema")
         void alwaysSendsContextAndStage() throws Exception {
             injectMockClient();
             discoverListTablesTool();
-            when(dbMcpConfig.getDefaultContext()).thenReturn("pflege");
-            when(dbMcpConfig.getDefaultStage()).thenReturn("INTE");
             when(mcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult(List.of(
                     new McpSchema.TextContent("ok"),
                     new McpSchema.TextContent("{\"rows\":[{},{},{}]}")
             ), false));
 
-            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables();
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables("pflege", "INTE");
 
             assertThat(status.connected()).isTrue();
             assertThat(status.available()).isTrue();
@@ -381,18 +379,16 @@ class OracleMcpConnectionTest {
         }
 
         @Test
-        @DisplayName("omits context/stage when they are not configured (blank)")
+        @DisplayName("omits context/stage when they are not given (blank)")
         void omitsBlankContextAndStage() throws Exception {
             injectMockClient();
             discoverListTablesTool();
-            when(dbMcpConfig.getDefaultContext()).thenReturn("");
-            when(dbMcpConfig.getDefaultStage()).thenReturn(null);
             when(mcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult(List.of(
                     new McpSchema.TextContent("ok"),
                     new McpSchema.TextContent("{\"rows\":[]}")
             ), false));
 
-            connection.checkListTables();
+            connection.checkListTables("", null);
 
             verify(mcpClient).callTool(argThat(req ->
                     !req.arguments().containsKey("context") && !req.arguments().containsKey("stage")));
@@ -406,7 +402,7 @@ class OracleMcpConnectionTest {
             when(mcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult(
                     List.of(new McpSchema.TextContent("Missing required argument 'context'")), true));
 
-            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables();
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables("pflege", "INTE");
 
             assertThat(status.connected()).isTrue();
             assertThat(status.available()).isTrue();
@@ -421,7 +417,7 @@ class OracleMcpConnectionTest {
             discoverListTablesTool();
             when(mcpClient.callTool(any())).thenThrow(new RuntimeException("connection reset"));
 
-            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables();
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables("pflege", "INTE");
 
             assertThat(status.connected()).isTrue();
             assertThat(status.available()).isTrue();

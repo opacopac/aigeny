@@ -8,8 +8,9 @@ import com.tschanz.aigeny.jira.SessionJiraWriteService;
 import com.tschanz.aigeny.confirmation.ExecutionContextManager;
 
 import com.tschanz.aigeny.llm.model.Message;
-import com.tschanz.aigeny.chat.ChatResult;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
+import com.tschanz.aigeny.orchestration.SelectedDataContext;
+import com.tschanz.aigeny.database.DataContextSelectionService;
 import com.tschanz.aigeny.Messages;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
@@ -65,6 +66,7 @@ public class ChatController {
     private final StatusAggregatorService statusAggregator;
     private final ChatStreamingService streamingService;
     private final ExecutionContextManager contextManager;
+    private final DataContextSelectionService dataContextSelectionService;
 
     public ChatController(OrchestrationService orchestration,
                           TokenService tokenService,
@@ -74,7 +76,8 @@ public class ChatController {
                           SessionJiraWriteService jiraWriteService,
                           StatusAggregatorService statusAggregator,
                           ChatStreamingService streamingService,
-                          ExecutionContextManager contextManager) {
+                          ExecutionContextManager contextManager,
+                          DataContextSelectionService dataContextSelectionService) {
         this.orchestration      = orchestration;
         this.tokenService       = tokenService;
         this.historyService     = historyService;
@@ -84,6 +87,7 @@ public class ChatController {
         this.statusAggregator   = statusAggregator;
         this.streamingService   = streamingService;
         this.contextManager     = contextManager;
+        this.dataContextSelectionService = dataContextSelectionService;
     }
 
     // ── POST /api/chat ──────────────────────────────────────────────────────
@@ -104,6 +108,9 @@ public class ChatController {
         final String jiraToken        = tokenService.getEffectiveJiraToken(session);
         final boolean jiraWriteEnabled = jiraWriteService.isJiraWriteModeEnabled(session);
         final String bitbucketToken   = tokenService.getEffectiveBitbucketToken(session);
+        final SelectedDataContext selectedDataContext = new SelectedDataContext(
+                dataContextSelectionService.getSelectedContext(session),
+                dataContextSelectionService.getSelectedStage(session));
 
         return CompletableFuture.supplyAsync(() -> {
             // Confirmation handlers are null because write tools require SSE streaming.
@@ -111,8 +118,9 @@ public class ChatController {
             tokens.put(JiraContextProvider.KEY, jiraToken);
             tokens.put(BitbucketContextProvider.KEY, bitbucketToken);
             contextManager.setupContexts(tokens, jiraWriteEnabled, null, null);
+            dataContextSelectionService.activate(selectedDataContext.context(), selectedDataContext.stage());
             try {
-                ChatResult result = orchestration.chat(history, message);
+                ChatResult result = orchestration.chat(history, message, null, null, null, selectedDataContext);
                 if (result.hasExportData()) {
                     exportService.setLastQueryResult(session, result.lastToolResult().getQueryResult());
                 }
@@ -128,6 +136,7 @@ public class ChatController {
                 ));
             } finally {
                 contextManager.cleanupAllContexts();
+                dataContextSelectionService.clear();
             }
         });
     }
@@ -145,9 +154,12 @@ public class ChatController {
         String jiraToken = tokenService.getEffectiveJiraToken(session);
         boolean jiraWriteEnabled = jiraWriteService.isJiraWriteModeEnabled(session);
         String bitbucketToken = tokenService.getEffectiveBitbucketToken(session);
+        SelectedDataContext selectedDataContext = new SelectedDataContext(
+                dataContextSelectionService.getSelectedContext(session),
+                dataContextSelectionService.getSelectedStage(session));
 
         return streamingService.streamChat(
-                message, history, session, jiraToken, jiraWriteEnabled, bitbucketToken
+                message, history, session, jiraToken, jiraWriteEnabled, bitbucketToken, selectedDataContext
         );
     }
 

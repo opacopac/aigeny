@@ -1,7 +1,7 @@
 package com.tschanz.aigeny.database.mcp_client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tschanz.aigeny.database.DbMcpConfiguration;
+import com.tschanz.aigeny.database.DataContextSelectionService;
 import com.tschanz.aigeny.tool.Tool;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,13 +27,13 @@ class OracleMcpToolProviderTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Mock private OracleMcpConnection connection;
-    @Mock private DbMcpConfiguration dbMcpConfig;
+    @Mock private DataContextSelectionService dataContextSelectionService;
 
     private OracleMcpToolProvider provider;
 
     @BeforeEach
     void setUp() {
-        provider = new OracleMcpToolProvider(connection, objectMapper, dbMcpConfig);
+        provider = new OracleMcpToolProvider(connection, objectMapper, dataContextSelectionService);
     }
 
     @Test

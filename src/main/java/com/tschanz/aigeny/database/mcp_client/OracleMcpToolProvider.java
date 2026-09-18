@@ -1,7 +1,7 @@
 package com.tschanz.aigeny.database.mcp_client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tschanz.aigeny.database.DbMcpConfiguration;
+import com.tschanz.aigeny.database.DataContextSelectionService;
 import com.tschanz.aigeny.tool.DynamicToolProvider;
 import com.tschanz.aigeny.tool.Tool;
 import org.springframework.stereotype.Service;
@@ -30,19 +30,19 @@ public class OracleMcpToolProvider implements DynamicToolProvider {
 
     private final OracleMcpConnection connection;
     private final ObjectMapper objectMapper;
-    private final DbMcpConfiguration dbMcpConfig;
+    private final DataContextSelectionService dataContextSelectionService;
 
     public OracleMcpToolProvider(OracleMcpConnection connection, ObjectMapper objectMapper,
-                                  DbMcpConfiguration dbMcpConfig) {
+                                  DataContextSelectionService dataContextSelectionService) {
         this.connection = connection;
         this.objectMapper = objectMapper;
-        this.dbMcpConfig = dbMcpConfig;
+        this.dataContextSelectionService = dataContextSelectionService;
     }
 
     @Override
     public List<Tool> getTools() {
         return connection.getDiscoveredToolNames().stream()
-                .map(name -> (Tool) new GenericOracleMcpTool(name, connection, objectMapper, dbMcpConfig))
+                .map(name -> (Tool) new GenericOracleMcpTool(name, connection, objectMapper, dataContextSelectionService))
                 .toList();
     }
 }

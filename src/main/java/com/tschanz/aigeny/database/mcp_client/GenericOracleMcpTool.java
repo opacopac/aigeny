@@ -3,7 +3,7 @@ package com.tschanz.aigeny.database.mcp_client;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;
-import com.tschanz.aigeny.database.DbMcpConfiguration;
+import com.tschanz.aigeny.database.DataContextSelectionService;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.tool.AbstractTool;
 import com.tschanz.aigeny.tool.QueryResult;
@@ -37,14 +37,14 @@ public class GenericOracleMcpTool extends AbstractTool {
 
     private final String name;
     private final OracleMcpConnection connection;
-    private final DbMcpConfiguration dbMcpConfig;
+    private final DataContextSelectionService dataContextSelectionService;
 
     public GenericOracleMcpTool(String name, OracleMcpConnection connection, ObjectMapper objectMapper,
-                                 DbMcpConfiguration dbMcpConfig) {
+                                 DataContextSelectionService dataContextSelectionService) {
         super(objectMapper);
         this.name = name;
         this.connection = connection;
-        this.dbMcpConfig = dbMcpConfig;
+        this.dataContextSelectionService = dataContextSelectionService;
     }
 
     @Override
@@ -135,11 +135,13 @@ public class GenericOracleMcpTool extends AbstractTool {
         Map<String, Object> arguments = objectMapper.readValue(argumentsJson,
                 objectMapper.getTypeFactory().constructMapType(Map.class, String.class, Object.class));
 
-        // "context"/"stage" are locally, mechanically configured (aigeny.db.default-context/
-        // default-stage) - override whatever the LLM supplied for these two arguments so the
-        // call always targets the configured context/stage, regardless of what the model passed.
-        overrideIfNotBlank(arguments, "context", dbMcpConfig.getDefaultContext());
-        overrideIfNotBlank(arguments, "stage", dbMcpConfig.getDefaultStage());
+        // "context"/"stage" are resolved per chat-request via DataContextSelectionService
+        // (today effectively fixed from aigeny.db.default-context/default-stage, but designed
+        // to support a future per-session UI selection - see DataContextSelectionService) -
+        // override whatever the LLM supplied for these two arguments so the call always
+        // targets the currently selected context/stage, regardless of what the model passed.
+        overrideIfNotBlank(arguments, "context", dataContextSelectionService.getContext());
+        overrideIfNotBlank(arguments, "stage", dataContextSelectionService.getStage());
 
         log.info("  DB TOOL REQUEST name={} args={}", name, arguments);
         if (arguments.get("sql") != null) {

@@ -1,16 +1,16 @@
 package com.tschanz.aigeny.chat;
-import com.tschanz.aigeny.jira.JiraContextProvider;
-import com.tschanz.aigeny.bitbucket.BitbucketContextProvider;
-import com.tschanz.aigeny.confirmation.ExecutionContextManager;
-import com.tschanz.aigeny.confirmation.ConfirmationOrchestrator;
-import com.tschanz.aigeny.session.SessionCancellationService;
-import com.tschanz.aigeny.export.SessionExportService;
 
+import com.tschanz.aigeny.bitbucket.BitbucketContextProvider;
+import com.tschanz.aigeny.confirmation.ConfirmationOrchestrator;
+import com.tschanz.aigeny.confirmation.ExecutionContextManager;
+import com.tschanz.aigeny.export.SessionExportService;
+import com.tschanz.aigeny.jira.JiraContextProvider;
 import com.tschanz.aigeny.llm.model.Message;
+import com.tschanz.aigeny.orchestration.OrchestrationService;
+import com.tschanz.aigeny.orchestration.SelectedDataContext;
+import com.tschanz.aigeny.session.SessionCancellationService;
 import com.tschanz.aigeny.tool.QueryResult;
 import com.tschanz.aigeny.tool.ToolResult;
-import com.tschanz.aigeny.chat.ChatResult;
-import com.tschanz.aigeny.orchestration.OrchestrationService;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,19 +37,30 @@ import static org.mockito.Mockito.*;
 @DisplayName("ChatStreamingService")
 class ChatStreamingServiceTest {
 
-    @Mock private OrchestrationService orchestration;
-    @Mock private SessionCancellationService cancellationService;
-    @Mock private SessionExportService exportService;
-    @Mock private ConfirmationOrchestrator confirmationOrchestrator;
-    @Mock private ExecutionContextManager contextManager;
-    @Mock private SseStreamManager sseManager;
-    @Mock private HttpSession session;
+    @Mock
+    private OrchestrationService orchestration;
+    @Mock
+    private SessionCancellationService cancellationService;
+    @Mock
+    private SessionExportService exportService;
+    @Mock
+    private ConfirmationOrchestrator confirmationOrchestrator;
+    @Mock
+    private ExecutionContextManager contextManager;
+    @Mock
+    private SseStreamManager sseManager;
+    @Mock
+    private HttpSession session;
+    @Mock
+    private com.tschanz.aigeny.database.DataContextSelectionService dataContextSelectionService;
+
+    private static final SelectedDataContext SELECTED_DATA_CONTEXT = new SelectedDataContext("pflege", "INTE");
 
     private ChatStreamingService streamingService;
 
     @BeforeEach
     void setUp() {
-        streamingService = new ChatStreamingService(orchestration, cancellationService, exportService, confirmationOrchestrator, contextManager, sseManager);
+        streamingService = new ChatStreamingService(orchestration, cancellationService, exportService, confirmationOrchestrator, contextManager, sseManager, dataContextSelectionService);
 
         // Default: sseManager creates a new emitter
         when(sseManager.createEmitter()).thenReturn(new SseEmitter(300_000L));
@@ -62,12 +73,12 @@ class ChatStreamingServiceTest {
         @Test
         @DisplayName("should create emitter via SseStreamManager")
         void shouldCreateEmitterViaSseStreamManager() {
-            List<Message> history  = new ArrayList<>();
+            List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
             when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
 
             SseEmitter emitter = streamingService.streamChat(
-                    "test message", history, session, "token", false, "bb-token");
+                    "test message", history, session, "token", false, "bb-token", SELECTED_DATA_CONTEXT);
 
             assertThat(emitter).isNotNull();
             verify(sseManager).createEmitter();
@@ -76,11 +87,11 @@ class ChatStreamingServiceTest {
         @Test
         @DisplayName("should setup cancel flag on emitter lifecycle events")
         void shouldSetupCancelFlagOnEmitterLifecycleEvents() {
-            List<Message> history  = new ArrayList<>();
+            List<Message> history = new ArrayList<>();
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
             when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
 
-            streamingService.streamChat("test message", history, session, "token", false, "bb-token");
+            streamingService.streamChat("test message", history, session, "token", false, "bb-token", SELECTED_DATA_CONTEXT);
 
             verify(cancellationService).createCancelFlag(session);
         }
@@ -89,7 +100,7 @@ class ChatStreamingServiceTest {
         @DisplayName("should handle empty message with error event via SseStreamManager")
         void shouldHandleEmptyMessageWithErrorEvent() {
             SseEmitter emitter = streamingService.streamChat(
-                    "", new ArrayList<>(), session, "token", false, "bb-token");
+                    "", new ArrayList<>(), session, "token", false, "bb-token", SELECTED_DATA_CONTEXT);
 
             assertThat(emitter).isNotNull();
             verify(sseManager).sendErrorAndComplete(any(SseEmitter.class), anyString());
@@ -100,7 +111,7 @@ class ChatStreamingServiceTest {
         @DisplayName("should handle null message with error event via SseStreamManager")
         void shouldHandleNullMessageWithErrorEvent() {
             SseEmitter emitter = streamingService.streamChat(
-                    null, new ArrayList<>(), session, "token", false, "bb-token");
+                    null, new ArrayList<>(), session, "token", false, "bb-token", SELECTED_DATA_CONTEXT);
 
             assertThat(emitter).isNotNull();
             verify(sseManager).sendErrorAndComplete(any(SseEmitter.class), anyString());
@@ -119,15 +130,15 @@ class ChatStreamingServiceTest {
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
             QueryResult queryResult = mock(QueryResult.class);
-            ToolResult toolResult   = mock(ToolResult.class);
+            ToolResult toolResult = mock(ToolResult.class);
             when(toolResult.getQueryResult()).thenReturn(queryResult);
             when(toolResult.hasQueryResult()).thenReturn(true);
 
             ChatResult chatResult = new ChatResult("response", toolResult);
             when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
-            when(orchestration.chat(any(), anyString(), any(), any(), any())).thenReturn(chatResult);
+            when(orchestration.chat(any(), anyString(), any(), any(), any(), any())).thenReturn(chatResult);
 
-            streamingService.streamChat("show me data", history, session, "token", false, "bb-token");
+            streamingService.streamChat("show me data", history, session, "token", false, "bb-token", SELECTED_DATA_CONTEXT);
             Thread.sleep(100);
 
             verify(exportService).setLastQueryResult(session, queryResult);
@@ -142,9 +153,9 @@ class ChatStreamingServiceTest {
 
             ChatResult chatResult = new ChatResult("response", null);
             when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
-            when(orchestration.chat(any(), anyString(), any(), any(), any())).thenReturn(chatResult);
+            when(orchestration.chat(any(), anyString(), any(), any(), any(), any())).thenReturn(chatResult);
 
-            streamingService.streamChat("hello", history, session, "token", false, "bb-token");
+            streamingService.streamChat("hello", history, session, "token", false, "bb-token", SELECTED_DATA_CONTEXT);
             Thread.sleep(100);
 
             verify(exportService, never()).setLastQueryResult(any(), any());
@@ -163,15 +174,15 @@ class ChatStreamingServiceTest {
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
             when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
-            when(orchestration.chat(any(), anyString(), any(), any(), any()))
+            when(orchestration.chat(any(), anyString(), any(), any(), any(), any()))
                     .thenReturn(new ChatResult("response", null));
 
-            streamingService.streamChat("test", history, session, "jira-token", true, "bb-token");
+            streamingService.streamChat("test", history, session, "jira-token", true, "bb-token", SELECTED_DATA_CONTEXT);
             Thread.sleep(100);
 
             verify(contextManager).setupContexts(
                     argThat(tokens -> "jira-token".equals(tokens.get(JiraContextProvider.KEY))
-                                   && "bb-token".equals(tokens.get(BitbucketContextProvider.KEY))),
+                            && "bb-token".equals(tokens.get(BitbucketContextProvider.KEY))),
                     eq(true),
                     any(),
                     any()
@@ -186,10 +197,10 @@ class ChatStreamingServiceTest {
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
             when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
-            when(orchestration.chat(any(), anyString(), any(), any(), any()))
+            when(orchestration.chat(any(), anyString(), any(), any(), any(), any()))
                     .thenThrow(new RuntimeException("Test error"));
 
-            streamingService.streamChat("test", history, session, "token", false, "bb-token");
+            streamingService.streamChat("test", history, session, "token", false, "bb-token", SELECTED_DATA_CONTEXT);
             Thread.sleep(100);
 
             verify(contextManager).cleanupAllContexts();
@@ -207,10 +218,10 @@ class ChatStreamingServiceTest {
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
             when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
-            when(orchestration.chat(any(), anyString(), any(), any(), any()))
+            when(orchestration.chat(any(), anyString(), any(), any(), any(), any()))
                     .thenThrow(new InterruptedException("Cancelled"));
 
-            streamingService.streamChat("test", history, session, "token", false, "bb-token");
+            streamingService.streamChat("test", history, session, "token", false, "bb-token", SELECTED_DATA_CONTEXT);
             Thread.sleep(100);
 
             verify(sseManager).handleCancellation(any(SseEmitter.class), eq(session));
@@ -229,22 +240,23 @@ class ChatStreamingServiceTest {
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
             when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
-            when(orchestration.chat(any(), anyString(), any(), any(), any()))
+            when(orchestration.chat(any(), anyString(), any(), any(), any(), any()))
                     .thenReturn(new ChatResult("response", null));
 
-            streamingService.streamChat("test message", history, session, "jira-token", true, "bb-token");
+            streamingService.streamChat("test message", history, session, "jira-token", true, "bb-token", SELECTED_DATA_CONTEXT);
             Thread.sleep(100);
 
-            ArgumentCaptor<BiConsumer<String, String>> toolCallCaptor   = ArgumentCaptor.forClass(BiConsumer.class);
-            ArgumentCaptor<Consumer<String>>          intermediateCaptor = ArgumentCaptor.forClass(Consumer.class);
-            ArgumentCaptor<Supplier<Boolean>>         cancelSupplierCaptor = ArgumentCaptor.forClass(Supplier.class);
+            ArgumentCaptor<BiConsumer<String, String>> toolCallCaptor = ArgumentCaptor.forClass(BiConsumer.class);
+            ArgumentCaptor<Consumer<String>> intermediateCaptor = ArgumentCaptor.forClass(Consumer.class);
+            ArgumentCaptor<Supplier<Boolean>> cancelSupplierCaptor = ArgumentCaptor.forClass(Supplier.class);
 
             verify(orchestration).chat(
                     eq(history),
                     eq("test message"),
                     toolCallCaptor.capture(),
                     intermediateCaptor.capture(),
-                    cancelSupplierCaptor.capture()
+                    cancelSupplierCaptor.capture(),
+                    eq(SELECTED_DATA_CONTEXT)
             );
 
             assertThat(toolCallCaptor.getValue()).isNotNull();
@@ -259,13 +271,13 @@ class ChatStreamingServiceTest {
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
             when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
-            when(orchestration.chat(any(), anyString(), any(), any(), any()))
+            when(orchestration.chat(any(), anyString(), any(), any(), any(), any()))
                     .thenReturn(new ChatResult("response", null));
 
-            streamingService.streamChat("my test message", history, session, "token", false, "bb-token");
+            streamingService.streamChat("my test message", history, session, "token", false, "bb-token", SELECTED_DATA_CONTEXT);
             Thread.sleep(100);
 
-            verify(orchestration).chat(eq(history), eq("my test message"), any(), any(), any());
+            verify(orchestration).chat(eq(history), eq("my test message"), any(), any(), any(), any());
         }
     }
 
@@ -280,11 +292,11 @@ class ChatStreamingServiceTest {
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
             when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
-            when(orchestration.chat(any(), anyString(), any(), any(), any()))
+            when(orchestration.chat(any(), anyString(), any(), any(), any(), any()))
                     .thenThrow(new RuntimeException("Test error"));
 
             SseEmitter emitter = streamingService.streamChat(
-                    "test", history, session, "token", false, "bb-token");
+                    "test", history, session, "token", false, "bb-token", SELECTED_DATA_CONTEXT);
             Thread.sleep(100);
 
             assertThat(emitter).isNotNull();
@@ -299,10 +311,10 @@ class ChatStreamingServiceTest {
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
             when(cancellationService.createCancelFlag(session)).thenReturn(cancelFlag);
-            when(orchestration.chat(any(), anyString(), any(), any(), any()))
+            when(orchestration.chat(any(), anyString(), any(), any(), any(), any()))
                     .thenThrow(new RuntimeException("Orchestration failed"));
 
-            streamingService.streamChat("test", history, session, "token", true, "bb-token");
+            streamingService.streamChat("test", history, session, "token", true, "bb-token", SELECTED_DATA_CONTEXT);
             Thread.sleep(100);
 
             verify(cancellationService).clearCancelFlag(session);

@@ -2,6 +2,7 @@ package com.tschanz.aigeny.chat;
 
 import com.tschanz.aigeny.config.AigenyProperties;
 import com.tschanz.aigeny.config.ConfigurationValidator;
+import com.tschanz.aigeny.database.DataContextSelectionService;
 import com.tschanz.aigeny.database.mcp_client.OracleMcpConnection;
 import com.tschanz.aigeny.export.SessionExportService;
 import com.tschanz.aigeny.jira.SessionJiraWriteService;
@@ -45,6 +46,9 @@ class StatusAggregatorServiceTest {
     private OracleMcpConnection dbMcpConnection;
 
     @Mock
+    private DataContextSelectionService dataContextSelectionService;
+
+    @Mock
     private HttpSession session;
 
     private StatusAggregatorService statusAggregator;
@@ -56,7 +60,9 @@ class StatusAggregatorServiceTest {
         jiraConfig = new AigenyProperties.Jira();
         bitbucketConfig = new AigenyProperties.Bitbucket();
 
-        lenient().when(dbMcpConnection.checkListTables())
+        lenient().when(dataContextSelectionService.getSelectedContext(session)).thenReturn("pflege");
+        lenient().when(dataContextSelectionService.getSelectedStage(session)).thenReturn("INTE");
+        lenient().when(dbMcpConnection.checkListTables(any(), any()))
                 .thenReturn(new OracleMcpConnection.McpListTablesStatus(false, false, null, null));
 
         statusAggregator = new StatusAggregatorService(
@@ -69,7 +75,8 @@ class StatusAggregatorServiceTest {
             tokenService,
             jiraWriteService,
             exportService,
-            dbMcpConnection
+            dbMcpConnection,
+            dataContextSelectionService
         );
     }
 
@@ -160,7 +167,7 @@ class StatusAggregatorServiceTest {
             verify(tokenService).hasBitbucketToken(session);
             verify(jiraWriteService).isJiraWriteModeEnabled(session);
             verify(exportService).hasQueryResult(session);
-            verify(dbMcpConnection).checkListTables();
+            verify(dbMcpConnection).checkListTables(any(), any());
             verify(configValidator, atLeastOnce()).isDbConfigured(dbConfig, dbConfig);
         }
 
@@ -368,7 +375,7 @@ class StatusAggregatorServiceTest {
             // Given
             llmConfig.setProvider("test");
             llmConfig.setModel("test");
-            when(dbMcpConnection.checkListTables())
+            when(dbMcpConnection.checkListTables(any(), any()))
                     .thenReturn(new OracleMcpConnection.McpListTablesStatus(true, true, 99, null));
 
             // When

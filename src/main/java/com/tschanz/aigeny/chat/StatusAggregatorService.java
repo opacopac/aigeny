@@ -5,6 +5,7 @@ import com.tschanz.aigeny.export.SessionExportService;
 
 import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
 import com.tschanz.aigeny.config.ConfigurationValidator;
+import com.tschanz.aigeny.database.DataContextSelectionService;
 import com.tschanz.aigeny.database.DbMcpConfiguration;
 import com.tschanz.aigeny.database.DbServerConfiguration;
 import com.tschanz.aigeny.database.DbServerStage;
@@ -51,6 +52,7 @@ public class StatusAggregatorService {
     private final SessionJiraWriteService jiraWriteService;
     private final SessionExportService exportService;
     private final OracleMcpConnection dbMcpConnection;
+    private final DataContextSelectionService dataContextSelectionService;
 
     public StatusAggregatorService(LlmConfiguration llmConfig,
                                    DbServerConfiguration dbServerConfig,
@@ -61,7 +63,8 @@ public class StatusAggregatorService {
                                    TokenService tokenService,
                                    SessionJiraWriteService jiraWriteService,
                                    SessionExportService exportService,
-                                   OracleMcpConnection dbMcpConnection) {
+                                   OracleMcpConnection dbMcpConnection,
+                                   DataContextSelectionService dataContextSelectionService) {
         this.llmConfig = llmConfig;
         this.dbServerConfig = dbServerConfig;
         this.dbMcpConfig = dbMcpConfig;
@@ -72,6 +75,7 @@ public class StatusAggregatorService {
         this.jiraWriteService = jiraWriteService;
         this.exportService = exportService;
         this.dbMcpConnection = dbMcpConnection;
+        this.dataContextSelectionService = dataContextSelectionService;
     }
 
     /**
@@ -90,13 +94,15 @@ public class StatusAggregatorService {
 
         // Database configuration
         status.put(KEY_DB_CONFIGURED, configValidator.isDbConfigured(dbServerConfig, dbMcpConfig));
-        status.put(KEY_DB_USERNAME, currentDbUsername());
-        status.put(KEY_DB_STAGE, dbMcpConfig.getDefaultStage());
+        String selectedStage = dataContextSelectionService.getSelectedStage(session);
+        status.put(KEY_DB_USERNAME, currentDbUsername(selectedStage));
+        status.put(KEY_DB_STAGE, selectedStage);
 
         // DB MCP server status - checked live via the "list_tables" MCP tool call.
         // Named "dbMcp*" (not just "mcp*") since later on there will also be MCP
         // servers for Jira and Bitbucket - this one is specifically the DB server.
-        OracleMcpConnection.McpListTablesStatus dbMcpStatus = dbMcpConnection.checkListTables();
+        OracleMcpConnection.McpListTablesStatus dbMcpStatus = dbMcpConnection.checkListTables(
+                dataContextSelectionService.getSelectedContext(session), selectedStage);
         status.put(KEY_DB_MCP_CONNECTED, dbMcpStatus.connected());
         status.put(KEY_DB_MCP_LIST_TABLES_AVAILABLE, dbMcpStatus.available());
         status.put(KEY_DB_MCP_TABLE_COUNT, dbMcpStatus.tableCount());
@@ -118,12 +124,13 @@ public class StatusAggregatorService {
     }
 
     /**
-     * Returns the username of the default DB stage (see {@link DbMcpConfiguration#getDefaultStage()}),
-     * or {@code null} if that stage isn't configured.
+     * Returns the username of the given DB stage (typically the currently selected stage -
+     * see {@link DataContextSelectionService#getSelectedStage(HttpSession)}), or {@code null}
+     * if that stage isn't configured.
      */
-    private String currentDbUsername() {
-        DbServerStage stage = dbServerConfig.getStage(dbMcpConfig.getDefaultStage());
-        return stage != null ? stage.getUsername() : null;
+    private String currentDbUsername(String stage) {
+        DbServerStage dbStage = dbServerConfig.getStage(stage);
+        return dbStage != null ? dbStage.getUsername() : null;
     }
 
     /**

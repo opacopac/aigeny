@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
 import com.tschanz.aigeny.jira.JiraConfiguration;
 import com.tschanz.aigeny.config.ConfigurationValidator;
+import com.tschanz.aigeny.database.DataContextSelectionService;
 import com.tschanz.aigeny.database.DbMcpConfiguration;
 import com.tschanz.aigeny.database.DbServerConfiguration;
 import com.tschanz.aigeny.bitbucket.ReadBitbucketFileTool;
@@ -47,6 +48,7 @@ class ToolGetCallDescriptionTest {
     @Mock private BitbucketConfiguration bitbucketConfig;
     @Mock private DbServerConfiguration dbServerConfig;
     @Mock private DbMcpConfiguration dbMcpConfig;
+    @Mock private DataContextSelectionService dataContextSelectionService;
     @Mock private ConfigurationValidator configValidator;
     @Mock private JiraHttpClient jiraHttpClient;
     @Mock private ConfirmationService confirmationService;
@@ -67,7 +69,7 @@ class ToolGetCallDescriptionTest {
 
         @BeforeEach void init() {
             OracleMcpConnection connection = new OracleMcpConnection(dbServerConfig, dbMcpConfig, configValidator, objectMapper);
-            tool = new GenericOracleMcpTool("run_query", connection, objectMapper, dbMcpConfig);
+            tool = new GenericOracleMcpTool("run_query", connection, objectMapper, dataContextSelectionService);
         }
 
         @Test

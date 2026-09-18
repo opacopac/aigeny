@@ -10,11 +10,12 @@ import com.tschanz.aigeny.Messages;
 import com.tschanz.aigeny.llm.model.Message;
 import com.tschanz.aigeny.chat.ChatResult;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
+import com.tschanz.aigeny.orchestration.SelectedDataContext;
+import com.tschanz.aigeny.database.DataContextSelectionService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.HashMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,19 +40,22 @@ public class ChatStreamingService {
     private final ConfirmationOrchestrator confirmationOrchestrator;
     private final ExecutionContextManager contextManager;
     private final SseStreamManager sseManager;
+    private final DataContextSelectionService dataContextSelectionService;
 
     public ChatStreamingService(OrchestrationService orchestration,
                                 SessionCancellationService cancellationService,
                                 SessionExportService exportService,
                                 ConfirmationOrchestrator confirmationOrchestrator,
                                 ExecutionContextManager contextManager,
-                                SseStreamManager sseManager) {
+                                SseStreamManager sseManager,
+                                DataContextSelectionService dataContextSelectionService) {
         this.orchestration            = orchestration;
         this.cancellationService      = cancellationService;
         this.exportService            = exportService;
         this.confirmationOrchestrator = confirmationOrchestrator;
         this.contextManager           = contextManager;
         this.sseManager               = sseManager;
+        this.dataContextSelectionService = dataContextSelectionService;
     }
 
     /**
@@ -62,7 +66,8 @@ public class ChatStreamingService {
                                   HttpSession session,
                                   String jiraToken,
                                   boolean jiraWriteEnabled,
-                                  String bitbucketToken) {
+                                  String bitbucketToken,
+                                  SelectedDataContext selectedDataContext) {
 
         SseEmitter emitter = sseManager.createEmitter();
 
@@ -77,7 +82,7 @@ public class ChatStreamingService {
         emitter.onError(t -> cancelFlag.set(true));
 
         CompletableFuture.runAsync(() -> processChatStream(
-                emitter, message, history, session, jiraToken, jiraWriteEnabled, bitbucketToken, cancelFlag
+                emitter, message, history, session, jiraToken, jiraWriteEnabled, bitbucketToken, cancelFlag, selectedDataContext
         ));
 
         return emitter;
@@ -93,7 +98,8 @@ public class ChatStreamingService {
                                     String jiraToken,
                                     boolean jiraWriteEnabled,
                                     String bitbucketToken,
-                                    AtomicBoolean cancelFlag) {
+                                    AtomicBoolean cancelFlag,
+                                    SelectedDataContext selectedDataContext) {
 
         // Setup all ThreadLocal contexts via ExecutionContextManager
         Map<String, String> tokens = new HashMap<>();
@@ -106,9 +112,12 @@ public class ChatStreamingService {
                         emitter, session, jiraToken, jiraWriteEnabled, humanDescription, action),
                 writeToolInfos -> confirmationOrchestrator.handleBatchConfirmation(emitter, session, writeToolInfos)
         );
+        dataContextSelectionService.activate(
+                selectedDataContext != null ? selectedDataContext.context() : null,
+                selectedDataContext != null ? selectedDataContext.stage() : null);
 
         try {
-            runOrchestrationAndComplete(emitter, message, history, session, cancelFlag);
+            runOrchestrationAndComplete(emitter, message, history, session, cancelFlag, selectedDataContext);
         } finally {
             cleanup(session);
         }
@@ -123,14 +132,16 @@ public class ChatStreamingService {
                                              String message,
                                              List<Message> history,
                                              HttpSession session,
-                                             AtomicBoolean cancelFlag) {
+                                             AtomicBoolean cancelFlag,
+                                             SelectedDataContext selectedDataContext) {
         try {
             ChatResult result = orchestration.chat(
                     history,
                     message,
                     (toolName, description) -> sseManager.sendToolCall(emitter, toolName, description),
                     (intermediateText) -> sseManager.sendIntermediateMessage(emitter, intermediateText),
-                    cancelFlag::get
+                    cancelFlag::get,
+                    selectedDataContext
             );
 
             if (result.hasExportData()) {
@@ -149,5 +160,6 @@ public class ChatStreamingService {
     private void cleanup(HttpSession session) {
         cancellationService.clearCancelFlag(session);
         contextManager.cleanupAllContexts();
+        dataContextSelectionService.clear();
     }
 }

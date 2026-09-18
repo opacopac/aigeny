@@ -30,9 +30,10 @@ public class OrchestrationService {
     private static final int MAX_EMPTY_RESPONSE_RETRIES = 2;
 
     // ── Message keys ─────────────────────────────────────────────────────────
-    private static final String MSG_PERSONA_PRIMER    = "orchestration.persona_primer";
-    private static final String MSG_TOOL_LOOP         = "orchestration.error.tool_loop";
-    private static final String MSG_EMPTY_RESPONSE    = "orchestration.error.empty_response";
+    private static final String MSG_PERSONA_PRIMER         = "orchestration.persona_primer";
+    private static final String MSG_TOOL_LOOP              = "orchestration.error.tool_loop";
+    private static final String MSG_EMPTY_RESPONSE         = "orchestration.error.empty_response";
+    private static final String MSG_DATA_CONTEXT_SELECTED  = "orchestration.data_context_selected";
 
     private final LlmClient llmClient;
     private final ToolExecutor toolExecutor;
@@ -56,13 +57,13 @@ public class OrchestrationService {
 
     /** Convenience overload without tool-call listener. */
     public ChatResult chat(List<Message> history, String userMessage) throws Exception {
-        return chat(history, userMessage, null, null, null);
+        return chat(history, userMessage, null, null, null, null);
     }
 
     /** Convenience overload with tool-call listener but no intermediate-message listener. */
     public ChatResult chat(List<Message> history, String userMessage,
                            BiConsumer<String, String> onToolCall) throws Exception {
-        return chat(history, userMessage, onToolCall, null, null);
+        return chat(history, userMessage, onToolCall, null, null, null);
     }
 
     /**
@@ -75,11 +76,11 @@ public class OrchestrationService {
     public ChatResult chat(List<Message> history, String userMessage,
                            BiConsumer<String, String> onToolCall,
                            java.util.function.Consumer<String> onIntermediateMessage) throws Exception {
-        return chat(history, userMessage, onToolCall, onIntermediateMessage, null);
+        return chat(history, userMessage, onToolCall, onIntermediateMessage, null, null);
     }
 
     /**
-     * Full overload with cancellation support.
+     * Overload with cancellation support but no data-context selection info.
      * {@code isCancelled} is polled at the start of each loop iteration; when it returns {@code true}
      * an {@link InterruptedException} is thrown to abort the loop.
      */
@@ -87,6 +88,24 @@ public class OrchestrationService {
                            BiConsumer<String, String> onToolCall,
                            java.util.function.Consumer<String> onIntermediateMessage,
                            java.util.function.Supplier<Boolean> isCancelled) throws Exception {
+        return chat(history, userMessage, onToolCall, onIntermediateMessage, isCancelled, null);
+    }
+
+    /**
+     * Full overload with cancellation support and an optional {@link SelectedDataContext}.
+     * {@code isCancelled} is polled at the start of each loop iteration; when it returns {@code true}
+     * an {@link InterruptedException} is thrown to abort the loop.
+     * <p>
+     * When {@code selectedDataContext} is non-{@code null} and this is the first message of a
+     * new conversation, an informational message naming the currently selected data context
+     * and environment stage is injected into the history (right after the persona primer),
+     * so the LLM is aware of it from the start.
+     */
+    public ChatResult chat(List<Message> history, String userMessage,
+                           BiConsumer<String, String> onToolCall,
+                           java.util.function.Consumer<String> onIntermediateMessage,
+                           java.util.function.Supplier<Boolean> isCancelled,
+                           SelectedDataContext selectedDataContext) throws Exception {
         List<ToolDefinition> toolDefs = toolExecutor.getTools().stream()
                 .map(Tool::getDefinition)
                 .toList();
@@ -95,6 +114,13 @@ public class OrchestrationService {
         if (history.isEmpty()) {
             history.add(Message.assistant(PERSONA_PRIMER));
             log.debug("Injected persona primer as first assistant message");
+
+            if (selectedDataContext != null) {
+                history.add(Message.assistant(Messages.get(MSG_DATA_CONTEXT_SELECTED,
+                        selectedDataContext.context(), selectedDataContext.stage())));
+                log.debug("Injected data-context selection message (context='{}', stage='{}')",
+                        selectedDataContext.context(), selectedDataContext.stage());
+            }
         }
 
         String now = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("EEEE, dd.MM.yyyy HH:mm:ss z"));

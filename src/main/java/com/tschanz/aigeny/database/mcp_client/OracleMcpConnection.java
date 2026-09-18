@@ -271,7 +271,7 @@ public class OracleMcpConnection {
     private static final String LIST_TABLES_TOOL = "list_tables";
 
     /**
-     * Result of a {@link #checkListTables()} probe.
+     * Result of a {@link #checkListTables(String, String)} probe.
      *
      * @param connected  true if the MCP client is connected to the server
      * @param available  true if the server actually exposes a {@code list_tables} tool
@@ -286,17 +286,19 @@ public class OracleMcpConnection {
      * tool and counting the rows it returns. Used to power the sidebar "MCP" status and table
      * count instead of a direct JDBC connection to the DB.
      *
-     * <p>Explicitly passes the configured {@code context}/{@code stage} arguments (see
-     * {@link DbMcpConfiguration#getDefaultContext()}/{@link DbMcpConfiguration#getDefaultStage()}),
-     * even though the embedded server falls back to those same defaults when they're omitted
-     * (see {@code ContextStageSupport}) - both are declared {@code required} in the tool's JSON
+     * <p>Explicitly passes the given {@code context}/{@code stage} arguments (the caller
+     * resolves these via {@code DataContextSelectionService}, so the status shown always
+     * matches the context/stage actually used by real tool calls - today effectively fixed
+     * config defaults, but ready for a future per-session selection), even though the
+     * embedded server falls back to its own configured defaults when they're omitted (see
+     * {@code ContextStageSupport}) - both are declared {@code required} in the tool's JSON
      * schema (see {@link com.tschanz.aigeny.database.mcp_server.ListTablesHandler}), and a
      * strictly-validating external/remote MCP server (see
      * {@link DbMcpConfiguration#getMcpServerUrl()}) may reject the call with a "Missing required
      * argument 'context'" style error if they're missing on the wire, unlike our lenient
      * embedded implementation.
      */
-    public McpListTablesStatus checkListTables() {
+    public McpListTablesStatus checkListTables(String context, String stage) {
         if (!isAvailable()) {
             return new McpListTablesStatus(false, false, null, "MCP client is not connected");
         }
@@ -304,7 +306,7 @@ public class OracleMcpConnection {
             return new McpListTablesStatus(true, false, null, null);
         }
         try {
-            McpSchema.CallToolResult result = callTool(LIST_TABLES_TOOL, listTablesArguments());
+            McpSchema.CallToolResult result = callTool(LIST_TABLES_TOOL, listTablesArguments(context, stage));
             if (Boolean.TRUE.equals(result.isError())) {
                 return new McpListTablesStatus(true, true, null, firstText(result.content()));
             }
@@ -316,18 +318,18 @@ public class OracleMcpConnection {
     }
 
     /**
-     * Builds the arguments for the {@link #checkListTables()} probe call: always includes the
-     * configured default {@code context}/{@code stage} (when set), since both are declared
+     * Builds the arguments for the {@link #checkListTables(String, String)} probe call: always
+     * includes the given {@code context}/{@code stage} (when set), since both are declared
      * {@code required} in the tool's JSON schema and a strictly-validating external/remote MCP
      * server rejects the call with a "Missing required argument 'context'" style error if they're
      * missing on the wire - even though our lenient embedded implementation would fall back to
      * its own defaults if they were omitted. Only actually blank/unconfigured values are left out,
      * since there's nothing meaningful to send for them.
      */
-    private Map<String, Object> listTablesArguments() {
+    private Map<String, Object> listTablesArguments(String context, String stage) {
         Map<String, Object> arguments = new LinkedHashMap<>();
-        putIfNotBlank(arguments, "context", dbMcpConfig.getDefaultContext());
-        putIfNotBlank(arguments, "stage", dbMcpConfig.getDefaultStage());
+        putIfNotBlank(arguments, "context", context);
+        putIfNotBlank(arguments, "stage", stage);
         return arguments;
     }
 

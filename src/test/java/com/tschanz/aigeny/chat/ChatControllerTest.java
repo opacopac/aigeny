@@ -1,15 +1,15 @@
 package com.tschanz.aigeny.chat;
-import com.tschanz.aigeny.jira.JiraContextProvider;
-import com.tschanz.aigeny.bitbucket.BitbucketContextProvider;
-import com.tschanz.aigeny.llm.github.TokenService;
-import com.tschanz.aigeny.export.SessionExportService;
-import com.tschanz.aigeny.session.SessionCancellationService;
-import com.tschanz.aigeny.jira.SessionJiraWriteService;
-import com.tschanz.aigeny.confirmation.ExecutionContextManager;
 
+import com.tschanz.aigeny.bitbucket.BitbucketContextProvider;
+import com.tschanz.aigeny.confirmation.ExecutionContextManager;
+import com.tschanz.aigeny.database.DataContextSelectionService;
+import com.tschanz.aigeny.export.SessionExportService;
+import com.tschanz.aigeny.jira.JiraContextProvider;
+import com.tschanz.aigeny.jira.SessionJiraWriteService;
+import com.tschanz.aigeny.llm.github.TokenService;
 import com.tschanz.aigeny.llm.model.Message;
-import com.tschanz.aigeny.chat.ChatResult;
 import com.tschanz.aigeny.orchestration.OrchestrationService;
+import com.tschanz.aigeny.session.SessionCancellationService;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -45,25 +45,39 @@ import static org.mockito.Mockito.*;
 @DisplayName("ChatController")
 class ChatControllerTest {
 
-    @Mock private OrchestrationService orchestration;
-    @Mock private TokenService tokenService;
-    @Mock private SessionHistoryService historyService;
-    @Mock private SessionExportService exportService;
-    @Mock private SessionCancellationService cancellationService;
-    @Mock private SessionJiraWriteService jiraWriteService;
-    @Mock private StatusAggregatorService statusAggregator;
-    @Mock private ChatStreamingService streamingService;
-    @Mock private ExecutionContextManager contextManager;
-    @Mock private HttpSession session;
+    @Mock
+    private OrchestrationService orchestration;
+    @Mock
+    private TokenService tokenService;
+    @Mock
+    private SessionHistoryService historyService;
+    @Mock
+    private SessionExportService exportService;
+    @Mock
+    private SessionCancellationService cancellationService;
+    @Mock
+    private SessionJiraWriteService jiraWriteService;
+    @Mock
+    private StatusAggregatorService statusAggregator;
+    @Mock
+    private ChatStreamingService streamingService;
+    @Mock
+    private ExecutionContextManager contextManager;
+    @Mock
+    private HttpSession session;
+    @Mock
+    private DataContextSelectionService dataContextSelectionService;
 
     private ChatController controller;
 
     @BeforeEach
     void setUp() {
+        lenient().when(dataContextSelectionService.getSelectedContext(session)).thenReturn("pflege");
+        lenient().when(dataContextSelectionService.getSelectedStage(session)).thenReturn("INTE");
         controller = new ChatController(
                 orchestration, tokenService,
                 historyService, exportService, cancellationService, jiraWriteService,
-                statusAggregator, streamingService, contextManager);
+                statusAggregator, streamingService, contextManager, dataContextSelectionService);
     }
 
     // ── POST /api/chat (non-streaming) ────────────────────────────────────────
@@ -81,7 +95,7 @@ class ChatControllerTest {
             lenient().when(tokenService.getEffectiveJiraToken(session)).thenReturn("jira-token");
             lenient().when(jiraWriteService.isJiraWriteModeEnabled(session)).thenReturn(false);
             lenient().when(tokenService.getEffectiveBitbucketToken(session)).thenReturn("bb-token");
-            lenient().when(orchestration.chat(any(), anyString()))
+            lenient().when(orchestration.chat(any(), anyString(), any(), any(), any(), any()))
                     .thenReturn(new ChatResult("response text", null));
         }
 
@@ -92,7 +106,7 @@ class ChatControllerTest {
 
             verify(contextManager).setupContexts(
                     argThat(tokens -> "jira-token".equals(tokens.get(JiraContextProvider.KEY))
-                                   && "bb-token".equals(tokens.get(BitbucketContextProvider.KEY))),
+                            && "bb-token".equals(tokens.get(BitbucketContextProvider.KEY))),
                     eq(false),
                     isNull(),   // no confirmation handler in non-streaming path
                     isNull()    // no batch handler in non-streaming path
@@ -110,7 +124,7 @@ class ChatControllerTest {
         @Test
         @DisplayName("calls cleanupAllContexts even when orchestration throws (D-3)")
         void callsCleanupAfterException() throws Exception {
-            when(orchestration.chat(any(), anyString()))
+            when(orchestration.chat(any(), anyString(), any(), any(), any(), any()))
                     .thenThrow(new RuntimeException("LLM failure"));
 
             controller.chat(Map.of("message", "hello"), session).get();
@@ -153,7 +167,7 @@ class ChatControllerTest {
         @Test
         @DisplayName("returns 200 error-response (not exception) when orchestration throws")
         void returnsErrorResponseOnException() throws Exception {
-            when(orchestration.chat(any(), anyString()))
+            when(orchestration.chat(any(), anyString(), any(), any(), any(), any()))
                     .thenThrow(new RuntimeException("oops"));
 
             ResponseEntity<Map<String, Object>> response =
@@ -182,7 +196,7 @@ class ChatControllerTest {
             when(tokenService.getEffectiveBitbucketToken(session)).thenReturn("bb-tok");
             when(streamingService.streamChat(
                     eq("hi"), same(history), same(session),
-                    eq("jira-tok"), eq(true), eq("bb-tok")))
+                    eq("jira-tok"), eq(true), eq("bb-tok"), any()))
                     .thenReturn(emitter);
 
             SseEmitter result = controller.chatStream(Map.of("message", "hi"), session);
