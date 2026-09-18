@@ -3,7 +3,9 @@ package com.tschanz.aigeny.database.mcp_client;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.config.ConfigurationValidator;
-import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.DbMcpConfiguration;
+import com.tschanz.aigeny.database.DbServerConfiguration;
+import com.tschanz.aigeny.database.DbServerStage;
 import com.tschanz.aigeny.database.mcp_server.OracleMcpServerLauncher;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -28,12 +30,12 @@ import java.util.Optional;
 /**
  * Manages the lifecycle of the {@link McpSyncClient} connected to the Oracle DB MCP server.
  *
- * <p>By default (no {@link DbConfiguration#getMcpServerUrl()} configured) this launches
+ * <p>By default (no {@link DbMcpConfiguration#getMcpServerUrl()} configured) this launches
  * {@link OracleMcpServerLauncher} as a local child process and communicates with it over
  * the MCP stdio transport, exactly like a real external MCP server would be used. When a
  * {@code mcp-server-url} is configured instead, the local subprocess is skipped entirely and
  * the client connects to that URL over the Streamable HTTP MCP transport (optionally sending
- * {@link DbConfiguration#getMcpServerHeaders()} with every request, e.g. an auth header/API
+ * {@link DbMcpConfiguration#getMcpServerHeaders()} with every request, e.g. an auth header/API
  * key) - so switching from the embedded implementation to an independently deployed/remote
  * MCP server is a pure configuration change (see {@code aigeny.db.mcp-server-url} in
  * {@code application.yml}).
@@ -48,16 +50,18 @@ public class OracleMcpConnection {
 
     private static final Logger log = LoggerFactory.getLogger(OracleMcpConnection.class);
 
-    private final DbConfiguration dbConfig;
+    private final DbServerConfiguration dbServerConfig;
+    private final DbMcpConfiguration dbMcpConfig;
     private final ConfigurationValidator configValidator;
     private final ObjectMapper objectMapper;
 
     private volatile McpSyncClient client;
     private volatile Map<String, McpSchema.Tool> discoveredTools = Map.of();
 
-    public OracleMcpConnection(DbConfiguration dbConfig, ConfigurationValidator configValidator,
-                                ObjectMapper objectMapper) {
-        this.dbConfig = dbConfig;
+    public OracleMcpConnection(DbServerConfiguration dbServerConfig, DbMcpConfiguration dbMcpConfig,
+                                ConfigurationValidator configValidator, ObjectMapper objectMapper) {
+        this.dbServerConfig = dbServerConfig;
+        this.dbMcpConfig = dbMcpConfig;
         this.configValidator = configValidator;
         this.objectMapper = objectMapper;
     }
@@ -79,7 +83,7 @@ public class OracleMcpConnection {
             newClient.initialize();
             this.client = newClient;
             if (remote) {
-                log.info("Oracle DB MCP client connected to remote server at {}.", dbConfig.getMcpServerUrl());
+                log.info("Oracle DB MCP client connected to remote server at {}.", dbMcpConfig.getMcpServerUrl());
             } else {
                 log.info("Oracle DB MCP server started (stdio subprocess) and initialized.");
             }
@@ -87,16 +91,16 @@ public class OracleMcpConnection {
             discoverTools(newClient);
         } catch (Exception e) {
             log.error("Failed to {} Oracle DB MCP {}: {}", remote ? "connect to" : "start",
-                    remote ? "server at " + dbConfig.getMcpServerUrl() : "server", e.getMessage(), e);
+                    remote ? "server at " + dbMcpConfig.getMcpServerUrl() : "server", e.getMessage(), e);
         }
     }
 
     /**
-     * True when a {@link DbConfiguration#getMcpServerUrl()} is configured, i.e. tool calls
+     * True when a {@link DbMcpConfiguration#getMcpServerUrl()} is configured, i.e. tool calls
      * should go to that remote MCP server instead of a locally spawned subprocess.
      */
     boolean isRemoteConfigured() {
-        String url = dbConfig.getMcpServerUrl();
+        String url = dbMcpConfig.getMcpServerUrl();
         return url != null && !url.isBlank();
     }
 
@@ -107,13 +111,13 @@ public class OracleMcpConnection {
      * (not {@code private}) so it can be unit-tested directly without a real connection attempt.
      */
     boolean shouldSkipStartup() {
-        return !isRemoteConfigured() && !configValidator.isDbConfigured(dbConfig);
+        return !isRemoteConfigured() && !configValidator.isDbConfigured(dbServerConfig, dbMcpConfig);
     }
 
     /**
      * Builds the {@link McpClientTransport} to connect with: the Streamable HTTP MCP
-     * transport pointed at {@link DbConfiguration#getMcpServerUrl()} when configured
-     * (with any {@link DbConfiguration#getMcpServerHeaders()} attached to every request,
+     * transport pointed at {@link DbMcpConfiguration#getMcpServerUrl()} when configured
+     * (with any {@link DbMcpConfiguration#getMcpServerHeaders()} attached to every request,
      * e.g. an auth header/API key), otherwise the stdio transport to a locally spawned
      * {@link OracleMcpServerLauncher} subprocess. Package-private (not {@code private})
      * so it can be unit-tested directly.
@@ -121,8 +125,8 @@ public class OracleMcpConnection {
     McpClientTransport buildTransport() {
         if (isRemoteConfigured()) {
             HttpClientStreamableHttpTransport.Builder builder =
-                    HttpClientStreamableHttpTransport.builder(dbConfig.getMcpServerUrl());
-            Map<String, String> headers = dbConfig.getMcpServerHeaders();
+                    HttpClientStreamableHttpTransport.builder(dbMcpConfig.getMcpServerUrl());
+            Map<String, String> headers = dbMcpConfig.getMcpServerHeaders();
             if (headers != null && !headers.isEmpty()) {
                 builder.customizeRequest(req -> headers.forEach(req::header));
             }
@@ -133,25 +137,25 @@ public class OracleMcpConnection {
         ServerParameters params = ServerParameters.builder(javaBin)
                 .args(buildJavaArgs())
                 .addEnvVar("AIGENY_DB_STAGES_JSON", buildStagesJson())
-                .addEnvVar("AIGENY_DB_DEFAULT_CONTEXT", nullToEmpty(dbConfig.getDefaultContext()))
-                .addEnvVar("AIGENY_DB_DEFAULT_STAGE", nullToEmpty(dbConfig.getDefaultStage()))
+                .addEnvVar("AIGENY_DB_DEFAULT_CONTEXT", nullToEmpty(dbMcpConfig.getDefaultContext()))
+                .addEnvVar("AIGENY_DB_DEFAULT_STAGE", nullToEmpty(dbMcpConfig.getDefaultStage()))
                 .build();
         return new StdioClientTransport(params, new JacksonMcpJsonMapper(objectMapper));
     }
 
     /**
-     * Serializes all configured {@link DbConfiguration.Stage}s (url/username/password/effective
+     * Serializes all configured {@link DbServerStage}s (url/username/password/effective
      * schema, keyed by upper-cased stage name) into a single JSON blob, passed to the
      * {@link OracleMcpServerLauncher} subprocess via the {@code AIGENY_DB_STAGES_JSON} env var -
      * this keeps the set of supported stages fully open-ended (not hardcoded to INTE/PROD) on
      * both sides. Package-private (not {@code private}) so it can be unit-tested directly.
      */
     String buildStagesJson() {
-        Map<String, ? extends DbConfiguration.Stage> stages = dbConfig.getStages();
+        Map<String, ? extends DbServerStage> stages = dbServerConfig.getStages();
         Map<String, Object> payload = new LinkedHashMap<>();
         if (stages != null) {
-            for (Map.Entry<String, ? extends DbConfiguration.Stage> entry : stages.entrySet()) {
-                DbConfiguration.Stage stage = entry.getValue();
+            for (Map.Entry<String, ? extends DbServerStage> entry : stages.entrySet()) {
+                DbServerStage stage = entry.getValue();
                 Map<String, String> stagePayload = new LinkedHashMap<>();
                 stagePayload.put("url", nullToEmpty(stage.getUrl()));
                 stagePayload.put("username", nullToEmpty(stage.getUsername()));
@@ -283,12 +287,12 @@ public class OracleMcpConnection {
      * count instead of a direct JDBC connection to the DB.
      *
      * <p>Explicitly passes the configured {@code context}/{@code stage} arguments (see
-     * {@link DbConfiguration#getDefaultContext()}/{@link DbConfiguration#getDefaultStage()}),
+     * {@link DbMcpConfiguration#getDefaultContext()}/{@link DbMcpConfiguration#getDefaultStage()}),
      * even though the embedded server falls back to those same defaults when they're omitted
      * (see {@code ContextStageSupport}) - both are declared {@code required} in the tool's JSON
      * schema (see {@link com.tschanz.aigeny.database.mcp_server.ListTablesHandler}), and a
      * strictly-validating external/remote MCP server (see
-     * {@link DbConfiguration#getMcpServerUrl()}) may reject the call with a "Missing required
+     * {@link DbMcpConfiguration#getMcpServerUrl()}) may reject the call with a "Missing required
      * argument 'context'" style error if they're missing on the wire, unlike our lenient
      * embedded implementation.
      */
@@ -322,8 +326,8 @@ public class OracleMcpConnection {
      */
     private Map<String, Object> listTablesArguments() {
         Map<String, Object> arguments = new LinkedHashMap<>();
-        putIfNotBlank(arguments, "context", dbConfig.getDefaultContext());
-        putIfNotBlank(arguments, "stage", dbConfig.getDefaultStage());
+        putIfNotBlank(arguments, "context", dbMcpConfig.getDefaultContext());
+        putIfNotBlank(arguments, "stage", dbMcpConfig.getDefaultStage());
         return arguments;
     }
 

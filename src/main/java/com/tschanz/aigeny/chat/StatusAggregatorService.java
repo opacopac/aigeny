@@ -5,7 +5,9 @@ import com.tschanz.aigeny.export.SessionExportService;
 
 import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
 import com.tschanz.aigeny.config.ConfigurationValidator;
-import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.DbMcpConfiguration;
+import com.tschanz.aigeny.database.DbServerConfiguration;
+import com.tschanz.aigeny.database.DbServerStage;
 import com.tschanz.aigeny.database.mcp_client.OracleMcpConnection;
 import com.tschanz.aigeny.jira.JiraConfiguration;
 import com.tschanz.aigeny.llm.LlmConfiguration;
@@ -40,7 +42,8 @@ public class StatusAggregatorService {
     private static final String KEY_HAS_EXPORT                   = "hasExport";
 
     private final LlmConfiguration llmConfig;
-    private final DbConfiguration dbConfig;
+    private final DbServerConfiguration dbServerConfig;
+    private final DbMcpConfiguration dbMcpConfig;
     private final JiraConfiguration jiraConfig;
     private final BitbucketConfiguration bitbucketConfig;
     private final ConfigurationValidator configValidator;
@@ -50,7 +53,8 @@ public class StatusAggregatorService {
     private final OracleMcpConnection dbMcpConnection;
 
     public StatusAggregatorService(LlmConfiguration llmConfig,
-                                   DbConfiguration dbConfig,
+                                   DbServerConfiguration dbServerConfig,
+                                   DbMcpConfiguration dbMcpConfig,
                                    JiraConfiguration jiraConfig,
                                    BitbucketConfiguration bitbucketConfig,
                                    ConfigurationValidator configValidator,
@@ -59,7 +63,8 @@ public class StatusAggregatorService {
                                    SessionExportService exportService,
                                    OracleMcpConnection dbMcpConnection) {
         this.llmConfig = llmConfig;
-        this.dbConfig = dbConfig;
+        this.dbServerConfig = dbServerConfig;
+        this.dbMcpConfig = dbMcpConfig;
         this.jiraConfig = jiraConfig;
         this.bitbucketConfig = bitbucketConfig;
         this.configValidator = configValidator;
@@ -84,9 +89,9 @@ public class StatusAggregatorService {
         status.put(KEY_LLM_MODEL, llmConfig.getModel());
 
         // Database configuration
-        status.put(KEY_DB_CONFIGURED, configValidator.isDbConfigured(dbConfig));
+        status.put(KEY_DB_CONFIGURED, configValidator.isDbConfigured(dbServerConfig, dbMcpConfig));
         status.put(KEY_DB_USERNAME, currentDbUsername());
-        status.put(KEY_DB_STAGE, dbConfig.getDefaultStage());
+        status.put(KEY_DB_STAGE, dbMcpConfig.getDefaultStage());
 
         // DB MCP server status - checked live via the "list_tables" MCP tool call.
         // Named "dbMcp*" (not just "mcp*") since later on there will also be MCP
@@ -113,11 +118,11 @@ public class StatusAggregatorService {
     }
 
     /**
-     * Returns the username of the default DB stage (see {@link DbConfiguration#getDefaultStage()}),
+     * Returns the username of the default DB stage (see {@link DbMcpConfiguration#getDefaultStage()}),
      * or {@code null} if that stage isn't configured.
      */
     private String currentDbUsername() {
-        DbConfiguration.Stage stage = dbConfig.getStage(dbConfig.getDefaultStage());
+        DbServerStage stage = dbServerConfig.getStage(dbMcpConfig.getDefaultStage());
         return stage != null ? stage.getUsername() : null;
     }
 

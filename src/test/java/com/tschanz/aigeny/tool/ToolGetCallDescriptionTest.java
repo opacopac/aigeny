@@ -12,7 +12,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
 import com.tschanz.aigeny.jira.JiraConfiguration;
 import com.tschanz.aigeny.config.ConfigurationValidator;
-import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.DbMcpConfiguration;
+import com.tschanz.aigeny.database.DbServerConfiguration;
 import com.tschanz.aigeny.bitbucket.ReadBitbucketFileTool;
 import com.tschanz.aigeny.bitbucket.SearchBitbucketTool;
 import com.tschanz.aigeny.database.mcp_client.GenericOracleMcpTool;
@@ -44,7 +45,8 @@ class ToolGetCallDescriptionTest {
 
     @Mock private JiraConfiguration jiraConfig;
     @Mock private BitbucketConfiguration bitbucketConfig;
-    @Mock private DbConfiguration dbConfig;
+    @Mock private DbServerConfiguration dbServerConfig;
+    @Mock private DbMcpConfiguration dbMcpConfig;
     @Mock private ConfigurationValidator configValidator;
     @Mock private JiraHttpClient jiraHttpClient;
     @Mock private ConfirmationService confirmationService;
@@ -64,8 +66,8 @@ class ToolGetCallDescriptionTest {
         private GenericOracleMcpTool tool;
 
         @BeforeEach void init() {
-            OracleMcpConnection connection = new OracleMcpConnection(dbConfig, configValidator, objectMapper);
-            tool = new GenericOracleMcpTool("run_query", connection, objectMapper, dbConfig);
+            OracleMcpConnection connection = new OracleMcpConnection(dbServerConfig, dbMcpConfig, configValidator, objectMapper);
+            tool = new GenericOracleMcpTool("run_query", connection, objectMapper, dbMcpConfig);
         }
 
         @Test

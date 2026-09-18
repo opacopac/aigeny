@@ -2,7 +2,8 @@ package com.tschanz.aigeny.database.mcp_client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.config.ConfigurationValidator;
-import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.DbMcpConfiguration;
+import com.tschanz.aigeny.database.DbServerConfiguration;
 import com.tschanz.aigeny.database.mcp_server.OracleMcpServerLauncher;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
@@ -41,7 +42,8 @@ class OracleMcpConnectionTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Mock private DbConfiguration dbConfig;
+    @Mock private DbServerConfiguration dbServerConfig;
+    @Mock private DbMcpConfiguration dbMcpConfig;
     @Mock private ConfigurationValidator configValidator;
     @Mock private McpSyncClient mcpClient;
 
@@ -49,7 +51,7 @@ class OracleMcpConnectionTest {
 
     @BeforeEach
     void setUp() {
-        connection = new OracleMcpConnection(dbConfig, configValidator, objectMapper);
+        connection = new OracleMcpConnection(dbServerConfig, dbMcpConfig, configValidator, objectMapper);
     }
 
     private void injectMockClient() throws Exception {
@@ -79,8 +81,8 @@ class OracleMcpConnectionTest {
         @Test
         @DisplayName("does not attempt to launch the MCP server when DB is not configured and no remote URL is set")
         void skipsStartupWhenNotConfigured() throws Exception {
-            when(configValidator.isDbConfigured(dbConfig)).thenReturn(false);
-            when(dbConfig.getMcpServerUrl()).thenReturn("");
+            when(configValidator.isDbConfigured(dbServerConfig, dbMcpConfig)).thenReturn(false);
+            when(dbMcpConfig.getMcpServerUrl()).thenReturn("");
 
             invokeStart();
 
@@ -91,7 +93,7 @@ class OracleMcpConnectionTest {
         @Test
         @DisplayName("does not skip startup when a remote MCP server URL is configured, even if local DB fields are blank")
         void doesNotSkipStartupWhenRemoteUrlConfigured() {
-            when(dbConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
+            when(dbMcpConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
             // isDbConfigured() is deliberately never stubbed here (Mockito default: false) -
             // shouldSkipStartup() must still be false because a remote URL is set. Verified
             // directly (no real connection attempt / network call involved).
@@ -101,8 +103,8 @@ class OracleMcpConnectionTest {
         @Test
         @DisplayName("skips startup when neither a remote URL nor local DB fields are configured")
         void skipsStartupWhenNeitherConfigured() {
-            when(dbConfig.getMcpServerUrl()).thenReturn("");
-            when(configValidator.isDbConfigured(dbConfig)).thenReturn(false);
+            when(dbMcpConfig.getMcpServerUrl()).thenReturn("");
+            when(configValidator.isDbConfigured(dbServerConfig, dbMcpConfig)).thenReturn(false);
 
             assertThat(connection.shouldSkipStartup()).isTrue();
         }
@@ -110,8 +112,8 @@ class OracleMcpConnectionTest {
         @Test
         @DisplayName("does not skip startup when local DB fields are configured, even without a remote URL")
         void doesNotSkipStartupWhenLocallyConfigured() {
-            when(dbConfig.getMcpServerUrl()).thenReturn("");
-            when(configValidator.isDbConfigured(dbConfig)).thenReturn(true);
+            when(dbMcpConfig.getMcpServerUrl()).thenReturn("");
+            when(configValidator.isDbConfigured(dbServerConfig, dbMcpConfig)).thenReturn(true);
 
             assertThat(connection.shouldSkipStartup()).isFalse();
         }
@@ -126,21 +128,21 @@ class OracleMcpConnectionTest {
         @Test
         @DisplayName("is false when mcpServerUrl is blank")
         void falseWhenBlank() {
-            when(dbConfig.getMcpServerUrl()).thenReturn("");
+            when(dbMcpConfig.getMcpServerUrl()).thenReturn("");
             assertThat(connection.isRemoteConfigured()).isFalse();
         }
 
         @Test
         @DisplayName("is false when mcpServerUrl is null")
         void falseWhenNull() {
-            when(dbConfig.getMcpServerUrl()).thenReturn(null);
+            when(dbMcpConfig.getMcpServerUrl()).thenReturn(null);
             assertThat(connection.isRemoteConfigured()).isFalse();
         }
 
         @Test
         @DisplayName("is true when mcpServerUrl is set")
         void trueWhenSet() {
-            when(dbConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
+            when(dbMcpConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
             assertThat(connection.isRemoteConfigured()).isTrue();
         }
     }
@@ -154,7 +156,7 @@ class OracleMcpConnectionTest {
         @Test
         @DisplayName("builds a StdioClientTransport (local subprocess) when no remote URL is configured")
         void buildsStdioTransportByDefault() {
-            when(dbConfig.getMcpServerUrl()).thenReturn("");
+            when(dbMcpConfig.getMcpServerUrl()).thenReturn("");
 
             McpClientTransport transport = connection.buildTransport();
 
@@ -164,7 +166,7 @@ class OracleMcpConnectionTest {
         @Test
         @DisplayName("builds an HttpClientStreamableHttpTransport (remote) when a mcpServerUrl is configured")
         void buildsStreamableTransportWhenRemoteConfigured() {
-            when(dbConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
+            when(dbMcpConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
 
             McpClientTransport transport = connection.buildTransport();
 
@@ -174,8 +176,8 @@ class OracleMcpConnectionTest {
         @Test
         @DisplayName("still builds a valid remote transport when extra headers are configured")
         void buildsStreamableTransportWithExtraHeaders() {
-            when(dbConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
-            when(dbConfig.getMcpServerHeaders()).thenReturn(Map.of("X-API-Key", "secret-value"));
+            when(dbMcpConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
+            when(dbMcpConfig.getMcpServerHeaders()).thenReturn(Map.of("X-API-Key", "secret-value"));
 
             McpClientTransport transport = connection.buildTransport();
 
@@ -185,8 +187,8 @@ class OracleMcpConnectionTest {
         @Test
         @DisplayName("still builds a valid remote transport when no headers are configured (null or empty map)")
         void buildsStreamableTransportWithoutHeaders() {
-            when(dbConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
-            when(dbConfig.getMcpServerHeaders()).thenReturn(null);
+            when(dbMcpConfig.getMcpServerUrl()).thenReturn("http://mcp-host:8081");
+            when(dbMcpConfig.getMcpServerHeaders()).thenReturn(null);
 
             McpClientTransport transport = connection.buildTransport();
 
@@ -359,8 +361,8 @@ class OracleMcpConnectionTest {
         void alwaysSendsContextAndStage() throws Exception {
             injectMockClient();
             discoverListTablesTool();
-            when(dbConfig.getDefaultContext()).thenReturn("pflege");
-            when(dbConfig.getDefaultStage()).thenReturn("INTE");
+            when(dbMcpConfig.getDefaultContext()).thenReturn("pflege");
+            when(dbMcpConfig.getDefaultStage()).thenReturn("INTE");
             when(mcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult(List.of(
                     new McpSchema.TextContent("ok"),
                     new McpSchema.TextContent("{\"rows\":[{},{},{}]}")
@@ -383,8 +385,8 @@ class OracleMcpConnectionTest {
         void omitsBlankContextAndStage() throws Exception {
             injectMockClient();
             discoverListTablesTool();
-            when(dbConfig.getDefaultContext()).thenReturn("");
-            when(dbConfig.getDefaultStage()).thenReturn(null);
+            when(dbMcpConfig.getDefaultContext()).thenReturn("");
+            when(dbMcpConfig.getDefaultStage()).thenReturn(null);
             when(mcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult(List.of(
                     new McpSchema.TextContent("ok"),
                     new McpSchema.TextContent("{\"rows\":[]}")

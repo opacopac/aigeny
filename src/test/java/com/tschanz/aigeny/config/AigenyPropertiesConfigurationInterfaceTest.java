@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.config;
 import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
-import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.DbMcpConfiguration;
+import com.tschanz.aigeny.database.DbServerConfiguration;
 import com.tschanz.aigeny.jira.JiraConfiguration;
 import com.tschanz.aigeny.llm.LlmConfiguration;
 
@@ -66,21 +67,22 @@ class AigenyPropertiesConfigurationInterfaceTest {
     }
 
     @Nested
-    @DisplayName("DbConfiguration")
+    @DisplayName("DbServerConfiguration / DbMcpConfiguration")
     class DbConfigurationContract {
 
         @Test
-        @DisplayName("AigenyProperties.Db is assignable to DbConfiguration")
+        @DisplayName("AigenyProperties.Db is assignable to DbServerConfiguration and DbMcpConfiguration")
         void dbIsAssignableToInterface() {
             AigenyProperties.Db db = new AigenyProperties.Db();
-            assertThat(db).isInstanceOf(DbConfiguration.class);
+            assertThat(db).isInstanceOf(DbServerConfiguration.class);
+            assertThat(db).isInstanceOf(DbMcpConfiguration.class);
         }
 
         @Test
         @DisplayName("getStages() is empty by default")
         void getStagesDefaultsToEmpty() {
             AigenyProperties.Db db = new AigenyProperties.Db();
-            DbConfiguration config = db;
+            DbServerConfiguration config = db;
             assertThat(config.getStages()).isEmpty();
         }
 
@@ -91,7 +93,7 @@ class AigenyPropertiesConfigurationInterfaceTest {
             AigenyProperties.Db.StageProps stage = new AigenyProperties.Db.StageProps();
             stage.setUrl("jdbc:oracle:thin:@host:1521/XE");
             db.getStages().put("INTE", stage);
-            DbConfiguration config = db;
+            DbServerConfiguration config = db;
             assertThat(config.getStage("inte")).isSameAs(stage);
             assertThat(config.getStage("PROD")).isNull();
         }
@@ -130,7 +132,7 @@ class AigenyPropertiesConfigurationInterfaceTest {
         @DisplayName("getDefaultContext()/getDefaultStage() default to pflege/INTE")
         void defaultContextAndStageHaveSensibleDefaults() {
             AigenyProperties.Db db = new AigenyProperties.Db();
-            DbConfiguration config = db;
+            DbMcpConfiguration config = db;
             assertThat(config.getDefaultContext()).isEqualTo("pflege");
             assertThat(config.getDefaultStage()).isEqualTo("INTE");
         }
@@ -148,7 +150,7 @@ class AigenyPropertiesConfigurationInterfaceTest {
         @DisplayName("getMcpServerUrl() defaults to blank")
         void getMcpServerUrlDefaultsToBlank() {
             AigenyProperties.Db db = new AigenyProperties.Db();
-            DbConfiguration config = db;
+            DbMcpConfiguration config = db;
             assertThat(config.getMcpServerUrl()).isBlank();
         }
 
@@ -157,7 +159,7 @@ class AigenyPropertiesConfigurationInterfaceTest {
         void getMcpServerUrlDelegates() {
             AigenyProperties.Db db = new AigenyProperties.Db();
             db.setMcpServerUrl("http://mcp-host:8081");
-            DbConfiguration config = db;
+            DbMcpConfiguration config = db;
             assertThat(config.getMcpServerUrl()).isEqualTo("http://mcp-host:8081");
         }
 
@@ -165,7 +167,7 @@ class AigenyPropertiesConfigurationInterfaceTest {
         @DisplayName("getMcpServerHeaders() defaults to an empty map")
         void getMcpServerHeadersDefaultsToEmpty() {
             AigenyProperties.Db db = new AigenyProperties.Db();
-            DbConfiguration config = db;
+            DbMcpConfiguration config = db;
             assertThat(config.getMcpServerHeaders()).isEmpty();
         }
 
@@ -174,7 +176,7 @@ class AigenyPropertiesConfigurationInterfaceTest {
         void getMcpServerHeadersDelegates() {
             AigenyProperties.Db db = new AigenyProperties.Db();
             db.setMcpServerHeaders(java.util.Map.of("X-API-Key", "secret-value"));
-            DbConfiguration config = db;
+            DbMcpConfiguration config = db;
             assertThat(config.getMcpServerHeaders()).containsEntry("X-API-Key", "secret-value");
         }
 
@@ -183,7 +185,7 @@ class AigenyPropertiesConfigurationInterfaceTest {
         void getMcpServerHeadersNeverNull() {
             AigenyProperties.Db db = new AigenyProperties.Db();
             db.setMcpServerHeaders(null);
-            DbConfiguration config = db;
+            DbMcpConfiguration config = db;
             assertThat(config.getMcpServerHeaders()).isNotNull().isEmpty();
         }
     }

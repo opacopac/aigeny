@@ -1,15 +1,11 @@
 package com.tschanz.aigeny.chat;
-import com.tschanz.aigeny.llm.github.TokenService;
-import com.tschanz.aigeny.jira.SessionJiraWriteService;
-import com.tschanz.aigeny.export.SessionExportService;
 
 import com.tschanz.aigeny.config.AigenyProperties;
-import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
 import com.tschanz.aigeny.config.ConfigurationValidator;
-import com.tschanz.aigeny.database.DbConfiguration;
 import com.tschanz.aigeny.database.mcp_client.OracleMcpConnection;
-import com.tschanz.aigeny.jira.JiraConfiguration;
-import com.tschanz.aigeny.llm.LlmConfiguration;
+import com.tschanz.aigeny.export.SessionExportService;
+import com.tschanz.aigeny.jira.SessionJiraWriteService;
+import com.tschanz.aigeny.llm.github.TokenService;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -66,6 +62,7 @@ class StatusAggregatorServiceTest {
         statusAggregator = new StatusAggregatorService(
             llmConfig,
             dbConfig,
+            dbConfig,
             jiraConfig,
             bitbucketConfig,
             configValidator,
@@ -95,7 +92,7 @@ class StatusAggregatorServiceTest {
             when(tokenService.hasBitbucketToken(session)).thenReturn(true);
             when(jiraWriteService.isJiraWriteModeEnabled(session)).thenReturn(true);
             when(exportService.hasQueryResult(session)).thenReturn(true);
-            when(configValidator.isDbConfigured(dbConfig)).thenReturn(true);
+            when(configValidator.isDbConfigured(dbConfig, dbConfig)).thenReturn(true);
 
             // When
             Map<String, Object> status = statusAggregator.aggregateStatus(session);
@@ -128,7 +125,7 @@ class StatusAggregatorServiceTest {
             when(tokenService.hasBitbucketToken(session)).thenReturn(false);
             when(jiraWriteService.isJiraWriteModeEnabled(session)).thenReturn(false);
             when(exportService.hasQueryResult(session)).thenReturn(false);
-            when(configValidator.isDbConfigured(dbConfig)).thenReturn(false);
+            when(configValidator.isDbConfigured(dbConfig, dbConfig)).thenReturn(false);
 
             // When
             Map<String, Object> status = statusAggregator.aggregateStatus(session);
@@ -164,7 +161,7 @@ class StatusAggregatorServiceTest {
             verify(jiraWriteService).isJiraWriteModeEnabled(session);
             verify(exportService).hasQueryResult(session);
             verify(dbMcpConnection).checkListTables();
-            verify(configValidator, atLeastOnce()).isDbConfigured(dbConfig);
+            verify(configValidator, atLeastOnce()).isDbConfigured(dbConfig, dbConfig);
         }
 
         @Test

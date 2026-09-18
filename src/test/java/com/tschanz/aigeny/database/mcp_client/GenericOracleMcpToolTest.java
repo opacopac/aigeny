@@ -1,7 +1,7 @@
 package com.tschanz.aigeny.database.mcp_client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.DbMcpConfiguration;
 import com.tschanz.aigeny.tool.ToolResult;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,10 +34,10 @@ class GenericOracleMcpToolTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Mock private OracleMcpConnection connection;
-    @Mock private DbConfiguration dbConfig;
+    @Mock private DbMcpConfiguration dbMcpConfig;
 
     private GenericOracleMcpTool tool(String name) {
-        return new GenericOracleMcpTool(name, connection, objectMapper, dbConfig);
+        return new GenericOracleMcpTool(name, connection, objectMapper, dbMcpConfig);
     }
 
     @Nested
@@ -285,8 +285,8 @@ class GenericOracleMcpToolTest {
         @Test
         @DisplayName("replaces LLM-supplied context/stage with the configured values")
         void overridesLlmSuppliedValues() throws Exception {
-            when(dbConfig.getDefaultContext()).thenReturn("pflege");
-            when(dbConfig.getDefaultStage()).thenReturn("PROD");
+            when(dbMcpConfig.getDefaultContext()).thenReturn("pflege");
+            when(dbMcpConfig.getDefaultStage()).thenReturn("PROD");
 
             tool("run_query").execute(
                     "{\"sql\":\"SELECT 1\",\"context\":\"whatever-the-llm-said\",\"stage\":\"DEV\"}");
@@ -302,8 +302,8 @@ class GenericOracleMcpToolTest {
         @Test
         @DisplayName("adds context/stage even when the LLM omitted them, when configured locally")
         void addsWhenOmittedByLlm() throws Exception {
-            when(dbConfig.getDefaultContext()).thenReturn("pflege");
-            when(dbConfig.getDefaultStage()).thenReturn("INTE");
+            when(dbMcpConfig.getDefaultContext()).thenReturn("pflege");
+            when(dbMcpConfig.getDefaultStage()).thenReturn("INTE");
 
             tool("run_query").execute("{\"sql\":\"SELECT 1\"}");
 
@@ -318,8 +318,8 @@ class GenericOracleMcpToolTest {
         @Test
         @DisplayName("leaves the LLM-supplied value untouched when nothing is configured locally")
         void leavesLlmValueWhenNotConfigured() throws Exception {
-            when(dbConfig.getDefaultContext()).thenReturn("");
-            when(dbConfig.getDefaultStage()).thenReturn(null);
+            when(dbMcpConfig.getDefaultContext()).thenReturn("");
+            when(dbMcpConfig.getDefaultStage()).thenReturn(null);
 
             tool("run_query").execute(
                     "{\"sql\":\"SELECT 1\",\"context\":\"from-llm\",\"stage\":\"from-llm-stage\"}");

@@ -1,6 +1,8 @@
 package com.tschanz.aigeny.config;
 import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
-import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.DbMcpConfiguration;
+import com.tschanz.aigeny.database.DbServerConfiguration;
+import com.tschanz.aigeny.database.DbServerStage;
 import com.tschanz.aigeny.jira.JiraConfiguration;
 import com.tschanz.aigeny.llm.LlmConfiguration;
 
@@ -42,7 +44,7 @@ class ConfigurationValidatorTest {
             db.setPassword("testpass");
 
             // When
-            boolean result = validator.isDbConfigured(db);
+            boolean result = validator.isDbConfigured(db, db);
 
             // Then
             assertThat(result).isTrue();
@@ -52,7 +54,7 @@ class ConfigurationValidatorTest {
         @DisplayName("should return false when DB config is null")
         void shouldReturnFalseWhenDbConfigIsNull() {
             // When
-            boolean result = validator.isDbConfigured(null);
+            boolean result = validator.isDbConfigured(null, null);
 
             // Then
             assertThat(result).isFalse();
@@ -65,7 +67,7 @@ class ConfigurationValidatorTest {
             AigenyProperties.Db db = new AigenyProperties.Db();
 
             // When
-            boolean result = validator.isDbConfigured(db);
+            boolean result = validator.isDbConfigured(db, db);
 
             // Then
             assertThat(result).isFalse();
@@ -78,7 +80,7 @@ class ConfigurationValidatorTest {
             AigenyProperties.Db db = dbWithDefaultStage(null, "testuser");
 
             // When
-            boolean result = validator.isDbConfigured(db);
+            boolean result = validator.isDbConfigured(db, db);
 
             // Then
             assertThat(result).isFalse();
@@ -91,7 +93,7 @@ class ConfigurationValidatorTest {
             AigenyProperties.Db db = dbWithDefaultStage("   ", "testuser");
 
             // When
-            boolean result = validator.isDbConfigured(db);
+            boolean result = validator.isDbConfigured(db, db);
 
             // Then
             assertThat(result).isFalse();
@@ -104,7 +106,7 @@ class ConfigurationValidatorTest {
             AigenyProperties.Db db = dbWithDefaultStage("jdbc:oracle:thin:@localhost:1521/XE", null);
 
             // When
-            boolean result = validator.isDbConfigured(db);
+            boolean result = validator.isDbConfigured(db, db);
 
             // Then
             assertThat(result).isFalse();
@@ -117,7 +119,7 @@ class ConfigurationValidatorTest {
             AigenyProperties.Db db = dbWithDefaultStage("jdbc:oracle:thin:@localhost:1521/XE", "");
 
             // When
-            boolean result = validator.isDbConfigured(db);
+            boolean result = validator.isDbConfigured(db, db);
 
             // Then
             assertThat(result).isFalse();
@@ -131,7 +133,7 @@ class ConfigurationValidatorTest {
             db.setPassword(null);  // Password is not required for validation
 
             // When
-            boolean result = validator.isDbConfigured(db);
+            boolean result = validator.isDbConfigured(db, db);
 
             // Then
             assertThat(result).isTrue();
@@ -450,23 +452,25 @@ class ConfigurationValidatorTest {
     class InterfaceBasedValidation {
 
         @Test
-        @DisplayName("isDbConfigured accepts arbitrary DbConfiguration implementations")
+        @DisplayName("isDbConfigured accepts arbitrary DbServerConfiguration/DbMcpConfiguration implementations")
         void isDbConfiguredAcceptsArbitraryImplementation() {
-            DbConfiguration.Stage stage = new DbConfiguration.Stage() {
+            DbServerStage stage = new DbServerStage() {
                 public String getUrl()             { return "jdbc:oracle:thin:@host:1521/XE"; }
                 public String getUsername()        { return "user"; }
                 public String getPassword()        { return "pass"; }
                 public String getSchema()          { return ""; }
                 public String getEffectiveSchema() { return "user"; }
             };
-            DbConfiguration config = new DbConfiguration() {
-                public java.util.Map<String, ? extends Stage> getStages() { return java.util.Map.of("INTE", stage); }
+            DbServerConfiguration serverConfig = new DbServerConfiguration() {
+                public java.util.Map<String, ? extends DbServerStage> getStages() { return java.util.Map.of("INTE", stage); }
+            };
+            DbMcpConfiguration mcpConfig = new DbMcpConfiguration() {
                 public String getDefaultContext()  { return "pflege"; }
                 public String getDefaultStage()    { return "INTE"; }
                 public String getMcpServerUrl()    { return ""; }
                 public java.util.Map<String, String> getMcpServerHeaders() { return java.util.Map.of(); }
             };
-            assertThat(validator.isDbConfigured(config)).isTrue();
+            assertThat(validator.isDbConfigured(serverConfig, mcpConfig)).isTrue();
         }
 
         @Test

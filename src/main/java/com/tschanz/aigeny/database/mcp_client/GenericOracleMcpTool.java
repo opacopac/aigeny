@@ -3,7 +3,7 @@ package com.tschanz.aigeny.database.mcp_client;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;
-import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.DbMcpConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.tool.AbstractTool;
 import com.tschanz.aigeny.tool.QueryResult;
@@ -37,14 +37,14 @@ public class GenericOracleMcpTool extends AbstractTool {
 
     private final String name;
     private final OracleMcpConnection connection;
-    private final DbConfiguration dbConfig;
+    private final DbMcpConfiguration dbMcpConfig;
 
     public GenericOracleMcpTool(String name, OracleMcpConnection connection, ObjectMapper objectMapper,
-                                 DbConfiguration dbConfig) {
+                                 DbMcpConfiguration dbMcpConfig) {
         super(objectMapper);
         this.name = name;
         this.connection = connection;
-        this.dbConfig = dbConfig;
+        this.dbMcpConfig = dbMcpConfig;
     }
 
     @Override
@@ -138,8 +138,8 @@ public class GenericOracleMcpTool extends AbstractTool {
         // "context"/"stage" are locally, mechanically configured (aigeny.db.default-context/
         // default-stage) - override whatever the LLM supplied for these two arguments so the
         // call always targets the configured context/stage, regardless of what the model passed.
-        overrideIfNotBlank(arguments, "context", dbConfig.getDefaultContext());
-        overrideIfNotBlank(arguments, "stage", dbConfig.getDefaultStage());
+        overrideIfNotBlank(arguments, "context", dbMcpConfig.getDefaultContext());
+        overrideIfNotBlank(arguments, "stage", dbMcpConfig.getDefaultStage());
 
         log.info("  DB TOOL REQUEST name={} args={}", name, arguments);
         if (arguments.get("sql") != null) {

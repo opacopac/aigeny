@@ -1,6 +1,8 @@
 package com.tschanz.aigeny.config;
 import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
-import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.DbMcpConfiguration;
+import com.tschanz.aigeny.database.DbServerConfiguration;
+import com.tschanz.aigeny.database.DbServerStage;
 import com.tschanz.aigeny.jira.JiraConfiguration;
 import com.tschanz.aigeny.llm.LlmConfiguration;
 
@@ -91,7 +93,7 @@ public class AigenyProperties {
         public void setMaxTokens(int maxTokens) { this.maxTokens = maxTokens; }
     }
 
-    public static class Db implements DbConfiguration {
+    public static class Db implements DbServerConfiguration, DbMcpConfiguration {
 
         /**
          * Per-stage Oracle connection details, keyed by stage name (e.g. {@code INTE},
@@ -117,25 +119,25 @@ public class AigenyProperties {
 
         /**
          * Default value for the mandatory {@code context} tool argument (see
-         * {@link DbConfiguration#getDefaultContext()}).
+         * {@link DbMcpConfiguration#getDefaultContext()}).
          */
         private String defaultContext = "pflege";
         /**
          * Default value for the mandatory {@code stage} tool argument (see
-         * {@link DbConfiguration#getDefaultStage()}). Also the stage whose password
+         * {@link DbMcpConfiguration#getDefaultStage()}). Also the stage whose password
          * {@link #setPassword(String)} (used by {@link SecretFileResolver} for the
          * {@code AIGENY_DB_PASSWORD_FILE} Docker secret) applies to.
          */
         private String defaultStage = "INTE";
         /**
-         * Optional URL of a remote Oracle DB MCP server (see {@link DbConfiguration#getMcpServerUrl()}).
+         * Optional URL of a remote Oracle DB MCP server (see {@link DbMcpConfiguration#getMcpServerUrl()}).
          * Leave blank (default) to keep launching the embedded MCP server as a local stdio
          * subprocess; set this to switch to an independently deployed/remote MCP server instead.
          */
         private String mcpServerUrl = "";
         /**
          * Optional extra HTTP headers sent with every request to a remote MCP server
-         * (see {@link DbConfiguration#getMcpServerHeaders()}), e.g. {@code X-API-Key}.
+         * (see {@link DbMcpConfiguration#getMcpServerHeaders()}), e.g. {@code X-API-Key}.
          * Bound from YAML as a nested map, e.g.:
          * <pre>
          * aigeny:
@@ -181,7 +183,7 @@ public class AigenyProperties {
             stages.computeIfAbsent(defaultStage, key -> new StageProps()).setPassword(password);
         }
 
-        public static class StageProps implements DbConfiguration.Stage {
+        public static class StageProps implements DbServerStage {
             /** JDBC URL, e.g. jdbc:oracle:thin:@hostname:1521/SERVICENAME */
             private String url = "";
             private String username = "";

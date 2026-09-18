@@ -1,6 +1,8 @@
 package com.tschanz.aigeny.config;
 import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
-import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.DbMcpConfiguration;
+import com.tschanz.aigeny.database.DbServerConfiguration;
+import com.tschanz.aigeny.database.DbServerStage;
 import com.tschanz.aigeny.jira.JiraConfiguration;
 import com.tschanz.aigeny.llm.LlmConfiguration;
 
@@ -18,16 +20,17 @@ public class ConfigurationValidator {
     /**
      * Checks if database configuration is complete and valid.
      * A database is considered configured if the default stage (see
-     * {@link DbConfiguration#getDefaultStage()}) has both a URL and a username configured.
+     * {@link DbMcpConfiguration#getDefaultStage()}) has both a URL and a username configured.
      *
-     * @param db the database configuration to validate
+     * @param dbServer the per-stage database connection details to validate
+     * @param dbMcp    the MCP context/stage defaults (selects which stage of {@code dbServer} to check)
      * @return true if database is properly configured, false otherwise
      */
-    public boolean isDbConfigured(DbConfiguration db) {
-        if (db == null) {
+    public boolean isDbConfigured(DbServerConfiguration dbServer, DbMcpConfiguration dbMcp) {
+        if (dbServer == null || dbMcp == null) {
             return false;
         }
-        DbConfiguration.Stage stage = db.getStage(db.getDefaultStage());
+        DbServerStage stage = dbServer.getStage(dbMcp.getDefaultStage());
         if (stage == null) {
             return false;
         }

@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.config;
 import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
-import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.DbMcpConfiguration;
+import com.tschanz.aigeny.database.DbServerConfiguration;
 import com.tschanz.aigeny.jira.JiraConfiguration;
 import com.tschanz.aigeny.llm.LlmConfiguration;
 
@@ -51,11 +52,19 @@ class ConfigBeansTest {
     }
 
     @Test
-    @DisplayName("dbConfiguration bean returns the Db sub-object as DbConfiguration")
-    void dbConfigurationBeanReturnsDbSubObject() {
-        DbConfiguration result = configBeans.dbConfiguration(props);
+    @DisplayName("dbServerConfiguration bean returns the Db sub-object as DbServerConfiguration")
+    void dbServerConfigurationBeanReturnsDbSubObject() {
+        DbServerConfiguration result = configBeans.dbServerConfiguration(props);
         assertThat(result).isSameAs(db);
-        assertThat(result).isInstanceOf(DbConfiguration.class);
+        assertThat(result).isInstanceOf(DbServerConfiguration.class);
+    }
+
+    @Test
+    @DisplayName("dbMcpConfiguration bean returns the Db sub-object as DbMcpConfiguration")
+    void dbMcpConfigurationBeanReturnsDbSubObject() {
+        DbMcpConfiguration result = configBeans.dbMcpConfiguration(props);
+        assertThat(result).isSameAs(db);
+        assertThat(result).isInstanceOf(DbMcpConfiguration.class);
     }
 
     @Test

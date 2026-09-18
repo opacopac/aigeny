@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.config;
 import com.tschanz.aigeny.bitbucket.BitbucketConfiguration;
-import com.tschanz.aigeny.database.DbConfiguration;
+import com.tschanz.aigeny.database.DbMcpConfiguration;
+import com.tschanz.aigeny.database.DbServerConfiguration;
 import com.tschanz.aigeny.jira.JiraConfiguration;
 import com.tschanz.aigeny.llm.LlmConfiguration;
 
@@ -14,7 +15,8 @@ import org.springframework.context.annotation.Configuration;
  *
  * <ul>
  *   <li>{@link LlmConfiguration}       – consumed by LLM adapters and factories</li>
- *   <li>{@link DbConfiguration}        – consumed by DB tools and schema loader</li>
+ *   <li>{@link DbServerConfiguration}  – consumed by DB tools needing per-stage connection details</li>
+ *   <li>{@link DbMcpConfiguration}     – consumed by DB tools needing MCP context/stage defaults</li>
  *   <li>{@link JiraConfiguration}      – consumed by Jira tools and token service</li>
  *   <li>{@link BitbucketConfiguration} – consumed by Bitbucket tools and token service</li>
  * </ul>
@@ -31,7 +33,12 @@ public class ConfigBeans {
     }
 
     @Bean
-    public DbConfiguration dbConfiguration(AigenyProperties props) {
+    public DbServerConfiguration dbServerConfiguration(AigenyProperties props) {
+        return props.getDb();
+    }
+
+    @Bean
+    public DbMcpConfiguration dbMcpConfiguration(AigenyProperties props) {
         return props.getDb();
     }
 
