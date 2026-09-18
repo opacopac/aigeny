@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.database;
 
 import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 /**
@@ -19,7 +20,7 @@ public class ConfiguredDataContextSelectionService implements DataContextSelecti
 
     private final DbMcpConfiguration dbMcpConfiguration;
 
-    public ConfiguredDataContextSelectionService(DbMcpConfiguration dbMcpConfiguration) {
+    public ConfiguredDataContextSelectionService(@Qualifier("dbMcpConfiguration") DbMcpConfiguration dbMcpConfiguration) {
         this.dbMcpConfiguration = dbMcpConfiguration;
     }
 

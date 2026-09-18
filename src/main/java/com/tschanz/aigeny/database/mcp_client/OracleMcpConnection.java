@@ -19,6 +19,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -58,7 +59,8 @@ public class OracleMcpConnection {
     private volatile McpSyncClient client;
     private volatile Map<String, McpSchema.Tool> discoveredTools = Map.of();
 
-    public OracleMcpConnection(DbServerConfiguration dbServerConfig, DbMcpConfiguration dbMcpConfig,
+    public OracleMcpConnection(@Qualifier("dbServerConfiguration") DbServerConfiguration dbServerConfig,
+                                @Qualifier("dbMcpConfiguration") DbMcpConfiguration dbMcpConfig,
                                 ConfigurationValidator configValidator, ObjectMapper objectMapper) {
         this.dbServerConfig = dbServerConfig;
         this.dbMcpConfig = dbMcpConfig;

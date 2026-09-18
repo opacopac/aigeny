@@ -13,6 +13,7 @@ import com.tschanz.aigeny.database.mcp_client.OracleMcpConnection;
 import com.tschanz.aigeny.jira.JiraConfiguration;
 import com.tschanz.aigeny.llm.LlmConfiguration;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -55,8 +56,8 @@ public class StatusAggregatorService {
     private final DataContextSelectionService dataContextSelectionService;
 
     public StatusAggregatorService(LlmConfiguration llmConfig,
-                                   DbServerConfiguration dbServerConfig,
-                                   DbMcpConfiguration dbMcpConfig,
+                                   @Qualifier("dbServerConfiguration") DbServerConfiguration dbServerConfig,
+                                   @Qualifier("dbMcpConfiguration") DbMcpConfiguration dbMcpConfig,
                                    JiraConfiguration jiraConfig,
                                    BitbucketConfiguration bitbucketConfig,
                                    ConfigurationValidator configValidator,
