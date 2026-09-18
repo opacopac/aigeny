@@ -424,6 +424,79 @@ class OracleMcpConnectionTest {
             assertThat(status.tableCount()).isNull();
             assertThat(status.error()).isEqualTo("connection reset");
         }
+
+        // ── External/third-party MCP servers: only a single text content block ──
+        // (no second "structured JSON" block, since that's purely this app's own
+        // embedded server convention - see OracleSqlSupport#runSelect). Without a
+        // text-based fallback, the sidebar would always show "Fehler" here even
+        // though the tool call itself succeeded.
+
+        @Test
+        @DisplayName("counts rows via a top-level JSON array text block (single content block, external server)")
+        void countsFromTopLevelJsonArray() throws Exception {
+            injectMockClient();
+            discoverListTablesTool();
+            when(mcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult(
+                    List.of(new McpSchema.TextContent("[\"TABLE_A\",\"TABLE_B\",\"TABLE_C\"]")), false));
+
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables("pflege", "INTE");
+
+            assertThat(status.tableCount()).isEqualTo(3);
+            assertThat(status.error()).isNull();
+        }
+
+        @Test
+        @DisplayName("counts rows via a nested \"tables\" JSON array text block (single content block, external server)")
+        void countsFromNestedJsonArray() throws Exception {
+            injectMockClient();
+            discoverListTablesTool();
+            when(mcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult(
+                    List.of(new McpSchema.TextContent("{\"tables\":[\"A\",\"B\"]}")), false));
+
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables("pflege", "INTE");
+
+            assertThat(status.tableCount()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("counts plain newline-separated table names (single content block, external server)")
+        void countsFromPlainLines() throws Exception {
+            injectMockClient();
+            discoverListTablesTool();
+            when(mcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult(
+                    List.of(new McpSchema.TextContent("TABLE_A\nTABLE_B\nTABLE_C\nTABLE_D")), false));
+
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables("pflege", "INTE");
+
+            assertThat(status.tableCount()).isEqualTo(4);
+        }
+
+        @Test
+        @DisplayName("still counts correctly from this app's own text format when only one content block is present")
+        void countsFromOwnTextFormatWithoutStructuredBlock() throws Exception {
+            injectMockClient();
+            discoverListTablesTool();
+            String text = "TABLE_NAME\n------------------------------------------------------------\nTABLE_A\nTABLE_B\n";
+            when(mcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult(
+                    List.of(new McpSchema.TextContent(text)), false));
+
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables("pflege", "INTE");
+
+            assertThat(status.tableCount()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("reports 0 tables for an empty result (single content block, external server)")
+        void countsZeroForNoRows() throws Exception {
+            injectMockClient();
+            discoverListTablesTool();
+            when(mcpClient.callTool(any())).thenReturn(new McpSchema.CallToolResult(
+                    List.of(new McpSchema.TextContent("(no rows returned)")), false));
+
+            OracleMcpConnection.McpListTablesStatus status = connection.checkListTables("pflege", "INTE");
+
+            assertThat(status.tableCount()).isEqualTo(0);
+        }
     }
 }
 

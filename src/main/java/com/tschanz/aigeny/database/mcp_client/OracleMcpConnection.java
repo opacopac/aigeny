@@ -341,8 +341,28 @@ public class OracleMcpConnection {
         }
     }
 
-    /** Extracts the row count from the structured (second) content block of a tool result. */
+    /**
+     * Extracts the number of tables reported by a {@code list_tables} call. Tries, in order:
+     * <ol>
+     *   <li>this app's own "text + structured JSON" convention (see
+     *       {@code OracleSqlSupport#runSelect}) - a second content block whose text is a JSON
+     *       object with a {@code rows} array - used by the embedded local MCP server;</li>
+     *   <li>a text-only fallback (see {@link #extractRowCountFromText(List)}) for third-party/
+     *       external MCP servers, which generally only return a single human-readable text
+     *       content block and don't follow that (purely internal) two-block convention at all -
+     *       without this, the sidebar "Tabellen" status would always show an error for any
+     *       external server even though the {@code list_tables} tool call itself works fine
+     *       (chat/tool-use only ever reads the first text block, never this row count).</li>
+     * </ol>
+     */
     private Integer extractRowCount(List<McpSchema.Content> content) {
+        Integer structured = extractStructuredRowCount(content);
+        if (structured != null) return structured;
+        return extractRowCountFromText(content);
+    }
+
+    /** Extracts the row count from the structured (second) content block of a tool result, if present. */
+    private Integer extractStructuredRowCount(List<McpSchema.Content> content) {
         if (content.size() < 2) return null;
         try {
             JsonNode structured = objectMapper.readTree(firstText(List.of(content.get(1))));
@@ -352,6 +372,62 @@ public class OracleMcpConnection {
             log.warn("Could not parse {} result while checking MCP status: {}", LIST_TABLES_TOOL, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Fallback row-count extraction for MCP servers that only return a single, human-readable
+     * text content block (i.e. essentially every external/third-party MCP server, since the
+     * two-block convention checked by {@link #extractStructuredRowCount(List)} is purely internal
+     * to this app's own embedded server). Tries, in order:
+     * <ol>
+     *   <li>parsing the text as JSON and counting a top-level array, or a {@code rows}/{@code
+     *       tables}/{@code items}/{@code results} array nested in a JSON object - common for
+     *       servers that emit structured data as plain text;</li>
+     *   <li>counting non-empty lines, skipping this app's own "column | column" header +
+     *       "----" separator line and any trailing "... (N more rows)" summary line, if present
+     *       (so a single content block from this app's own server is still handled correctly);
+     *       otherwise every non-empty line is assumed to be one table (e.g. plain
+     *       newline-separated table names, or a simple markdown/CSV-ish table listing).</li>
+     * </ol>
+     */
+    private Integer extractRowCountFromText(List<McpSchema.Content> content) {
+        if (content.isEmpty()) return null;
+        String text = firstText(content).trim();
+        if (text.isEmpty()) return null;
+        if (text.equalsIgnoreCase("(no rows returned)")) return 0;
+
+        Integer fromJson = tryCountFromJson(text);
+        if (fromJson != null) return fromJson;
+
+        List<String> lines = new java.util.ArrayList<>();
+        for (String line : text.split("\n", -1)) {
+            if (!line.isBlank()) lines.add(line.trim());
+        }
+        if (lines.isEmpty()) return null;
+        if (lines.size() >= 2 && !lines.get(1).isEmpty() && lines.get(1).chars().allMatch(c -> c == '-')) {
+            lines = lines.subList(2, lines.size());
+        }
+        if (!lines.isEmpty() && lines.get(lines.size() - 1).startsWith("...")) {
+            lines = lines.subList(0, lines.size() - 1);
+        }
+        return lines.isEmpty() ? null : lines.size();
+    }
+
+    /** Tries to parse {@code text} as JSON and count a top-level array or a known nested array field. */
+    private Integer tryCountFromJson(String text) {
+        try {
+            JsonNode node = objectMapper.readTree(text);
+            if (node.isArray()) return node.size();
+            if (node.isObject()) {
+                for (String key : List.of("rows", "tables", "items", "results")) {
+                    JsonNode arr = node.get(key);
+                    if (arr != null && arr.isArray()) return arr.size();
+                }
+            }
+        } catch (Exception ignored) {
+            // Not JSON - fall through to the line-counting heuristic.
+        }
+        return null;
     }
 
     private static String firstText(List<McpSchema.Content> content) {
