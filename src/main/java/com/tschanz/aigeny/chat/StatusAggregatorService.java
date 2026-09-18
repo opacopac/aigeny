@@ -27,6 +27,7 @@ public class StatusAggregatorService {
     private static final String KEY_LLM_MODEL                    = "llmModel";
     private static final String KEY_DB_CONFIGURED                = "dbConfigured";
     private static final String KEY_DB_USERNAME                  = "dbUsername";
+    private static final String KEY_DB_STAGE                     = "dbStage";
     private static final String KEY_DB_MCP_CONNECTED             = "dbMcpConnected";
     private static final String KEY_DB_MCP_LIST_TABLES_AVAILABLE = "dbMcpListTablesAvailable";
     private static final String KEY_DB_MCP_TABLE_COUNT           = "dbMcpTableCount";
@@ -85,6 +86,7 @@ public class StatusAggregatorService {
         // Database configuration
         status.put(KEY_DB_CONFIGURED, configValidator.isDbConfigured(dbConfig));
         status.put(KEY_DB_USERNAME, currentDbUsername());
+        status.put(KEY_DB_STAGE, dbConfig.getDefaultStage());
 
         // DB MCP server status - checked live via the "list_tables" MCP tool call.
         // Named "dbMcp*" (not just "mcp*") since later on there will also be MCP

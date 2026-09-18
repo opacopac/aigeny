@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   buildDbState,
+  buildDbStageState,
   buildTablesState,
   buildJiraState,
   buildBitbucketState,
@@ -46,6 +47,24 @@ describe("buildDbState", () => {
   });
   it("is a pure function – same input yields same output", () => {
     expect(buildDbState({ dbConfigured: true, dbMcpConnected: true })).toEqual(buildDbState({ dbConfigured: true, dbMcpConnected: true }));
+  });
+});
+// ----------------------------------------------------------------------------
+// buildDbStageState
+// ----------------------------------------------------------------------------
+describe("buildDbStageState", () => {
+  it("returns the configured stage name", () => {
+    const s = buildDbStageState({ dbStage: "INTE" });
+    expect(s.className).toBe("info-val ok");
+    expect(s.text).toBe("INTE");
+  });
+  it("returns a placeholder when no stage is configured", () => {
+    const s = buildDbStageState({ dbStage: null });
+    expect(s.className).toBe("info-val");
+    expect(s.text).toBe("—");
+  });
+  it("is a pure function – same input yields same output", () => {
+    expect(buildDbStageState({ dbStage: "PROD" })).toEqual(buildDbStageState({ dbStage: "PROD" }));
   });
 });
 // ----------------------------------------------------------------------------
@@ -191,6 +210,7 @@ function makeElements() {
     infoModel:     makeEl(),
     infoTables:    makeEl(),
     infoDb:        makeEl(),
+    infoDbStage:   makeEl(),
     infoJira:      makeEl(),
     btnJiraToken:  makeBtn(),
     jiraWriteRow:  makeEl(),
@@ -253,6 +273,10 @@ describe("StatusPanel – applyStatus()", () => {
   it("applies error class to infoDb when db is configured but its MCP server is not connected", () => {
     panel.applyStatus({ llmProvider: "p", llmModel: "m", dbConfigured: true, dbMcpConnected: false, jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
     expect(els.infoDb.className).toBe("info-val error");
+  });
+  it("updates infoDbStage textContent with the configured stage", () => {
+    panel.applyStatus({ llmProvider: "p", llmModel: "m", dbConfigured: true, dbMcpConnected: true, dbStage: "PROD", jiraBaseUrlConfigured: false, bitbucketBaseUrlConfigured: false });
+    expect(els.infoDbStage.textContent).toBe("PROD");
   });
   it("shows jiraWriteRow when jiraBaseUrlConfigured", () => {
     panel.applyStatus({ llmProvider: "p", llmModel: "m", dbConfigured: false, jiraBaseUrlConfigured: true, jiraConfigured: true, bitbucketBaseUrlConfigured: false });

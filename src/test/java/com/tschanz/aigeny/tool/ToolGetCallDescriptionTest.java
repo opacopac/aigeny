@@ -65,7 +65,7 @@ class ToolGetCallDescriptionTest {
 
         @BeforeEach void init() {
             OracleMcpConnection connection = new OracleMcpConnection(dbConfig, configValidator, objectMapper);
-            tool = new GenericOracleMcpTool("run_query", connection, objectMapper);
+            tool = new GenericOracleMcpTool("run_query", connection, objectMapper, dbConfig);
         }
 
         @Test

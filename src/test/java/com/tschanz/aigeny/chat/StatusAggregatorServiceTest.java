@@ -106,6 +106,7 @@ class StatusAggregatorServiceTest {
             assertThat(status.get("llmModel")).isEqualTo("claude-3-sonnet");
             assertThat(status.get("dbConfigured")).isEqualTo(true);
             assertThat(status.get("dbUsername")).isEqualTo("dbuser");
+            assertThat(status.get("dbStage")).isEqualTo("INTE");
             assertThat(status.get("jiraConfigured")).isEqualTo(true);
             assertThat(status.get("jiraBaseUrlConfigured")).isEqualTo(true);
             assertThat(status.get("jiraWriteEnabled")).isEqualTo(true);
@@ -138,6 +139,7 @@ class StatusAggregatorServiceTest {
             assertThat(status.get("llmModel")).isEqualTo("gpt-4");
             assertThat(status.get("dbConfigured")).isEqualTo(false);
             assertThat(status.get("dbUsername")).isNull();
+            assertThat(status.get("dbStage")).isEqualTo("INTE");
             assertThat(status.get("jiraConfigured")).isEqualTo(false);
             assertThat(status.get("jiraBaseUrlConfigured")).isEqualTo(false);
             assertThat(status.get("jiraWriteEnabled")).isEqualTo(false);
@@ -181,6 +183,7 @@ class StatusAggregatorServiceTest {
                 "llmModel",
                 "dbConfigured",
                 "dbUsername",
+                "dbStage",
                 "dbMcpConnected",
                 "dbMcpListTablesAvailable",
                 "dbMcpTableCount",

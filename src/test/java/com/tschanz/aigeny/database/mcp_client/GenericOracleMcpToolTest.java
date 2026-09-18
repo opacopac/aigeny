@@ -1,6 +1,7 @@
 package com.tschanz.aigeny.database.mcp_client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tschanz.aigeny.database.DbConfiguration;
 import com.tschanz.aigeny.tool.ToolResult;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,9 +34,10 @@ class GenericOracleMcpToolTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Mock private OracleMcpConnection connection;
+    @Mock private DbConfiguration dbConfig;
 
     private GenericOracleMcpTool tool(String name) {
-        return new GenericOracleMcpTool(name, connection, objectMapper);
+        return new GenericOracleMcpTool(name, connection, objectMapper, dbConfig);
     }
 
     @Nested
@@ -266,6 +268,68 @@ class GenericOracleMcpToolTest {
 
             assertThat(result.getText()).contains("Only SELECT");
             assertThat(result.hasQueryResult()).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("execute() overrides context/stage with the local configuration")
+    class ContextStageOverride {
+
+        @BeforeEach
+        void arrange() {
+            when(connection.isAvailable()).thenReturn(true);
+            when(connection.callTool(eq("run_query"), any())).thenReturn(
+                    new McpSchema.CallToolResult("(no rows returned)", false));
+        }
+
+        @Test
+        @DisplayName("replaces LLM-supplied context/stage with the configured values")
+        void overridesLlmSuppliedValues() throws Exception {
+            when(dbConfig.getDefaultContext()).thenReturn("pflege");
+            when(dbConfig.getDefaultStage()).thenReturn("PROD");
+
+            tool("run_query").execute(
+                    "{\"sql\":\"SELECT 1\",\"context\":\"whatever-the-llm-said\",\"stage\":\"DEV\"}");
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+            verify(connection).callTool(eq("run_query"), captor.capture());
+
+            assertThat(captor.getValue()).containsEntry("context", "pflege");
+            assertThat(captor.getValue()).containsEntry("stage", "PROD");
+        }
+
+        @Test
+        @DisplayName("adds context/stage even when the LLM omitted them, when configured locally")
+        void addsWhenOmittedByLlm() throws Exception {
+            when(dbConfig.getDefaultContext()).thenReturn("pflege");
+            when(dbConfig.getDefaultStage()).thenReturn("INTE");
+
+            tool("run_query").execute("{\"sql\":\"SELECT 1\"}");
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+            verify(connection).callTool(eq("run_query"), captor.capture());
+
+            assertThat(captor.getValue()).containsEntry("context", "pflege");
+            assertThat(captor.getValue()).containsEntry("stage", "INTE");
+        }
+
+        @Test
+        @DisplayName("leaves the LLM-supplied value untouched when nothing is configured locally")
+        void leavesLlmValueWhenNotConfigured() throws Exception {
+            when(dbConfig.getDefaultContext()).thenReturn("");
+            when(dbConfig.getDefaultStage()).thenReturn(null);
+
+            tool("run_query").execute(
+                    "{\"sql\":\"SELECT 1\",\"context\":\"from-llm\",\"stage\":\"from-llm-stage\"}");
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+            verify(connection).callTool(eq("run_query"), captor.capture());
+
+            assertThat(captor.getValue()).containsEntry("context", "from-llm");
+            assertThat(captor.getValue()).containsEntry("stage", "from-llm-stage");
         }
     }
 }

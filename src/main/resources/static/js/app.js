@@ -29,6 +29,7 @@ const _statusPanel = new StatusPanel({
   infoModel:     document.getElementById('infoModel'),
   infoTables:    document.getElementById('infoTables'),
   infoDb:        document.getElementById('infoDb'),
+  infoDbStage:   document.getElementById('infoDbStage'),
   infoJira:      document.getElementById('infoJira'),
   btnJiraToken:  document.getElementById('btnJiraToken'),
   jiraWriteRow:  document.getElementById('jiraWriteToggleRow'),

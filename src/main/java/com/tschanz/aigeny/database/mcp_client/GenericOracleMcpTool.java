@@ -3,6 +3,7 @@ package com.tschanz.aigeny.database.mcp_client;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.Messages;
+import com.tschanz.aigeny.database.DbConfiguration;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
 import com.tschanz.aigeny.tool.AbstractTool;
 import com.tschanz.aigeny.tool.QueryResult;
@@ -36,11 +37,14 @@ public class GenericOracleMcpTool extends AbstractTool {
 
     private final String name;
     private final OracleMcpConnection connection;
+    private final DbConfiguration dbConfig;
 
-    public GenericOracleMcpTool(String name, OracleMcpConnection connection, ObjectMapper objectMapper) {
+    public GenericOracleMcpTool(String name, OracleMcpConnection connection, ObjectMapper objectMapper,
+                                 DbConfiguration dbConfig) {
         super(objectMapper);
         this.name = name;
         this.connection = connection;
+        this.dbConfig = dbConfig;
     }
 
     @Override
@@ -110,6 +114,18 @@ public class GenericOracleMcpTool extends AbstractTool {
         return toolName.replace('_', ' ');
     }
 
+    /**
+     * Overrides {@code arguments.get(key)} with {@code value} when {@code value} is configured
+     * (non-null/non-blank) - used to enforce the locally configured {@code context}/{@code stage}
+     * regardless of what the LLM passed for those arguments. Leaves the LLM-supplied value in
+     * place when nothing is configured locally.
+     */
+    private static void overrideIfNotBlank(Map<String, Object> arguments, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            arguments.put(key, value);
+        }
+    }
+
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
         if (!connection.isAvailable()) {
@@ -118,6 +134,12 @@ public class GenericOracleMcpTool extends AbstractTool {
 
         Map<String, Object> arguments = objectMapper.readValue(argumentsJson,
                 objectMapper.getTypeFactory().constructMapType(Map.class, String.class, Object.class));
+
+        // "context"/"stage" are locally, mechanically configured (aigeny.db.default-context/
+        // default-stage) - override whatever the LLM supplied for these two arguments so the
+        // call always targets the configured context/stage, regardless of what the model passed.
+        overrideIfNotBlank(arguments, "context", dbConfig.getDefaultContext());
+        overrideIfNotBlank(arguments, "stage", dbConfig.getDefaultStage());
 
         log.info("  DB TOOL REQUEST name={} args={}", name, arguments);
         if (arguments.get("sql") != null) {

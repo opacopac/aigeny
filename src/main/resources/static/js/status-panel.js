@@ -30,6 +30,17 @@ export function buildDbState(data) {
 }
 
 /**
+ * @param {{ dbStage?: string }} data
+ * @returns {{ text: string, className: string, title: string }}
+ */
+export function buildDbStageState(data) {
+  if (!data.dbStage) {
+    return { text: '—', className: 'info-val', title: '' };
+  }
+  return { text: data.dbStage, className: 'info-val ok', title: '' };
+}
+
+/**
  * @param {{
  *   dbConfigured: boolean,
  *   dbMcpConnected?: boolean,
@@ -138,6 +149,7 @@ export class StatusPanel {
    *   infoModel:      HTMLElement|null,
    *   infoTables:     HTMLElement|null,
    *   infoDb:         HTMLElement|null,
+   *   infoDbStage:    HTMLElement|null,
    *   infoJira:       HTMLElement|null,
    *   btnJiraToken:   HTMLElement|null,
    *   jiraWriteRow:   HTMLElement|null,
@@ -175,6 +187,9 @@ export class StatusPanel {
 
     // DB connection (backed by the DB's MCP server, checked via "list_tables")
     this._applyInfoRow(els.infoDb, null, buildDbState(data));
+
+    // Selected DB stage (aigeny.db.default-stage)
+    this._applyInfoRow(els.infoDbStage, null, buildDbStageState(data));
 
     // Number of tables reported by the DB MCP server's "list_tables" tool
     this._applyInfoRow(els.infoTables, null, buildTablesState(data));
