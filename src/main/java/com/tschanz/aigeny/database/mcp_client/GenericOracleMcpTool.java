@@ -34,6 +34,22 @@ public class GenericOracleMcpTool extends AbstractTool {
 
     private static final Logger log = LoggerFactory.getLogger(GenericOracleMcpTool.class);
     private static final String MSG_NOT_CONFIGURED = "db.error.not_configured";
+    private static final String MSG_CONTEXT_MISMATCH = "db.error.context_mismatch";
+    private static final String MSG_STAGE_MISMATCH = "db.error.stage_mismatch";
+
+    private static final String ARG_DESCRIPTION = "description";
+    private static final String ARG_CONTEXT = "context";
+    private static final String ARG_STAGE = "stage";
+    private static final String ARG_SQL = "sql";
+
+    private static final String SCHEMA_TYPE = "type";
+    private static final String SCHEMA_TYPE_OBJECT = "object";
+    private static final String SCHEMA_PROPERTIES = "properties";
+    private static final String SCHEMA_REQUIRED = "required";
+
+    private static final String RESULT_COLUMNS = "columns";
+    private static final String RESULT_ROWS = "rows";
+    private static final String RESULT_SOURCE_NAME = "Oracle DB";
 
     private final String name;
     private final OracleMcpConnection connection;
@@ -66,14 +82,14 @@ public class GenericOracleMcpTool extends AbstractTool {
         if (info.isEmpty()) {
             // MCP server not reachable (yet) - minimal fallback schema so the app still starts up cleanly.
             return new ToolDefinition(name, getDescription(),
-                    Map.of("type", "object", "properties", Map.of()));
+                    Map.of(SCHEMA_TYPE, SCHEMA_TYPE_OBJECT, SCHEMA_PROPERTIES, Map.of()));
         }
         McpSchema.JsonSchema schema = info.get().inputSchema();
         Map<String, Object> parameters = new LinkedHashMap<>();
-        parameters.put("type", schema.type() != null ? schema.type() : "object");
-        parameters.put("properties", schema.properties() != null ? schema.properties() : Map.of());
+        parameters.put(SCHEMA_TYPE, schema.type() != null ? schema.type() : SCHEMA_TYPE_OBJECT);
+        parameters.put(SCHEMA_PROPERTIES, schema.properties() != null ? schema.properties() : Map.of());
         if (schema.required() != null && !schema.required().isEmpty()) {
-            parameters.put("required", schema.required());
+            parameters.put(SCHEMA_REQUIRED, schema.required());
         }
         return new ToolDefinition(name, getDescription(), parameters);
     }
@@ -88,7 +104,7 @@ public class GenericOracleMcpTool extends AbstractTool {
     public String getCallDescription(String argumentsJson) {
         try {
             JsonNode args = objectMapper.readTree(argumentsJson);
-            JsonNode desc = args.get("description");
+            JsonNode desc = args.get(ARG_DESCRIPTION);
             if (desc != null && !desc.isNull() && !desc.asText().isBlank()) {
                 return desc.asText();
             }
@@ -147,22 +163,22 @@ public class GenericOracleMcpTool extends AbstractTool {
         // to support a future per-session UI selection - see DataContextSelectionService) -
         // reject the call if the LLM supplied a value for either argument that does not match
         // the currently selected context/stage, instead of silently overriding it.
-        ToolResult contextMismatch = checkMatchesConfigured(arguments, "context",
-                dataContextSelectionService.getContext(), "db.error.context_mismatch");
+        ToolResult contextMismatch = checkMatchesConfigured(arguments, ARG_CONTEXT,
+                dataContextSelectionService.getContext(), MSG_CONTEXT_MISMATCH);
         if (contextMismatch != null) {
             return contextMismatch;
         }
-        ToolResult stageMismatch = checkMatchesConfigured(arguments, "stage",
-                dataContextSelectionService.getStage(), "db.error.stage_mismatch");
+        ToolResult stageMismatch = checkMatchesConfigured(arguments, ARG_STAGE,
+                dataContextSelectionService.getStage(), MSG_STAGE_MISMATCH);
         if (stageMismatch != null) {
             return stageMismatch;
         }
 
         log.info("  DB TOOL REQUEST name={} args={}", name, arguments);
-        if (arguments.get("sql") != null) {
+        if (arguments.get(ARG_SQL) != null) {
             // Dedicated debug line with the raw SQL string (run_query), independent of the
             // generic args map above - easiest to grep for when debugging a specific query.
-            log.debug("  SQL: {}", arguments.get("sql"));
+            log.debug("  SQL: {}", arguments.get(ARG_SQL));
         }
 
         long t0 = System.currentTimeMillis();
@@ -188,11 +204,11 @@ public class GenericOracleMcpTool extends AbstractTool {
         if (content.size() < 2) return null;
         try {
             JsonNode structured = objectMapper.readTree(asText(content.get(1)));
-            List<String> columns = objectMapper.convertValue(structured.get("columns"),
+            List<String> columns = objectMapper.convertValue(structured.get(RESULT_COLUMNS),
                     objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
-            List<Map<String, Object>> rows = objectMapper.convertValue(structured.get("rows"),
+            List<Map<String, Object>> rows = objectMapper.convertValue(structured.get(RESULT_ROWS),
                     objectMapper.getTypeFactory().constructCollectionType(List.class, Map.class));
-            return new QueryResult("Oracle DB", columns, rows);
+            return new QueryResult(RESULT_SOURCE_NAME, columns, rows);
         } catch (Exception e) {
             log.warn("Could not parse structured MCP result for tool {}: {}", name, e.getMessage());
             return null;
