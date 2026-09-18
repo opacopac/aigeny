@@ -272,24 +272,24 @@ class GenericOracleMcpToolTest {
     }
 
     @Nested
-    @DisplayName("execute() overrides context/stage with the local configuration")
-    class ContextStageOverride {
+    @DisplayName("execute() validates context/stage against the local configuration")
+    class ContextStageValidation {
 
         @BeforeEach
         void arrange() {
             when(connection.isAvailable()).thenReturn(true);
-            when(connection.callTool(eq("run_query"), any())).thenReturn(
-                    new McpSchema.CallToolResult("(no rows returned)", false));
         }
 
         @Test
-        @DisplayName("replaces LLM-supplied context/stage with the configured values")
-        void overridesLlmSuppliedValues() throws Exception {
+        @DisplayName("proceeds and passes the LLM-supplied context/stage through when they match the configured values")
+        void proceedsWhenValuesMatch() throws Exception {
             when(dataContextSelectionService.getContext()).thenReturn("pflege");
             when(dataContextSelectionService.getStage()).thenReturn("PROD");
+            when(connection.callTool(eq("run_query"), any())).thenReturn(
+                    new McpSchema.CallToolResult("(no rows returned)", false));
 
             tool("run_query").execute(
-                    "{\"sql\":\"SELECT 1\",\"context\":\"whatever-the-llm-said\",\"stage\":\"DEV\"}");
+                    "{\"sql\":\"SELECT 1\",\"context\":\"pflege\",\"stage\":\"PROD\"}");
 
             @SuppressWarnings("unchecked")
             ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
@@ -300,26 +300,51 @@ class GenericOracleMcpToolTest {
         }
 
         @Test
-        @DisplayName("adds context/stage even when the LLM omitted them, when configured locally")
-        void addsWhenOmittedByLlm() throws Exception {
+        @DisplayName("proceeds without calling the connection's callTool differently when the LLM omitted context/stage")
+        void proceedsWhenOmittedByLlm() throws Exception {
             when(dataContextSelectionService.getContext()).thenReturn("pflege");
             when(dataContextSelectionService.getStage()).thenReturn("INTE");
+            when(connection.callTool(eq("run_query"), any())).thenReturn(
+                    new McpSchema.CallToolResult("(no rows returned)", false));
 
-            tool("run_query").execute("{\"sql\":\"SELECT 1\"}");
+            ToolResult result = tool("run_query").execute("{\"sql\":\"SELECT 1\"}");
 
-            @SuppressWarnings("unchecked")
-            ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
-            verify(connection).callTool(eq("run_query"), captor.capture());
-
-            assertThat(captor.getValue()).containsEntry("context", "pflege");
-            assertThat(captor.getValue()).containsEntry("stage", "INTE");
+            verify(connection).callTool(eq("run_query"), any());
+            assertThat(result.getText()).doesNotContain("ERROR");
         }
 
         @Test
-        @DisplayName("leaves the LLM-supplied value untouched when nothing is configured locally")
-        void leavesLlmValueWhenNotConfigured() throws Exception {
+        @DisplayName("returns an error ToolResult without calling the connection when 'context' does not match")
+        void returnsErrorOnContextMismatch() throws Exception {
+            when(dataContextSelectionService.getContext()).thenReturn("pflege");
+
+            ToolResult result = tool("run_query").execute(
+                    "{\"sql\":\"SELECT 1\",\"context\":\"whatever-the-llm-said\"}");
+
+            assertThat(result.getText()).contains("whatever-the-llm-said").contains("pflege");
+            verify(connection, never()).callTool(any(), any());
+        }
+
+        @Test
+        @DisplayName("returns an error ToolResult without calling the connection when 'stage' does not match")
+        void returnsErrorOnStageMismatch() throws Exception {
+            when(dataContextSelectionService.getContext()).thenReturn("pflege");
+            when(dataContextSelectionService.getStage()).thenReturn("PROD");
+
+            ToolResult result = tool("run_query").execute(
+                    "{\"sql\":\"SELECT 1\",\"context\":\"pflege\",\"stage\":\"DEV\"}");
+
+            assertThat(result.getText()).contains("DEV").contains("PROD");
+            verify(connection, never()).callTool(any(), any());
+        }
+
+        @Test
+        @DisplayName("proceeds when the LLM supplies a value but nothing is configured locally")
+        void proceedsWhenNotConfigured() throws Exception {
             when(dataContextSelectionService.getContext()).thenReturn("");
             when(dataContextSelectionService.getStage()).thenReturn(null);
+            when(connection.callTool(eq("run_query"), any())).thenReturn(
+                    new McpSchema.CallToolResult("(no rows returned)", false));
 
             tool("run_query").execute(
                     "{\"sql\":\"SELECT 1\",\"context\":\"from-llm\",\"stage\":\"from-llm-stage\"}");
@@ -333,4 +358,6 @@ class GenericOracleMcpToolTest {
         }
     }
 }
+
+
 

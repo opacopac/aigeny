@@ -115,15 +115,22 @@ public class GenericOracleMcpTool extends AbstractTool {
     }
 
     /**
-     * Overrides {@code arguments.get(key)} with {@code value} when {@code value} is configured
-     * (non-null/non-blank) - used to enforce the locally configured {@code context}/{@code stage}
-     * regardless of what the LLM passed for those arguments. Leaves the LLM-supplied value in
-     * place when nothing is configured locally.
+     * Verifies that {@code arguments.get(key)} (if supplied by the LLM) matches the currently
+     * configured/selected {@code expectedValue} for {@code context}/{@code stage}. Returns a
+     * {@link ToolResult} carrying an error message when they differ, or {@code null} when the
+     * argument is missing/blank or matches - i.e. the call may proceed.
      */
-    private static void overrideIfNotBlank(Map<String, Object> arguments, String key, String value) {
-        if (value != null && !value.isBlank()) {
-            arguments.put(key, value);
+    private static ToolResult checkMatchesConfigured(Map<String, Object> arguments, String key,
+                                                       String expectedValue, String messageKey) {
+        Object rawValue = arguments.get(key);
+        String value = rawValue == null ? null : String.valueOf(rawValue);
+        if (value == null || value.isBlank()) {
+            return null;
         }
+        if (expectedValue != null && !expectedValue.isBlank() && !expectedValue.equals(value)) {
+            return new ToolResult(Messages.get(messageKey, value, expectedValue));
+        }
+        return null;
     }
 
     @Override
@@ -138,10 +145,18 @@ public class GenericOracleMcpTool extends AbstractTool {
         // "context"/"stage" are resolved per chat-request via DataContextSelectionService
         // (today effectively fixed from aigeny.db.default-context/default-stage, but designed
         // to support a future per-session UI selection - see DataContextSelectionService) -
-        // override whatever the LLM supplied for these two arguments so the call always
-        // targets the currently selected context/stage, regardless of what the model passed.
-        overrideIfNotBlank(arguments, "context", dataContextSelectionService.getContext());
-        overrideIfNotBlank(arguments, "stage", dataContextSelectionService.getStage());
+        // reject the call if the LLM supplied a value for either argument that does not match
+        // the currently selected context/stage, instead of silently overriding it.
+        ToolResult contextMismatch = checkMatchesConfigured(arguments, "context",
+                dataContextSelectionService.getContext(), "db.error.context_mismatch");
+        if (contextMismatch != null) {
+            return contextMismatch;
+        }
+        ToolResult stageMismatch = checkMatchesConfigured(arguments, "stage",
+                dataContextSelectionService.getStage(), "db.error.stage_mismatch");
+        if (stageMismatch != null) {
+            return stageMismatch;
+        }
 
         log.info("  DB TOOL REQUEST name={} args={}", name, arguments);
         if (arguments.get("sql") != null) {
