@@ -9,9 +9,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Generic canned-response mock {@link Tool}, reusable as a base for tool-family-specific mocks
- * (Jira, Bitbucket, ...) in integration tests. Records every call's raw JSON arguments and
- * returns a single, pre-configured text response.
+ * Base mock {@link Tool} for integration tests, reusable across tool families (Jira, Bitbucket,
+ * database, ...). Handles the boilerplate every mock tool needs - name/description, optional
+ * "requires confirmation" flag, and call recording - and defaults {@link #execute(String)} to a
+ * single pre-configured canned text response.
+ *
+ * <p>Subclasses that need argument-dependent behaviour (e.g. {@link MockDatabaseTool} filtering
+ * a table list by a {@code prefix} argument) should call {@link #recordCall(String)} and override
+ * {@link #execute(String)} (and {@link #getDefinition()} if a richer schema is useful) instead of
+ * relying on the canned response.
  */
 public class GenericMockTool implements Tool {
 
@@ -48,9 +54,14 @@ public class GenericMockTool implements Tool {
     }
 
     @Override
-    public ToolResult execute(String argumentsJson) {
-        receivedArguments.add(argumentsJson);
+    public ToolResult execute(String argumentsJson) throws Exception {
+        recordCall(argumentsJson);
         return new ToolResult(cannedResponse);
+    }
+
+    /** Records a call's raw JSON arguments; subclasses overriding {@link #execute(String)} must call this. */
+    protected final void recordCall(String argumentsJson) {
+        receivedArguments.add(argumentsJson);
     }
 
     public int getCallCount()                  { return receivedArguments.size(); }
