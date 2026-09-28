@@ -12,6 +12,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -198,9 +199,26 @@ public class GenericOracleMcpTool extends AbstractTool {
         return qr != null ? new ToolResult(text, qr) : new ToolResult(text);
     }
 
-    /** Parses the second content block (JSON columns/rows), added by the server for CSV export. */
-    @SuppressWarnings("unchecked")
+    /**
+     * Extracts tabular data (columns + rows) for CSV export, trying two conventions in order:
+     * <ol>
+     *   <li>this app's own embedded server: a second content block whose text is
+     *       {@code {"columns":[...string...], "rows":[...map-per-row...]}} (see
+     *       {@code OracleSqlSupport#runSelect});</li>
+     *   <li>a fallback for third-party/external MCP servers (e.g. {@code nova-mcp-db-exposer}),
+     *       which generally return only a single content block and don't follow the two-block
+     *       convention at all - see {@link #tryParseSingleBlockStructuredJson(List)}.</li>
+     * </ol>
+     */
     private QueryResult tryParseStructuredResult(List<McpSchema.Content> content) {
+        QueryResult twoBlock = tryParseTwoBlockConvention(content);
+        if (twoBlock != null) return twoBlock;
+        return tryParseSingleBlockStructuredJson(content);
+    }
+
+    /** Parses the second content block (JSON columns/rows), added by our own embedded server for CSV export. */
+    @SuppressWarnings("unchecked")
+    private QueryResult tryParseTwoBlockConvention(List<McpSchema.Content> content) {
         if (content.size() < 2) return null;
         try {
             JsonNode structured = objectMapper.readTree(asText(content.get(1)));
@@ -210,7 +228,60 @@ public class GenericOracleMcpTool extends AbstractTool {
                     objectMapper.getTypeFactory().constructCollectionType(List.class, Map.class));
             return new QueryResult(RESULT_SOURCE_NAME, columns, rows);
         } catch (Exception e) {
-            log.warn("Could not parse structured MCP result for tool {}: {}", name, e.getMessage());
+            log.warn("Could not parse structured MCP result (2-block convention) for tool {}: {}", name, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Fallback for third-party/external MCP servers that embed tabular data as JSON text in the
+     * single (only) content block, in the shape {@code {"columns":[{"name":...,"type":...}, ...],
+     * "rows":[[v1,v2,...], ...]}} - as opposed to this app's own two-block convention (see
+     * {@link #tryParseTwoBlockConvention(List)}). Some such servers additionally report the same
+     * data via the official MCP {@code structuredContent} response field, which the MCP Java SDK
+     * version currently used by this app does not yet expose - so this parses the JSON already
+     * present in the text block instead, requiring no SDK upgrade.
+     *
+     * <p>Returns {@code null} (not tabular data) whenever the JSON doesn't have both a
+     * {@code columns} array (of strings or {@code {"name":...}} objects) and a {@code rows} array
+     * of same-length row arrays - e.g. {@code list_tables}'s response, which has a different
+     * shape ({@code tables}/{@code count}/...) - so this never misfires on non-tabular results.
+     */
+    private QueryResult tryParseSingleBlockStructuredJson(List<McpSchema.Content> content) {
+        if (content.isEmpty()) return null;
+        try {
+            JsonNode root = objectMapper.readTree(asText(content.get(0)));
+            JsonNode columnsNode = root.get(RESULT_COLUMNS);
+            JsonNode rowsNode = root.get(RESULT_ROWS);
+            if (columnsNode == null || !columnsNode.isArray() || rowsNode == null || !rowsNode.isArray()) {
+                return null;
+            }
+
+            List<String> columns = new ArrayList<>();
+            for (JsonNode col : columnsNode) {
+                if (col.isTextual()) {
+                    columns.add(col.asText());
+                } else if (col.isObject() && col.hasNonNull("name")) {
+                    columns.add(col.get("name").asText());
+                } else {
+                    return null; // unrecognized column shape - don't guess, bail out
+                }
+            }
+
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (JsonNode rowNode : rowsNode) {
+                if (!rowNode.isArray() || rowNode.size() != columns.size()) {
+                    return null; // not a positional row array matching the column count - bail out
+                }
+                Map<String, Object> row = new LinkedHashMap<>();
+                for (int i = 0; i < columns.size(); i++) {
+                    row.put(columns.get(i), objectMapper.convertValue(rowNode.get(i), Object.class));
+                }
+                rows.add(row);
+            }
+            return new QueryResult(RESULT_SOURCE_NAME, columns, rows);
+        } catch (Exception e) {
+            log.debug("Content block is not structured tabular JSON for tool {}: {}", name, e.getMessage());
             return null;
         }
     }

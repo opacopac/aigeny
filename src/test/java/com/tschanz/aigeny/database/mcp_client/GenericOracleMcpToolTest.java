@@ -247,6 +247,50 @@ class GenericOracleMcpToolTest {
             assertThat(result.getText()).isEqualTo("some text");
             assertThat(result.hasQueryResult()).isFalse();
         }
+
+        @Test
+        @DisplayName("falls back to parsing single-block structured JSON from third-party MCP servers " +
+                     "(e.g. nova-mcp-db-exposer, columns as {name,type} objects + positional row arrays)")
+        void parsesSingleBlockStructuredJsonFromThirdPartyServer() throws Exception {
+            // Real shape observed from the external nova-mcp-db-exposer MCP server: a single content
+            // block whose text is JSON with "columns" as {name,type} objects and "rows" as positional
+            // arrays - NOT this app's own {"columns":[...string...],"rows":[...map...]} 2-block convention.
+            String singleBlockJson = """
+                    {
+                      "columns": [ {"name":"ID","type":"NUMBER"}, {"name":"NAME","type":"VARCHAR2"} ],
+                      "rows": [ [1, "Alice"], [2, "Bob"] ],
+                      "rowCount": 2,
+                      "truncated": false,
+                      "elapsedMs": 12
+                    }
+                    """;
+            when(connection.callTool(eq("run_query"), any())).thenReturn(
+                    new McpSchema.CallToolResult(singleBlockJson, false));
+
+            ToolResult result = tool("run_query").execute("{\"sql\":\"SELECT * FROM USERS\",\"description\":\"x\"}");
+
+            assertThat(result.hasQueryResult()).isTrue();
+            assertThat(result.getQueryResult().getColumns()).containsExactly("ID", "NAME");
+            assertThat(result.getQueryResult().getRows()).containsExactly(
+                    Map.of("ID", 1, "NAME", "Alice"),
+                    Map.of("ID", 2, "NAME", "Bob"));
+        }
+
+        @Test
+        @DisplayName("does not misfire the single-block fallback on non-tabular JSON (e.g. list_tables)")
+        void singleBlockFallbackIgnoresNonTabularJson() throws Exception {
+            // Shape of a real list_tables response from the external server: has "tables"/"count",
+            // not "columns"/"rows" - must not be misinterpreted as tabular data.
+            String listTablesJson = """
+                    {"context":"pflege","count":2,"tables":[{"name":"P_PRODUKT_E"},{"name":"P_PRODUKT_V"}]}
+                    """;
+            when(connection.callTool(eq("list_tables"), any())).thenReturn(
+                    new McpSchema.CallToolResult(listTablesJson, false));
+
+            ToolResult result = tool("list_tables").execute("{\"context\":\"pflege\"}");
+
+            assertThat(result.hasQueryResult()).isFalse();
+        }
     }
 
     @Nested
