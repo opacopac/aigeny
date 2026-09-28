@@ -3,6 +3,7 @@ package com.tschanz.aigeny.integration.support;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tschanz.aigeny.llm.model.ToolDefinition;
+import com.tschanz.aigeny.tool.QueryResult;
 import com.tschanz.aigeny.tool.ToolResult;
 
 import java.util.List;
@@ -24,9 +25,11 @@ import java.util.Map;
 public class MockDatabaseTool extends GenericMockTool {
 
     public static final String LIST_TABLES = "list_tables";
+    public static final String RUN_QUERY   = "run_query";
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final List<String> tableNames;
+    private QueryResult queryResult; // only set in "run_query" mode, see #runQuery(...)
 
     public MockDatabaseTool(String name, List<String> tableNames) {
         super(name, "Mock database MCP tool: " + name);
@@ -36,6 +39,19 @@ public class MockDatabaseTool extends GenericMockTool {
     /** Convenience factory: a {@code list_tables} mock backed by the given canned table names. */
     public static MockDatabaseTool listTables(String... tableNames) {
         return new MockDatabaseTool(LIST_TABLES, List.of(tableNames));
+    }
+
+    /**
+     * Convenience factory: a {@code run_query} mock that always returns the given canned
+     * {@link QueryResult} (columns + rows), regardless of the SQL passed in. This is what real
+     * DB tools do for a successful {@code SELECT}: the {@link ToolResult} carries both the
+     * human-readable text (for the LLM) and the structured {@link QueryResult} (used for the
+     * "download as CSV" feature - see {@code ExportController}/{@code SessionExportService}).
+     */
+    public static MockDatabaseTool runQuery(List<String> columns, List<Map<String, Object>> rows) {
+        MockDatabaseTool tool = new MockDatabaseTool(RUN_QUERY, List.of());
+        tool.queryResult = new QueryResult("Oracle DB", columns, rows);
+        return tool;
     }
 
     @Override
@@ -49,6 +65,10 @@ public class MockDatabaseTool extends GenericMockTool {
     @Override
     public ToolResult execute(String argumentsJson) throws Exception {
         recordCall(argumentsJson);
+
+        if (queryResult != null) {
+            return new ToolResult(queryResult.toText(), queryResult);
+        }
 
         String prefix = null;
         if (argumentsJson != null && !argumentsJson.isBlank()) {
